@@ -27,8 +27,7 @@ enum class RangePreset(val label: String) {
     TODAY("Today"),
     YESTERDAY("Yesterday"),
     LAST_7_DAYS("Last 7 Days"),
-    LAST_30_DAYS("Last 30 Days"),
-    CUSTOM("Custom")
+    LAST_30_DAYS("Last 30 Days")
 }
 
 data class SharedStatsSummary(
@@ -123,6 +122,23 @@ object ShareRepository {
             set(Calendar.MILLISECOND, 0)
         }
         return localCal.timeInMillis
+    }
+
+    fun localStartOfDayToUtcPickerMillis(localMs: Long): Long {
+        val localCal = Calendar.getInstance().apply { timeInMillis = localMs }
+        val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(
+                localCal.get(Calendar.YEAR),
+                localCal.get(Calendar.MONTH),
+                localCal.get(Calendar.DAY_OF_MONTH),
+                0,
+                0,
+                0
+            )
+            set(Calendar.MILLISECOND, 0)
+        }
+        return utcCal.timeInMillis
     }
 
     fun dateKeyForMs(timeMs: Long): String {

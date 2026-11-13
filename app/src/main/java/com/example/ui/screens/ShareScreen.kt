@@ -15,8 +15,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DateRange
@@ -51,7 +48,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -68,7 +64,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -136,7 +131,7 @@ fun ShareScreen(
     }
 
     // Range Share configuration
-    var selectedPreset by remember { mutableStateOf(RangePreset.TODAY) }
+    var selectedPreset by remember { mutableStateOf<RangePreset?>(RangePreset.TODAY) }
     var rangeStartDateMs by remember {
         mutableLongStateOf(initialDateMs?.let { ShareRepository.startOfDayMs(it) } ?: todayStartMs)
     }
@@ -146,7 +141,8 @@ fun ShareScreen(
 
     // Pickers
     var showLiveStartPicker by remember { mutableStateOf(false) }
-    var showRangePicker by remember { mutableStateOf(false) }
+    var showRangeStartPicker by remember { mutableStateOf(false) }
+    var showRangeEndPicker by remember { mutableStateOf(false) }
 
     // Submission & Link state
     var isCreatingLink by remember { mutableStateOf(false) }
@@ -381,7 +377,7 @@ fun ShareScreen(
                             onClick = {
                                 selectedMode = ShareMode.RANGE
                                 if (initialDateMs != null && ShareRepository.startOfDayMs(initialDateMs) != todayStartMs) {
-                                    selectedPreset = RangePreset.CUSTOM
+                                    selectedPreset = null
                                     rangeStartDateMs = ShareRepository.startOfDayMs(initialDateMs)
                                     rangeEndDateMs = ShareRepository.startOfDayMs(initialDateMs)
                                 } else {
@@ -486,12 +482,14 @@ fun ShareScreen(
                                             rangeStartDateMs = ShareRepository.startOfDayMs(start)
                                             rangeEndDateMs = todayStartMs
                                         }
-                                        RangePreset.CUSTOM -> {
-                                            showRangePicker = true
-                                        }
                                     }
                                 },
-                                onOpenCustomRangePicker = { showRangePicker = true }
+                                onSelectStartDate = {
+                                    showRangeStartPicker = true
+                                },
+                                onSelectEndDate = {
+                                    showRangeEndPicker = true
+                                }
                             )
                         }
 
@@ -700,11 +698,21 @@ fun ShareScreen(
         )
     }
 
+    val currentYear = remember { Calendar.getInstance().get(Calendar.YEAR) }
+    val todayUtcMillis = remember(todayStartMs) {
+        ShareRepository.localStartOfDayToUtcPickerMillis(todayStartMs)
+    }
+
     if (showLiveStartPicker) {
         val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = ShareRepository.localStartOfDayToUtcPickerMillis(liveStartDateMs),
             selectableDates = object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    return utcTimeMillis <= System.currentTimeMillis()
+                    return utcTimeMillis <= todayUtcMillis
+                }
+
+                override fun isSelectableYear(year: Int): Boolean {
+                    return year <= currentYear
                 }
             }
         )
@@ -734,54 +742,111 @@ fun ShareScreen(
         }
     }
 
-    if (showRangePicker) {
-        val rangePickerState = rememberDateRangePickerState(
+    if (showRangeStartPicker) {
+        val startPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = ShareRepository.localStartOfDayToUtcPickerMillis(rangeStartDateMs),
             selectableDates = object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    return utcTimeMillis <= System.currentTimeMillis()
+                    return utcTimeMillis <= todayUtcMillis
+                }
+
+                override fun isSelectableYear(year: Int): Boolean {
+                    return year <= currentYear
                 }
             }
         )
         DatePickerDialog(
-            onDismissRequest = { showRangePicker = false },
+            onDismissRequest = {
+                showRangeStartPicker = false
+            },
             confirmButton = {
                 TextButton(
-                    enabled = rangePickerState.selectedStartDateMillis != null,
+                    enabled = startPickerState.selectedDateMillis != null,
                     onClick = {
-                        val startUtc = rangePickerState.selectedStartDateMillis
-                        val endUtc = rangePickerState.selectedEndDateMillis ?: startUtc
-                        if (startUtc != null && endUtc != null) {
-                            val localStart = ShareRepository.utcDatePickerMillisToLocalStartOfDay(startUtc)
-                            val localEnd = ShareRepository.utcDatePickerMillisToLocalStartOfDay(endUtc)
-                            rangeStartDateMs = minOf(localStart, localEnd)
-                            rangeEndDateMs = maxOf(localStart, localEnd)
-                            selectedPreset = RangePreset.CUSTOM
+                        startPickerState.selectedDateMillis?.let { utcMs ->
+                            val localStart = ShareRepository.utcDatePickerMillisToLocalStartOfDay(utcMs)
+                            rangeStartDateMs = localStart
+                            if (rangeEndDateMs < localStart) {
+                                rangeEndDateMs = localStart
+                            }
+                            selectedPreset = null
                         }
-                        showRangePicker = false
+                        showRangeStartPicker = false
                     }
                 ) {
-                    Text("Apply")
+                    Text("Select")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRangePicker = false }) {
+                TextButton(
+                    onClick = {
+                        showRangeStartPicker = false
+                    }
+                ) {
                     Text("Cancel")
                 }
             }
         ) {
-            DateRangePicker(
-                state = rangePickerState,
+            DatePicker(
+                state = startPickerState,
                 title = {
                     Text(
-                        text = "Select Date Range",
+                        text = "Select Start Date",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp)
                     )
-                },
-                showModeToggle = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(460.dp)
+                }
+            )
+        }
+    }
+
+    if (showRangeEndPicker) {
+        val minEndUtcMillis = ShareRepository.localStartOfDayToUtcPickerMillis(rangeStartDateMs)
+        val initialEndLocal = maxOf(rangeEndDateMs, rangeStartDateMs)
+        val endPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = ShareRepository.localStartOfDayToUtcPickerMillis(initialEndLocal),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis in minEndUtcMillis..todayUtcMillis
+                }
+
+                override fun isSelectableYear(year: Int): Boolean {
+                    return year <= currentYear
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showRangeEndPicker = false },
+            confirmButton = {
+                TextButton(
+                    enabled = endPickerState.selectedDateMillis != null,
+                    onClick = {
+                        endPickerState.selectedDateMillis?.let { utcMs ->
+                            val localEnd = ShareRepository.utcDatePickerMillisToLocalStartOfDay(utcMs)
+                            rangeEndDateMs = maxOf(localEnd, rangeStartDateMs)
+                            selectedPreset = null
+                        }
+                        showRangeEndPicker = false
+                    }
+                ) {
+                    Text("Select")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRangeEndPicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(
+                state = endPickerState,
+                title = {
+                    Text(
+                        text = "Select End Date",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp)
+                    )
+                }
             )
         }
     }
@@ -1144,15 +1209,24 @@ private fun DateOptionTile(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RangeShareConfigSection(
-    selectedPreset: RangePreset,
+    selectedPreset: RangePreset?,
     startDateMs: Long,
     endDateMs: Long,
     onSelectPreset: (RangePreset) -> Unit,
-    onOpenCustomRangePicker: () -> Unit
+    onSelectStartDate: () -> Unit,
+    onSelectEndDate: () -> Unit
 ) {
+    val presetWeights = remember {
+        mapOf(
+            RangePreset.TODAY to 0.74f,
+            RangePreset.YESTERDAY to 1.04f,
+            RangePreset.LAST_7_DAYS to 1.07f,
+            RangePreset.LAST_30_DAYS to 1.15f
+        )
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = "SELECT DATES",
@@ -1166,82 +1240,68 @@ private fun RangeShareConfigSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             RangePreset.entries.forEach { preset ->
                 val isSelected = selectedPreset == preset
-                FilterChip(
-                    selected = isSelected,
+                Surface(
                     onClick = { onSelectPreset(preset) },
-                    label = {
-                        Text(
-                            text = preset.label,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    },
-                    leadingIcon = if (preset == RangePreset.CUSTOM) {
-                        {
-                            Icon(
-                                imageVector = Icons.Outlined.CalendarMonth,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    } else null,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        width = if (isSelected) 1.5.dp else 1.dp,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                     ),
                     modifier = Modifier
+                        .weight(presetWeights[preset] ?: 1f)
                         .heightIn(min = 40.dp)
                         .testTag("range_preset_${preset.name.lowercase()}")
-                )
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = preset.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontSize = 11.5.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
 
-        Surface(
-            onClick = onOpenCustomRangePicker,
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("selected_range_pill")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CalendarMonth,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = ShareRepository.formatDateRangeLabel(startDateMs, endDateMs),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Text(
-                    text = "Edit",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            DateOptionTile(
+                title = "Start Date",
+                subtitle = ShareRepository.formatSingleDate(startDateMs),
+                selected = selectedPreset == null,
+                onClick = onSelectStartDate,
+                testTag = "range_start_date_button",
+                modifier = Modifier.weight(1f)
+            )
+            DateOptionTile(
+                title = "End Date",
+                subtitle = ShareRepository.formatSingleDate(endDateMs),
+                selected = selectedPreset == null,
+                onClick = onSelectEndDate,
+                testTag = "range_end_date_button",
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
