@@ -1,0 +1,6 @@
+{
+  "name": "Focus Lock",
+  "description": "Digital detox app that locks your phone while studying.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
