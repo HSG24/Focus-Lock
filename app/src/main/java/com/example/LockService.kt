@@ -125,6 +125,21 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         "com.miui.securityadd"
     )
 
+    private fun getHomeLauncherPackages(): Set<String> {
+        val homePackages = mutableSetOf<String>()
+        try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+            }
+            packageManager.queryIntentActivities(homeIntent, 0).forEach { info ->
+                info.activityInfo?.packageName?.let { homePackages.add(it) }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return homePackages
+    }
+
     private fun getAllowedPackages(): Set<String> {
         val settings = FocusSettingsRepository.getCurrent(this)
         val packages = mutableSetOf<String>()
@@ -164,6 +179,22 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
                 else -> {
                     packages.add(app.packageName)
+                    try {
+                        packageManager.getLaunchIntentForPackage(app.packageName)
+                            ?.resolveActivity(packageManager)
+                            ?.packageName
+                            ?.let { packages.add(it) }
+                    } catch (_: Exception) { }
+                    try {
+                        val mainIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_LAUNCHER)
+                            setPackage(app.packageName)
+                        }
+                        packageManager.queryIntentActivities(mainIntent, 0).forEach { info ->
+                            info.activityInfo?.packageName?.let { packages.add(it) }
+                            info.activityInfo?.applicationInfo?.packageName?.let { packages.add(it) }
+                        }
+                    } catch (_: Exception) { }
                 }
             }
         }
@@ -177,6 +208,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return@launch
             var trackedSessionMinimizeTs = 0L
             var lastQueryTime = 0L
+            var sessionAllowedPkg: String? = null
             var lastObservedForegroundPkg: String? = null
             var unauthorizedStreak = 0
 
@@ -186,6 +218,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     if (currentMinimizeTs != trackedSessionMinimizeTs) {
                         trackedSessionMinimizeTs = currentMinimizeTs
                         lastQueryTime = currentMinimizeTs
+                        sessionAllowedPkg = null
                         lastObservedForegroundPkg = null
                         unauthorizedStreak = 0
                     }
@@ -193,6 +226,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val settings = FocusSettingsRepository.getCurrent(this@LockService)
                     val graceMs = settings.appSwitchGraceSeconds * 1000L
                     val now = System.currentTimeMillis()
+                    val homePackages = getHomeLauncherPackages()
 
                     val queryStart = minOf(lastQueryTime, now)
                     val events = usageStatsManager.queryEvents(queryStart, now)
@@ -206,7 +240,21 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
                             val pkg = event.packageName
                             if (pkg != null && pkg != packageName && pkg !in transientSystemPackages) {
-                                lastObservedForegroundPkg = pkg
+                                // Capture the actual runtime foreground package of the app just launched
+                                // (handles activity-aliases, trampolines, or split system packages),
+                                // while never auto-trusting a Home Launcher.
+                                if (sessionAllowedPkg == null &&
+                                    pkg !in homePackages &&
+                                    event.timeStamp <= currentMinimizeTs + graceMs
+                                ) {
+                                    sessionAllowedPkg = pkg
+                                }
+
+                                // Ignore the initial 800ms overlay-minimize transition window for escape detection
+                                // so brief Launcher flickers during launch never poison lastObservedForegroundPkg.
+                                if (event.timeStamp >= currentMinimizeTs + 800L) {
+                                    lastObservedForegroundPkg = pkg
+                                }
                             }
                         }
                     }
@@ -214,7 +262,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                     if (now > currentMinimizeTs + graceMs) {
                         val fgPkg = lastObservedForegroundPkg
-                        val allowedPackages = getAllowedPackages()
+                        val allowedPackages = getAllowedPackages() + listOfNotNull(sessionAllowedPkg)
                         if (fgPkg != null && fgPkg !in allowedPackages) {
                             unauthorizedStreak++
                             if (unauthorizedStreak >= 2) {
@@ -229,6 +277,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         }
                     }
                 } else {
+                    sessionAllowedPkg = null
                     lastObservedForegroundPkg = null
                     unauthorizedStreak = 0
                 }
