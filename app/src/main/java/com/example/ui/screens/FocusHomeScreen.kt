@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Settings
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -92,40 +95,17 @@ fun FocusHomeScreen(
 
     val permissionsReady = hasOverlayPermission && hasUsagePermission
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = "Focus Lock",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
-            actions = {
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.testTag("settings_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        )
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(top = 40.dp, bottom = 56.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -133,16 +113,16 @@ fun FocusHomeScreen(
                     .widthIn(max = 460.dp)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // Minimalist Concentric Aura + Lock Emblem
                 Box(
-                    modifier = Modifier.size(164.dp),
+                    modifier = Modifier.size(152.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(164.dp)
+                            .size(152.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.radialGradient(
@@ -156,7 +136,7 @@ fun FocusHomeScreen(
                     )
                     Box(
                         modifier = Modifier
-                            .size(116.dp)
+                            .size(110.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surface)
                             .border(
@@ -168,7 +148,7 @@ fun FocusHomeScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(82.dp)
+                                .size(78.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -176,7 +156,7 @@ fun FocusHomeScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Lock,
                                 contentDescription = "Focus Lock Emblem",
-                                modifier = Modifier.size(36.dp),
+                                modifier = Modifier.size(34.dp),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -204,7 +184,7 @@ fun FocusHomeScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Primary CTA
                 if (isLoading) {
@@ -299,5 +279,31 @@ fun FocusHomeScreen(
                 }
             }
         }
+
+        TopAppBar(
+            title = {
+                Text(
+                    text = "Focus Lock",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            actions = {
+                IconButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.testTag("settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Settings",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent
+            ),
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
