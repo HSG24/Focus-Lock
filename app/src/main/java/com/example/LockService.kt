@@ -76,6 +76,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.LockAppLayout
+import com.example.data.ShareRepository
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
 import com.example.ui.theme.JetBrainsMono
@@ -91,6 +92,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
 
 class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
+
+    companion object {
+        @Volatile
+        var currentSessionStartTimeMs: Long = 0L
+    }
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
@@ -301,6 +307,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (startTime == 0L) {
             startTime = System.currentTimeMillis()
+            currentSessionStartTimeMs = startTime
+            scope.launch {
+                ShareRepository.syncLiveShareOnSessionStart(applicationContext, startTime)
+            }
         }
 
         when (intent?.action) {
@@ -521,7 +531,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         val endTime = System.currentTimeMillis()
         val duration = endTime - startTime
+        currentSessionStartTimeMs = 0L
         if (duration > 0) {
+            val appCtx = applicationContext
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val client = okhttp3.OkHttpClient()
@@ -532,10 +544,11 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         .url(url)
                         .post(body)
                         .build()
-                    client.newCall(request).execute()
+                    client.newCall(request).execute().close()
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
+                ShareRepository.syncLiveShareOnSessionEnd(appCtx)
             }
         }
 
@@ -544,6 +557,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onDestroy() {
         super.onDestroy()
+        currentSessionStartTimeMs = 0L
         stopMonitoringForegroundApp()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         if (composeView != null) {

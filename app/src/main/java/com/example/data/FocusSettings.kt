@@ -56,7 +56,9 @@ data class FocusSettingsState(
     val hapticKeypad: Boolean = true,
     val autoClearWrongPin: Boolean = true,
     val lockScreenFollowsTheme: Boolean = false,
-    val appSwitchGraceSeconds: Int = 2
+    val appSwitchGraceSeconds: Int = 2,
+    val activeLiveShareId: String? = null,
+    val activeLiveShareStartDateMs: Long = 0L
 )
 
 object FocusSettingsRepository {
@@ -70,6 +72,8 @@ object FocusSettingsRepository {
     private const val KEY_AUTO_CLEAR_PIN = "auto_clear_wrong_pin"
     private const val KEY_LOCK_FOLLOWS_THEME = "lock_screen_follows_theme"
     private const val KEY_GRACE_SECONDS = "app_switch_grace_sec"
+    private const val KEY_ACTIVE_LIVE_SHARE_ID = "active_live_share_id"
+    private const val KEY_ACTIVE_LIVE_SHARE_START_MS = "active_live_share_start_ms"
 
     const val PRESET_PHONE_PKG = "__builtin_phone__"
     const val PRESET_GOOGLE_PKG = "__builtin_google__"
@@ -157,7 +161,9 @@ object FocusSettingsRepository {
             hapticKeypad = prefs.getBoolean(KEY_HAPTIC_KEYPAD, true),
             autoClearWrongPin = prefs.getBoolean(KEY_AUTO_CLEAR_PIN, true),
             lockScreenFollowsTheme = prefs.getBoolean(KEY_LOCK_FOLLOWS_THEME, false),
-            appSwitchGraceSeconds = prefs.getInt(KEY_GRACE_SECONDS, 2).coerceIn(1, 5)
+            appSwitchGraceSeconds = prefs.getInt(KEY_GRACE_SECONDS, 2).coerceIn(1, 5),
+            activeLiveShareId = prefs.getString(KEY_ACTIVE_LIVE_SHARE_ID, null)?.takeIf { it.isNotBlank() },
+            activeLiveShareStartDateMs = prefs.getLong(KEY_ACTIVE_LIVE_SHARE_START_MS, 0L)
         )
     }
 
@@ -191,6 +197,22 @@ object FocusSettingsRepository {
 
     fun setAppSwitchGraceSeconds(context: Context, seconds: Int) {
         update(context) { putInt(KEY_GRACE_SECONDS, seconds.coerceIn(1, 5)) }
+    }
+
+    fun setActiveLiveShare(context: Context, shareId: String?, startDateMs: Long) {
+        update(context) {
+            if (shareId.isNullOrBlank()) {
+                remove(KEY_ACTIVE_LIVE_SHARE_ID)
+                remove(KEY_ACTIVE_LIVE_SHARE_START_MS)
+            } else {
+                putString(KEY_ACTIVE_LIVE_SHARE_ID, shareId)
+                putLong(KEY_ACTIVE_LIVE_SHARE_START_MS, startDateMs)
+            }
+        }
+    }
+
+    fun clearActiveLiveShare(context: Context) {
+        setActiveLiveShare(context, null, 0L)
     }
 
     fun addAllowedApp(context: Context, app: AllowedApp) {

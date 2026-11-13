@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.FocusSettingsRepository
 import com.example.ui.screens.FocusHomeScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.ShareScreen
 import com.example.ui.screens.StatsScreen
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
@@ -71,20 +72,33 @@ class MainActivity : ComponentActivity() {
             val settingsState by FocusSettingsRepository.observe(this).collectAsStateWithLifecycle()
             var currentScreen by remember { mutableStateOf(Screen.HOME) }
             var showSettings by remember { mutableStateOf(false) }
+            var showShare by remember { mutableStateOf(false) }
+            var shareInitialDateMs by remember { mutableStateOf<Long?>(null) }
+            val isLiveShareActive = !settingsState.activeLiveShareId.isNullOrBlank()
+
+            val activeOverlay = when {
+                showSettings -> "settings"
+                showShare -> "share"
+                else -> "main"
+            }
 
             MyApplicationTheme(themeMode = settingsState.themeMode) {
                 Crossfade(
-                    targetState = showSettings,
+                    targetState = activeOverlay,
                     animationSpec = tween(durationMillis = 200),
                     label = "root_navigation"
-                ) { isSettingsOpen ->
-                    if (isSettingsOpen) {
-                        SettingsScreen(
+                ) { overlay ->
+                    when (overlay) {
+                        "settings" -> SettingsScreen(
                             settingsState = settingsState,
                             onBack = { showSettings = false }
                         )
-                    } else {
-                        Scaffold(
+                        "share" -> ShareScreen(
+                            settingsState = settingsState,
+                            initialDateMs = shareInitialDateMs,
+                            onBack = { showShare = false }
+                        )
+                        else -> Scaffold(
                             modifier = Modifier.fillMaxSize(),
                             containerColor = MaterialTheme.colorScheme.background,
                             contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -151,11 +165,21 @@ class MainActivity : ComponentActivity() {
                             when (currentScreen) {
                                 Screen.HOME -> FocusHomeScreen(
                                     onOpenSettings = { showSettings = true },
+                                    onOpenShare = {
+                                        shareInitialDateMs = null
+                                        showShare = true
+                                    },
+                                    isLiveShareActive = isLiveShareActive,
                                     modifier = Modifier.padding(innerPadding)
                                 )
                                 Screen.STATS -> StatsScreen(
                                     settingsState = settingsState,
                                     onOpenSettings = { showSettings = true },
+                                    onOpenShare = { dateMs ->
+                                        shareInitialDateMs = dateMs
+                                        showShare = true
+                                    },
+                                    isLiveShareActive = isLiveShareActive,
                                     modifier = Modifier.padding(innerPadding)
                                 )
                             }

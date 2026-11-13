@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -92,6 +94,8 @@ import java.util.Calendar
 fun StatsScreen(
     settingsState: FocusSettingsState,
     onOpenSettings: () -> Unit,
+    onOpenShare: (Long?) -> Unit,
+    isLiveShareActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -158,6 +162,31 @@ fun StatsScreen(
                 )
             },
             actions = {
+                IconButton(
+                    onClick = { onOpenShare(selectedDate.timeInMillis) },
+                    modifier = Modifier.testTag("stats_share_button")
+                ) {
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = "Share Stats",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (isLiveShareActive) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(FocusEmerald)
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.background,
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
+                    }
+                }
                 IconButton(
                     onClick = { showDatePicker = true },
                     modifier = Modifier.testTag("calendar_picker_button")

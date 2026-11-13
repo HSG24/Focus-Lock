@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "sessions": {
+      ".read": true,
+      ".write": true
+    },
+    "current_lock": {
+      ".read": true,
+      ".write": true
+    },
+    "shared_stats": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

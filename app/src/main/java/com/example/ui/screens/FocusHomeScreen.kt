@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
@@ -68,6 +69,8 @@ import kotlin.random.Random
 @Composable
 fun FocusHomeScreen(
     onOpenSettings: () -> Unit,
+    onOpenShare: () -> Unit,
+    isLiveShareActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -289,6 +292,31 @@ fun FocusHomeScreen(
                 )
             },
             actions = {
+                IconButton(
+                    onClick = onOpenShare,
+                    modifier = Modifier.testTag("home_share_button")
+                ) {
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = "Share Stats",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isLiveShareActive) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(FocusEmerald)
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.background,
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
+                    }
+                }
                 IconButton(
                     onClick = onOpenSettings,
                     modifier = Modifier.testTag("settings_button")
