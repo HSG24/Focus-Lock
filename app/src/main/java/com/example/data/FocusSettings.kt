@@ -77,8 +77,7 @@ object FocusSettingsRepository {
 
     val DEFAULT_ALLOWED_APPS = listOf(
         AllowedApp(id = "preset_phone", label = "Phone", packageName = PRESET_PHONE_PKG, isPreset = true),
-        AllowedApp(id = "preset_google", label = "Google", packageName = PRESET_GOOGLE_PKG, isPreset = true),
-        AllowedApp(id = "preset_xiaomi", label = "Xiaomi Home", packageName = PRESET_XIAOMI_PKG, isPreset = true)
+        AllowedApp(id = "preset_google", label = "Google", packageName = PRESET_GOOGLE_PKG, isPreset = true)
     )
 
     val PHONE_PACKAGES = setOf(
@@ -248,6 +247,7 @@ object FocusSettingsRepository {
                 val pkg = obj.optString("packageName")
                 val isPreset = obj.optBoolean("isPreset", false)
                 if (id.isNotBlank() && label.isNotBlank() && pkg.isNotBlank()) {
+                    if (id == "preset_xiaomi" || pkg == PRESET_XIAOMI_PKG) continue
                     result.add(AllowedApp(id = id, label = label, packageName = pkg, isPreset = isPreset))
                 }
             }

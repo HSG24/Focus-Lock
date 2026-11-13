@@ -105,11 +105,25 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var composeView: ComposeView? = null
     private var targetPin: String = ""
     private var startTime: Long = 0
+
+    @Volatile
     private var minimizeTimestamp: Long = 0L
 
     private var isMinimizedState = mutableStateOf(false)
     private var monitorJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+
+    private val transientSystemPackages = setOf(
+        "android",
+        "com.android.systemui",
+        "com.android.intentresolver",
+        "com.android.permissioncontroller",
+        "com.google.android.permissioncontroller",
+        "com.google.android.packageinstaller",
+        "com.lbe.security.miui",
+        "com.miui.securitycenter",
+        "com.miui.securityadd"
+    )
 
     private fun getAllowedPackages(): Set<String> {
         val settings = FocusSettingsRepository.getCurrent(this)
@@ -161,39 +175,64 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         monitorJob?.cancel()
         monitorJob = scope.launch {
             val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return@launch
+            var trackedSessionMinimizeTs = 0L
+            var lastQueryTime = 0L
+            var lastObservedForegroundPkg: String? = null
+            var unauthorizedStreak = 0
+
             while (isActive) {
                 if (isMinimizedState.value) {
+                    val currentMinimizeTs = minimizeTimestamp
+                    if (currentMinimizeTs != trackedSessionMinimizeTs) {
+                        trackedSessionMinimizeTs = currentMinimizeTs
+                        lastQueryTime = currentMinimizeTs
+                        lastObservedForegroundPkg = null
+                        unauthorizedStreak = 0
+                    }
+
                     val settings = FocusSettingsRepository.getCurrent(this@LockService)
                     val graceMs = settings.appSwitchGraceSeconds * 1000L
-                    val time = System.currentTimeMillis()
-                    if (time > minimizeTimestamp + graceMs) {
-                        val searchStart = maxOf(minimizeTimestamp, time - 2000L)
-                        val events = usageStatsManager.queryEvents(searchStart, time)
-                        var latestEventTime = 0L
-                        var topPackage: String? = null
-                        while (events.hasNextEvent()) {
-                            val event = UsageEvents.Event()
-                            events.getNextEvent(event)
-                            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
-                                if (event.timeStamp >= latestEventTime) {
-                                    latestEventTime = event.timeStamp
-                                    topPackage = event.packageName
-                                }
+                    val now = System.currentTimeMillis()
+
+                    val queryStart = minOf(lastQueryTime, now)
+                    val events = usageStatsManager.queryEvents(queryStart, now)
+                    var latestEventTs = queryStart
+                    while (events.hasNextEvent()) {
+                        val event = UsageEvents.Event()
+                        events.getNextEvent(event)
+                        if (event.timeStamp > latestEventTs) {
+                            latestEventTs = event.timeStamp
+                        }
+                        if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                            val pkg = event.packageName
+                            if (pkg != null && pkg != packageName && pkg !in transientSystemPackages) {
+                                lastObservedForegroundPkg = pkg
                             }
                         }
+                    }
+                    lastQueryTime = maxOf(lastQueryTime, latestEventTs + 1L)
 
-                        if (topPackage != null && topPackage != packageName) {
-                            val allowedPackages = getAllowedPackages()
-                            if (topPackage !in allowedPackages) {
+                    if (now > currentMinimizeTs + graceMs) {
+                        val fgPkg = lastObservedForegroundPkg
+                        val allowedPackages = getAllowedPackages()
+                        if (fgPkg != null && fgPkg !in allowedPackages) {
+                            unauthorizedStreak++
+                            if (unauthorizedStreak >= 2) {
+                                unauthorizedStreak = 0
                                 launch(Dispatchers.Main) {
                                     isMinimizedState.value = false
                                     updateOverlayState(false)
                                 }
                             }
+                        } else {
+                            unauthorizedStreak = 0
                         }
                     }
+                } else {
+                    lastObservedForegroundPkg = null
+                    unauthorizedStreak = 0
                 }
-                delay(500)
+                delay(400)
             }
         }
     }
@@ -222,9 +261,12 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 return START_STICKY
             }
             "MINIMIZE" -> {
-                minimizeTimestamp = System.currentTimeMillis()
-                isMinimizedState.value = true
-                updateOverlayState(true)
+                val now = System.currentTimeMillis()
+                if (!isMinimizedState.value || now - minimizeTimestamp > 500L) {
+                    minimizeTimestamp = now
+                    isMinimizedState.value = true
+                    updateOverlayState(true)
+                }
                 return START_STICKY
             }
             else -> {
@@ -313,6 +355,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun launchAllowedApp(app: AllowedApp) {
+        minimizeTimestamp = System.currentTimeMillis()
+        isMinimizedState.value = true
+        updateOverlayState(true)
+
         val intent = when (app.packageName) {
             FocusSettingsRepository.PRESET_GOOGLE_PKG -> Intent(this, LensLauncherActivity::class.java)
             FocusSettingsRepository.PRESET_PHONE_PKG -> Intent(this, PhoneLauncherActivity::class.java)

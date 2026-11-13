@@ -1,6 +1,7 @@
 package com.example
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -12,6 +13,7 @@ class AppLauncherActivity : Activity() {
     }
 
     private var hasPaused = false
+    private var launchStartedAtMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,19 +36,19 @@ class AppLauncherActivity : Activity() {
 
         var launched = false
         if (packageName.isNotBlank()) {
-            try {
-                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-                if (launchIntent != null) {
+            val launchIntent = resolveAppLaunchIntent(packageName)
+            if (launchIntent != null) {
+                try {
                     launchIntent.addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_CLEAR_TASK or
-                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                     )
+                    launchStartedAtMs = System.currentTimeMillis()
                     startActivity(launchIntent)
                     launched = true
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
 
@@ -57,6 +59,29 @@ class AppLauncherActivity : Activity() {
         }
     }
 
+    private fun resolveAppLaunchIntent(packageName: String): Intent? {
+        packageManager.getLaunchIntentForPackage(packageName)?.let { return it }
+
+        return try {
+            val mainIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                setPackage(packageName)
+            }
+            val resolved = packageManager.queryIntentActivities(mainIntent, 0).firstOrNull()
+            val activityInfo = resolved?.activityInfo
+            if (activityInfo != null) {
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    component = ComponentName(activityInfo.packageName, activityInfo.name)
+                }
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         hasPaused = true
@@ -64,7 +89,7 @@ class AppLauncherActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPaused) {
+        if (hasPaused && System.currentTimeMillis() - launchStartedAtMs > 500L) {
             startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
             finish()
             @Suppress("DEPRECATION")
