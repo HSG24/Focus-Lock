@@ -68,30 +68,18 @@ data class LockPalette(
 ) {
     companion object {
         val StealthDark = LockPalette(
-            background = Color(0xFF0A0C10),
-            surface = Color(0xFF141821),
-            surfaceElevated = Color(0xFF1D2330),
-            border = Color.White.copy(alpha = 0.14f),
-            primaryText = Color(0xFFF3F5FA),
-            secondaryText = Color(0xFF96A0B2),
-            accent = Color(0xFF748FFC),
-            accentContent = Color(0xFF0A1230)
+            background = Color(0xFF000000),
+            surface = Color(0xFF0D0D0F),
+            surfaceElevated = Color(0xFF141418),
+            border = Color(0xFF222228),
+            primaryText = Color(0xFFFFFFFF),
+            secondaryText = Color(0xFF8E8E98),
+            accent = Color(0xFFFF1E27),
+            accentContent = Color(0xFFFFFFFF)
         )
 
         @Composable
-        fun fromMaterialTheme(): LockPalette {
-            val cs = MaterialTheme.colorScheme
-            return LockPalette(
-                background = cs.background,
-                surface = cs.surface,
-                surfaceElevated = cs.surfaceVariant,
-                border = cs.outline.copy(alpha = 0.5f),
-                primaryText = cs.onSurface,
-                secondaryText = cs.onSurfaceVariant,
-                accent = cs.primary,
-                accentContent = cs.onPrimary
-            )
-        }
+        fun fromMaterialTheme(): LockPalette = StealthDark
     }
 }
 

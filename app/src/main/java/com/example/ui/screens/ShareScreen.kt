@@ -92,8 +92,20 @@ import com.example.data.ShareRepository
 import com.example.data.SharedLinkItem
 import com.example.data.SharedStatsSummary
 import com.example.fetchAllSessions
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.key
+import androidx.compose.ui.platform.LocalView
+import com.example.ui.components.performKeyTapHaptic
+import com.example.ui.theme.CrimsonContainer
+import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.FocusEmerald
 import com.example.ui.theme.JetBrainsMono
+import com.example.ui.theme.ObsidianSurface
+import com.example.ui.theme.PureWhite
+import com.example.ui.theme.SlateGray
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -656,12 +668,15 @@ fun ShareScreen(
     if (pendingDelete != null) {
         AlertDialog(
             onDismissRequest = { linkPendingDelete = null },
+            containerColor = ObsidianSurface,
+            titleContentColor = PureWhite,
+            textContentColor = SlateGray,
             title = { Text("Delete Share Link?", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     text = "This permanently removes the link so anyone opening it will no longer be able to view these stats.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = SlateGray
                 )
             },
             confirmButton = {
@@ -683,8 +698,8 @@ fun ShareScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = Color.White
+                        containerColor = CrimsonPrimary,
+                        contentColor = PureWhite
                     )
                 ) {
                     Text("Delete")
@@ -692,7 +707,7 @@ fun ShareScreen(
             },
             dismissButton = {
                 TextButton(onClick = { linkPendingDelete = null }) {
-                    Text("Cancel")
+                    Text("Cancel", color = SlateGray)
                 }
             }
         )
@@ -718,6 +733,7 @@ fun ShareScreen(
         )
         DatePickerDialog(
             onDismissRequest = { showLiveStartPicker = false },
+            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -729,16 +745,19 @@ fun ShareScreen(
                         showLiveStartPicker = false
                     }
                 ) {
-                    Text("Select")
+                    Text("Select", color = CrimsonPrimary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLiveStartPicker = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = SlateGray)
                 }
             }
         ) {
-            DatePicker(state = datePickerState)
+            DatePicker(
+                state = datePickerState,
+                colors = DatePickerDefaults.colors(containerColor = ObsidianSurface)
+            )
         }
     }
 
@@ -759,6 +778,7 @@ fun ShareScreen(
             onDismissRequest = {
                 showRangeStartPicker = false
             },
+            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
             confirmButton = {
                 TextButton(
                     enabled = startPickerState.selectedDateMillis != null,
@@ -774,7 +794,7 @@ fun ShareScreen(
                         showRangeStartPicker = false
                     }
                 ) {
-                    Text("Select")
+                    Text("Select", color = CrimsonPrimary)
                 }
             },
             dismissButton = {
@@ -783,12 +803,13 @@ fun ShareScreen(
                         showRangeStartPicker = false
                     }
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = SlateGray)
                 }
             }
         ) {
             DatePicker(
                 state = startPickerState,
+                colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
                 title = {
                     Text(
                         text = "Select Start Date",
@@ -817,6 +838,7 @@ fun ShareScreen(
         )
         DatePickerDialog(
             onDismissRequest = { showRangeEndPicker = false },
+            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
             confirmButton = {
                 TextButton(
                     enabled = endPickerState.selectedDateMillis != null,
@@ -829,17 +851,18 @@ fun ShareScreen(
                         showRangeEndPicker = false
                     }
                 ) {
-                    Text("Select")
+                    Text("Select", color = CrimsonPrimary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRangeEndPicker = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = SlateGray)
                 }
             }
         ) {
             DatePicker(
                 state = endPickerState,
+                colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
                 title = {
                     Text(
                         text = "Select End Date",
@@ -1850,16 +1873,93 @@ private fun YourLinksSection(
                     )
                 }
             } else {
+                val view = LocalView.current
                 filteredLinks.forEach { item ->
-                    SharedLinkItemCard(
-                        item = item,
-                        isBusy = busyLinkId == item.shareId,
-                        isCopied = copiedLinkId == item.shareId,
-                        onCopy = { onCopyLink(item) },
-                        onView = { onViewLink(item) },
-                        onDisableLive = { onDisableLive(item) },
-                        onDelete = { onRequestDelete(item) }
-                    )
+                    key(item.shareId) {
+                        val swipeState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                when (value) {
+                                    SwipeToDismissBoxValue.EndToStart -> {
+                                        view.performKeyTapHaptic()
+                                        onRequestDelete(item)
+                                        false // Keep card until confirmation dialog deletes it
+                                    }
+                                    SwipeToDismissBoxValue.StartToEnd -> {
+                                        view.performKeyTapHaptic()
+                                        onCopyLink(item)
+                                        false // Snap back after copying
+                                    }
+                                    SwipeToDismissBoxValue.Settled -> false
+                                }
+                            }
+                        )
+                        SwipeToDismissBox(
+                            state = swipeState,
+                            backgroundContent = {
+                                val direction = swipeState.dismissDirection
+                                val isCopy = direction == SwipeToDismissBoxValue.StartToEnd
+                                val isDelete = direction == SwipeToDismissBoxValue.EndToStart
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(
+                                            when {
+                                                isCopy -> FocusEmerald.copy(alpha = 0.18f)
+                                                isDelete -> CrimsonContainer
+                                                else -> Color.Transparent
+                                            }
+                                        )
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = if (isCopy) Alignment.CenterStart else Alignment.CenterEnd
+                                ) {
+                                    if (isCopy) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.ContentCopy,
+                                                contentDescription = "Copy Link",
+                                                tint = FocusEmerald
+                                            )
+                                            Text(
+                                                text = "Copy Link",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = FocusEmerald
+                                            )
+                                        }
+                                    } else if (isDelete) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Delete",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = CrimsonPrimary
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Outlined.DeleteOutline,
+                                                contentDescription = "Delete Link",
+                                                tint = CrimsonPrimary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            SharedLinkItemCard(
+                                item = item,
+                                isBusy = busyLinkId == item.shareId,
+                                isCopied = copiedLinkId == item.shareId,
+                                onCopy = { onCopyLink(item) },
+                                onView = { onViewLink(item) },
+                                onDisableLive = { onDisableLive(item) },
+                                onDelete = { onRequestDelete(item) }
+                            )
+                        }
+                    }
                 }
             }
         }

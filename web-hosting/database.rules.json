@@ -11,6 +11,10 @@
     "shared_stats": {
       ".read": true,
       ".write": true
+    },
+    "app_config": {
+      ".read": true,
+      ".write": false
     }
   }
 }

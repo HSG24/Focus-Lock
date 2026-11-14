@@ -77,10 +77,21 @@ import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.LockAppLayout
 import com.example.data.ShareRepository
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
+import com.example.ui.components.rememberSpringPressScale
+import com.example.ui.theme.CrimsonBorderTint
+import com.example.ui.theme.CrimsonContainer
+import com.example.ui.theme.CrimsonGlow
+import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.ObsidianElevated
+import com.example.ui.theme.PureWhite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -446,7 +457,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
             setContent {
                 val settingsState by FocusSettingsRepository.observe(this@LockService).collectAsState()
-                MyApplicationTheme(themeMode = settingsState.themeMode) {
+                MyApplicationTheme {
                     val minimized by isMinimizedState
 
                     if (minimized) {
@@ -480,7 +491,6 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             showSessionTimer = settingsState.showSessionTimer,
                             hapticKeypad = settingsState.hapticKeypad,
                             autoClearWrongPin = settingsState.autoClearWrongPin,
-                            followAppTheme = settingsState.lockScreenFollowsTheme,
                             sessionStartTimeMs = startTime,
                             onLaunchApp = { app -> launchAllowedApp(app) }
                         )
@@ -591,15 +601,10 @@ fun LockScreen(
     showSessionTimer: Boolean = true,
     hapticKeypad: Boolean = true,
     autoClearWrongPin: Boolean = true,
-    followAppTheme: Boolean = false,
     sessionStartTimeMs: Long = 0L,
     onLaunchApp: ((AllowedApp) -> Unit)? = null
 ) {
-    val palette = if (followAppTheme) {
-        LockPalette.fromMaterialTheme()
-    } else {
-        LockPalette.StealthDark
-    }
+    val palette = LockPalette.StealthDark
     val haptic = LocalHapticFeedback.current
     var enteredPin by remember { mutableStateOf("") }
     var wrongPinError by remember { mutableStateOf(false) }
@@ -643,6 +648,14 @@ fun LockScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.background)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        CrimsonGlow.copy(alpha = 0.28f),
+                        Color.Transparent
+                    )
+                )
+            )
             .padding(horizontal = 24.dp, vertical = 28.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -661,17 +674,15 @@ fun LockScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(palette.surface)
-                        .border(1.dp, palette.border, CircleShape),
+                        .border(1.dp, CrimsonBorderTint, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lock,
-                        contentDescription = "Locked",
-                        modifier = Modifier.size(24.dp),
-                        tint = palette.accent
+                    FocusLockEmblem(
+                        size = 48.dp,
+                        showAmbientGlow = true
                     )
                 }
 
@@ -812,9 +823,18 @@ fun KeypadButton(
     palette: LockPalette = LockPalette.StealthDark,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.90f)
+
     Button(
         onClick = onClick,
-        modifier = Modifier.size(64.dp),
+        interactionSource = interactionSource,
+        modifier = Modifier
+            .size(64.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = palette.surface,
@@ -847,11 +867,11 @@ fun KeypadButton(
 fun FloatingBubble(onResumeLock: () -> Unit) {
     Surface(
         onClick = onResumeLock,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        color = ObsidianElevated,
+        contentColor = PureWhite,
         shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, CrimsonBorderTint),
+        shadowElevation = 8.dp,
         modifier = Modifier
             .padding(8.dp)
             .wrapContentSize()
@@ -864,12 +884,14 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
             Icon(
                 imageVector = Icons.Filled.Lock,
                 contentDescription = "Lock icon",
+                tint = CrimsonPrimary,
                 modifier = Modifier.size(16.dp)
             )
             Text(
                 text = "Back to Lock",
                 fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = PureWhite
             )
         }
     }

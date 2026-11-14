@@ -4,8 +4,15 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +21,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -34,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -49,7 +58,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,7 +71,19 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.LockService
 import com.example.MainActivity
+import com.example.ui.components.FocusLockEmblem
+import com.example.ui.components.performKeyTapHaptic
+import com.example.ui.components.rememberSpringPressScale
+import com.example.ui.theme.CrimsonBorderTint
+import com.example.ui.theme.CrimsonDeep
+import com.example.ui.theme.CrimsonGlow
+import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.FocusEmerald
+import com.example.ui.theme.ObsidianBorder
+import com.example.ui.theme.ObsidianSurface
+import com.example.ui.theme.OledBlack
+import com.example.ui.theme.PureWhite
+import com.example.ui.theme.SlateGray
 import com.example.uploadPinToFirebase
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -68,12 +91,12 @@ import kotlin.random.Random
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FocusHomeScreen(
-    onOpenSettings: () -> Unit,
     onOpenShare: () -> Unit,
     isLiveShareActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -98,75 +121,95 @@ fun FocusHomeScreen(
 
     val permissionsReady = hasOverlayPermission && hasUsagePermission
 
+    val infiniteTransition = rememberInfiniteTransition(label = "ambient_crimson_glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.22f,
+        targetValue = 0.42f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_alpha"
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(OledBlack)
     ) {
+        // Subtle ambient crimson radial backdrop behind the hero centerpiece
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            CrimsonGlow.copy(alpha = glowAlpha),
+                            CrimsonDeep.copy(alpha = 0.06f),
+                            OledBlack
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(top = 40.dp, bottom = 56.dp),
+                .padding(top = 68.dp, bottom = 104.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
-                    .widthIn(max = 460.dp)
+                    .widthIn(max = 440.dp)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
-                // Minimalist Concentric Aura + Lock Emblem
+                // Hero Custom Geometric Focus Lock Emblem with Obsidian Ring
                 Box(
-                    modifier = Modifier.size(152.dp),
+                    modifier = Modifier.size(164.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(152.dp)
+                            .size(156.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.radialGradient(
                                     colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.03f),
-                                        MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                                        CrimsonPrimary.copy(alpha = glowAlpha * 0.55f),
+                                        CrimsonGlow.copy(alpha = 0.16f),
+                                        Color.Transparent
                                     )
                                 )
                             )
                     )
                     Box(
                         modifier = Modifier
-                            .size(110.dp)
+                            .size(124.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surface)
+                            .background(ObsidianSurface)
                             .border(
                                 width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
+                                brush = Brush.linearGradient(
+                                    colors = listOf(CrimsonBorderTint, ObsidianBorder)
+                                ),
                                 shape = CircleShape
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(78.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Lock,
-                                contentDescription = "Focus Lock Emblem",
-                                modifier = Modifier.size(34.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        FocusLockEmblem(
+                            size = 92.dp,
+                            showAmbientGlow = true
+                        )
                     }
                 }
 
-                // Editorial Title & Subtitle
+                // Editorial Headline & Subtitle
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -175,30 +218,34 @@ fun FocusHomeScreen(
                         text = "Deep Focus",
                         style = MaterialTheme.typography.headlineMedium,
                         fontSize = 32.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = PureWhite,
                         textAlign = TextAlign.Center
                     )
                     Text(
                         text = "Silence distractions and keep only essential tools within reach.",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = SlateGray,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                // Primary CTA
+                // Primary Spring-Animated Crimson CTA
                 if (isLoading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(38.dp),
                         strokeWidth = 3.dp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = CrimsonPrimary
                     )
                 } else {
+                    val ctaInteraction = remember { MutableInteractionSource() }
+                    val ctaScale = rememberSpringPressScale(ctaInteraction, pressedScale = 0.96f)
+
                     Button(
                         onClick = {
+                            view.performKeyTapHaptic()
                             val mainActivity = context as? MainActivity
                             if (!Settings.canDrawOverlays(context)) {
                                 val intent = Intent(
@@ -229,14 +276,23 @@ fun FocusHomeScreen(
                                 }
                             }
                         },
+                        interactionSource = ctaInteraction,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp)
+                            .height(62.dp)
+                            .graphicsLayer {
+                                scaleX = ctaScale
+                                scaleY = ctaScale
+                            }
                             .testTag("start_focus_button"),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
+                            containerColor = CrimsonPrimary,
+                            contentColor = PureWhite
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = PureWhite.copy(alpha = 0.14f)
                         ),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                     ) {
@@ -248,33 +304,40 @@ fun FocusHomeScreen(
                     }
                 }
 
-                // Subtle Permission Indicator
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Obsidian Permission Readiness Pill
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = ObsidianSurface,
+                    border = BorderStroke(1.dp, ObsidianBorder)
                 ) {
-                    Icon(
-                        imageVector = if (permissionsReady) Icons.Outlined.VerifiedUser else Icons.Outlined.WarningAmber,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = if (permissionsReady) FocusEmerald else MaterialTheme.colorScheme.tertiary
-                    )
-                    Text(
-                        text = if (permissionsReady) {
-                            "Overlay & usage protection ready"
-                        } else {
-                            "Overlay or usage access permission needed"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (permissionsReady) Icons.Outlined.VerifiedUser else Icons.Outlined.WarningAmber,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = if (permissionsReady) FocusEmerald else CrimsonPrimary
+                        )
+                        Text(
+                            text = if (permissionsReady) {
+                                "Overlay & usage protection ready"
+                            } else {
+                                "Overlay or usage access permission needed"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 12.sp,
+                            color = SlateGray
+                        )
+                    }
                 }
 
                 if (errorMessage != null) {
                     Text(
                         text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error,
+                        color = CrimsonPrimary,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -283,24 +346,37 @@ fun FocusHomeScreen(
             }
         }
 
+        // Top Bar with Matching Geometric Brand Emblem + Share Action
         TopAppBar(
             title = {
-                Text(
-                    text = "Focus Lock",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FocusLockEmblem(
+                        size = 30.dp,
+                        showAmbientGlow = false
+                    )
+                    Text(
+                        text = "Focus Lock",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = PureWhite
+                    )
+                }
             },
             actions = {
                 IconButton(
-                    onClick = onOpenShare,
+                    onClick = {
+                        view.performKeyTapHaptic()
+                        onOpenShare()
+                    },
                     modifier = Modifier.testTag("home_share_button")
                 ) {
                     Box(contentAlignment = Alignment.TopEnd) {
                         Icon(
                             imageVector = Icons.Outlined.Share,
                             contentDescription = "Share Stats",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = PureWhite
                         )
                         if (isLiveShareActive) {
                             Box(
@@ -310,23 +386,14 @@ fun FocusHomeScreen(
                                     .background(FocusEmerald)
                                     .border(
                                         width = 1.dp,
-                                        color = MaterialTheme.colorScheme.background,
+                                        color = OledBlack,
                                         shape = CircleShape
                                     )
                             )
                         }
                     }
                 }
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.testTag("settings_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+                Spacer(modifier = Modifier.width(4.dp))
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent

@@ -1,78 +1,47 @@
 package com.example.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import com.example.data.ThemeMode
 
-private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    primaryContainer = DarkPrimaryContainer,
-    onPrimaryContainer = DarkOnPrimaryContainer,
-    secondary = DarkSecondary,
-    onSecondary = DarkOnSecondary,
-    secondaryContainer = DarkSecondaryContainer,
-    onSecondaryContainer = DarkOnSecondaryContainer,
-    tertiary = DarkTertiary,
-    tertiaryContainer = DarkTertiaryContainer,
-    onTertiaryContainer = DarkOnTertiaryContainer,
-    background = DarkBackground,
-    onBackground = DarkOnSurface,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceContainerLowest = DarkBackground,
-    surfaceContainerLow = DarkSurface,
-    surfaceContainer = DarkSurfaceVariant,
-    outline = DarkOutline,
-    outlineVariant = DarkOutlineVariant,
-    error = DarkError
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    primaryContainer = LightPrimaryContainer,
-    onPrimaryContainer = LightOnPrimaryContainer,
-    secondary = LightSecondary,
-    onSecondary = LightOnSecondary,
-    secondaryContainer = LightSecondaryContainer,
-    onSecondaryContainer = LightOnSecondaryContainer,
-    tertiary = LightTertiary,
-    tertiaryContainer = LightTertiaryContainer,
-    onTertiaryContainer = LightOnTertiaryContainer,
-    background = LightBackground,
-    onBackground = LightOnSurface,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    surfaceContainerLowest = LightSurface,
-    surfaceContainerLow = LightSurface,
-    surfaceContainer = LightSurfaceVariant,
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant,
-    error = LightError
+private val OledDarkColorScheme = darkColorScheme(
+    primary = CrimsonPrimary,
+    onPrimary = PureWhite,
+    primaryContainer = CrimsonContainer,
+    onPrimaryContainer = PureWhite,
+    secondary = SlateGray,
+    onSecondary = OledBlack,
+    secondaryContainer = ObsidianElevated,
+    onSecondaryContainer = PureWhite,
+    tertiary = CrimsonDeep,
+    onTertiary = PureWhite,
+    tertiaryContainer = CrimsonGlow,
+    onTertiaryContainer = PureWhite,
+    background = OledBlack,
+    onBackground = PureWhite,
+    surface = ObsidianSurface,
+    onSurface = PureWhite,
+    surfaceVariant = ObsidianElevated,
+    onSurfaceVariant = SlateGray,
+    surfaceContainerLowest = OledBlack,
+    surfaceContainerLow = ObsidianSurface,
+    surfaceContainer = ObsidianElevated,
+    surfaceContainerHigh = ObsidianElevated,
+    surfaceContainerHighest = ObsidianBorder,
+    outline = ObsidianOutline,
+    outlineVariant = ObsidianBorder,
+    error = CrimsonPrimary,
+    onError = PureWhite,
+    errorContainer = CrimsonContainer,
+    onErrorContainer = PureWhite
 )
 
 @Composable
 fun MyApplicationTheme(
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    darkTheme: Boolean = when (themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    },
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = OledDarkColorScheme,
         typography = Typography,
         content = content
     )

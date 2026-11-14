@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Monochrome Target Ring Segments -->
+    <path
+        android:pathData="M59,25.4 A29,29 0 0,1 82.6,49"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M82.6,59 A29,29 0 0,1 59,82.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M49,82.6 A29,29 0 0,1 25.4,59"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M25.4,49 A29,29 0 0,1 49,25.4"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+
+    <!-- Cardinal Target Ticks -->
+    <path
+        android:pathData="M54,21.5 L54,28.5 M54,79.5 L54,86.5 M21.5,54 L28.5,54 M79.5,54 L86.5,54"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+
+    <!-- Geometric Padlock Shackle -->
+    <path
+        android:pathData="M45.5,48 L45.5,41.5 A8.5,8.5 0 0,1 62.5,41.5 L62.5,48"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Padlock Body with Cutout Keyhole using evenOdd fillType -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M41.5,48 H66.5 A3.5,3.5 0 0,1 70,51.5 V67.5 A4.5,4.5 0 0,1 65.5,72 H42.5 A4.5,4.5 0 0,1 38,67.5 V51.5 A3.5,3.5 0 0,1 41.5,48 Z M54,55.2 A4.2,4.2 0 1,0 54,63.6 A4.2,4.2 0 1,0 54,55.2 Z M52.6,62.4 H55.4 V67.2 H52.6 Z" />
+</vector>

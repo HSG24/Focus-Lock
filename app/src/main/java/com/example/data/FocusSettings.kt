@@ -18,12 +18,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class ThemeMode(val displayName: String) {
-    SYSTEM("System"),
-    LIGHT("Light"),
-    DARK("Dark")
-}
-
 enum class LockAppLayout(
     val title: String,
     val subtitle: String
@@ -48,14 +42,12 @@ data class InstalledAppInfo(
 )
 
 data class FocusSettingsState(
-    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val lockAppLayout: LockAppLayout = LockAppLayout.PILL_ROW,
     val allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
     val dailyGoalMinutes: Long = 60L,
     val showSessionTimer: Boolean = true,
     val hapticKeypad: Boolean = true,
     val autoClearWrongPin: Boolean = true,
-    val lockScreenFollowsTheme: Boolean = false,
     val appSwitchGraceSeconds: Int = 2,
     val activeLiveShareId: String? = null,
     val activeLiveShareStartDateMs: Long = 0L
@@ -63,14 +55,12 @@ data class FocusSettingsState(
 
 object FocusSettingsRepository {
     private const val PREFS_NAME = "focus_settings"
-    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_LOCK_LAYOUT = "lock_app_layout"
     private const val KEY_ALLOWED_APPS = "allowed_apps_json"
     private const val KEY_DAILY_GOAL = "daily_goal_min"
     private const val KEY_SHOW_TIMER = "show_session_timer"
     private const val KEY_HAPTIC_KEYPAD = "haptic_keypad"
     private const val KEY_AUTO_CLEAR_PIN = "auto_clear_wrong_pin"
-    private const val KEY_LOCK_FOLLOWS_THEME = "lock_screen_follows_theme"
     private const val KEY_GRACE_SECONDS = "app_switch_grace_sec"
     private const val KEY_ACTIVE_LIVE_SHARE_ID = "active_live_share_id"
     private const val KEY_ACTIVE_LIVE_SHARE_START_MS = "active_live_share_start_ms"
@@ -138,10 +128,6 @@ object FocusSettingsRepository {
     }
 
     private fun readState(prefs: SharedPreferences): FocusSettingsState {
-        val themeName = prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name)
-        val themeMode = runCatching { ThemeMode.valueOf(themeName ?: ThemeMode.SYSTEM.name) }
-            .getOrDefault(ThemeMode.SYSTEM)
-
         val layoutName = prefs.getString(KEY_LOCK_LAYOUT, LockAppLayout.PILL_ROW.name)
         val lockLayout = runCatching { LockAppLayout.valueOf(layoutName ?: LockAppLayout.PILL_ROW.name) }
             .getOrDefault(LockAppLayout.PILL_ROW)
@@ -153,22 +139,16 @@ object FocusSettingsRepository {
         }
 
         return FocusSettingsState(
-            themeMode = themeMode,
             lockAppLayout = lockLayout,
             allowedApps = allowedApps,
             dailyGoalMinutes = prefs.getLong(KEY_DAILY_GOAL, 60L).coerceIn(5L, 720L),
             showSessionTimer = prefs.getBoolean(KEY_SHOW_TIMER, true),
             hapticKeypad = prefs.getBoolean(KEY_HAPTIC_KEYPAD, true),
             autoClearWrongPin = prefs.getBoolean(KEY_AUTO_CLEAR_PIN, true),
-            lockScreenFollowsTheme = prefs.getBoolean(KEY_LOCK_FOLLOWS_THEME, false),
             appSwitchGraceSeconds = prefs.getInt(KEY_GRACE_SECONDS, 2).coerceIn(1, 5),
             activeLiveShareId = prefs.getString(KEY_ACTIVE_LIVE_SHARE_ID, null)?.takeIf { it.isNotBlank() },
             activeLiveShareStartDateMs = prefs.getLong(KEY_ACTIVE_LIVE_SHARE_START_MS, 0L)
         )
-    }
-
-    fun setThemeMode(context: Context, mode: ThemeMode) {
-        update(context) { putString(KEY_THEME_MODE, mode.name) }
     }
 
     fun setLockAppLayout(context: Context, layout: LockAppLayout) {
@@ -189,10 +169,6 @@ object FocusSettingsRepository {
 
     fun setAutoClearWrongPin(context: Context, enabled: Boolean) {
         update(context) { putBoolean(KEY_AUTO_CLEAR_PIN, enabled) }
-    }
-
-    fun setLockScreenFollowsTheme(context: Context, enabled: Boolean) {
-        update(context) { putBoolean(KEY_LOCK_FOLLOWS_THEME, enabled) }
     }
 
     fun setAppSwitchGraceSeconds(context: Context, seconds: Int) {

@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,10 +18,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,17 +37,18 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.LocalFireDepartment
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
@@ -62,9 +68,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -83,8 +91,22 @@ import com.example.formatDurationMinutes
 import com.example.getFormattedDate
 import com.example.isSameDay
 import com.example.isSameDayCalendar
+import com.example.ui.components.FocusLockEmblem
+import com.example.ui.components.performClockTickHaptic
+import com.example.ui.components.performKeyTapHaptic
+import com.example.ui.theme.CrimsonBorderTint
+import com.example.ui.theme.CrimsonContainer
+import com.example.ui.theme.CrimsonDeep
+import com.example.ui.theme.CrimsonGlow
+import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.FocusEmerald
 import com.example.ui.theme.JetBrainsMono
+import com.example.ui.theme.ObsidianBorder
+import com.example.ui.theme.ObsidianElevated
+import com.example.ui.theme.ObsidianSurface
+import com.example.ui.theme.OledBlack
+import com.example.ui.theme.PureWhite
+import com.example.ui.theme.SlateGray
 import com.example.ui.theme.StreakAmber
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -93,12 +115,12 @@ import java.util.Calendar
 @Composable
 fun StatsScreen(
     settingsState: FocusSettingsState,
-    onOpenSettings: () -> Unit,
     onOpenShare: (Long?) -> Unit,
     isLiveShareActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -145,32 +167,52 @@ fun StatsScreen(
 
     val dailyGoalMs = settingsState.dailyGoalMinutes * 60 * 1000L
     val progressFraction = (totalTimeMs.toFloat() / dailyGoalMs.toFloat()).coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = progressFraction,
+        animationSpec = spring(
+            dampingRatio = 0.78f,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "daily_goal_progress"
+    )
     val progressPercentage = (progressFraction * 100).toInt()
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(OledBlack)
+            .navigationBarsPadding()
     ) {
-        // Top Header with Focus Insights title + minimal Calendar & Settings icons in top right
         TopAppBar(
             title = {
-                Text(
-                    text = "Focus Insights",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FocusLockEmblem(
+                        size = 26.dp,
+                        showAmbientGlow = false
+                    )
+                    Text(
+                        text = "Focus Insights",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = PureWhite
+                    )
+                }
             },
             actions = {
                 IconButton(
-                    onClick = { onOpenShare(selectedDate.timeInMillis) },
+                    onClick = {
+                        view.performKeyTapHaptic()
+                        onOpenShare(selectedDate.timeInMillis)
+                    },
                     modifier = Modifier.testTag("stats_share_button")
                 ) {
                     Box(contentAlignment = Alignment.TopEnd) {
                         Icon(
                             imageVector = Icons.Outlined.Share,
                             contentDescription = "Share Stats",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = PureWhite
                         )
                         if (isLiveShareActive) {
                             Box(
@@ -180,7 +222,7 @@ fun StatsScreen(
                                     .background(FocusEmerald)
                                     .border(
                                         width = 1.dp,
-                                        color = MaterialTheme.colorScheme.background,
+                                        color = OledBlack,
                                         shape = CircleShape
                                     )
                             )
@@ -188,36 +230,29 @@ fun StatsScreen(
                     }
                 }
                 IconButton(
-                    onClick = { showDatePicker = true },
+                    onClick = {
+                        view.performKeyTapHaptic()
+                        showDatePicker = true
+                    },
                     modifier = Modifier.testTag("calendar_picker_button")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.CalendarMonth,
                         contentDescription = "Select Custom Date",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.testTag("settings_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = SlateGray
                     )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background
+                containerColor = OledBlack
             )
         )
 
-        // Sleek Date Changing Bar positioned right at the top below "Focus Insights"
+        // Obsidian Date Selector Bar
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            color = ObsidianSurface,
+            border = BorderStroke(1.dp, ObsidianBorder),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
@@ -232,6 +267,7 @@ fun StatsScreen(
             ) {
                 IconButton(
                     onClick = {
+                        view.performClockTickHaptic()
                         selectedDate = (selectedDate.clone() as Calendar).apply {
                             add(Calendar.DATE, -1)
                         }
@@ -242,7 +278,7 @@ fun StatsScreen(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Previous Day",
                         modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = PureWhite
                     )
                 }
 
@@ -254,17 +290,24 @@ fun StatsScreen(
                     Text(
                         text = getFormattedDate(selectedDate),
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = PureWhite,
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable { showDatePicker = true }
+                            .clickable {
+                                view.performKeyTapHaptic()
+                                showDatePicker = true
+                            }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     )
 
                     AnimatedVisibility(
                         visible = !isSelectedToday,
-                        enter = fadeIn() + expandHorizontally(),
-                        exit = fadeOut() + shrinkHorizontally()
+                        enter = fadeIn() + expandHorizontally(
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        ),
+                        exit = fadeOut() + shrinkHorizontally(
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        )
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Spacer(modifier = Modifier.width(2.dp))
@@ -273,13 +316,17 @@ fun StatsScreen(
                                 modifier = Modifier
                                     .heightIn(min = 40.dp)
                                     .clip(RoundedCornerShape(50))
-                                    .clickable { selectedDate = Calendar.getInstance() }
+                                    .clickable {
+                                        view.performClockTickHaptic()
+                                        selectedDate = Calendar.getInstance()
+                                    }
                                     .padding(horizontal = 4.dp)
                                     .testTag("jump_today_button")
                             ) {
                                 Surface(
                                     shape = RoundedCornerShape(50),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    color = CrimsonContainer,
+                                    border = BorderStroke(1.dp, CrimsonBorderTint)
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
@@ -290,13 +337,13 @@ fun StatsScreen(
                                             text = "Today",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = CrimsonPrimary
                                         )
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                             contentDescription = null,
                                             modifier = Modifier.size(12.dp),
-                                            tint = MaterialTheme.colorScheme.primary
+                                            tint = CrimsonPrimary
                                         )
                                     }
                                 }
@@ -308,6 +355,7 @@ fun StatsScreen(
                 IconButton(
                     onClick = {
                         if (!isSelectedToday) {
+                            view.performClockTickHaptic()
                             selectedDate = (selectedDate.clone() as Calendar).apply {
                                 add(Calendar.DATE, 1)
                             }
@@ -320,11 +368,7 @@ fun StatsScreen(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = "Next Day",
                         modifier = Modifier.size(20.dp),
-                        tint = if (isSelectedToday) {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
+                        tint = if (isSelectedToday) PureWhite.copy(alpha = 0.22f) else PureWhite
                     )
                 }
             }
@@ -332,7 +376,7 @@ fun StatsScreen(
 
         HorizontalDivider(
             thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
+            color = ObsidianBorder
         )
 
         if (isLoadingStats) {
@@ -340,67 +384,81 @@ fun StatsScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                androidx.compose.material3.CircularProgressIndicator(
+                CircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
                     strokeWidth = 2.5.dp,
-                    color = MaterialTheme.colorScheme.primary
+                    color = CrimsonPrimary
                 )
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Hero Total Focus Time Card
+                // Hero Total Focus Time Card with subtle crimson radial sheen
                 item {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(22.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        color = ObsidianSurface,
+                        border = BorderStroke(1.dp, ObsidianBorder)
                     ) {
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 28.dp, horizontal = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            CrimsonGlow.copy(alpha = 0.35f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
                         ) {
-                            Text(
-                                text = "TOTAL FOCUS TIME",
-                                style = MaterialTheme.typography.labelSmall,
-                                letterSpacing = 1.4.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            val hours = totalTimeMs / (1000 * 60 * 60)
-                            val minutes = (totalTimeMs % (1000 * 60 * 60)) / (1000 * 60)
-                            val seconds = (totalTimeMs % (1000 * 60)) / 1000
-                            val formattedTime = when {
-                                hours > 0 -> "${hours}h ${minutes}m"
-                                minutes > 0 -> "${minutes}m ${seconds}s"
-                                else -> "${seconds}s"
-                            }
-
-                            Text(
-                                text = if (totalTimeMs > 0) formattedTime else "0s",
-                                fontFamily = JetBrainsMono,
-                                fontSize = 44.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.primaryContainer
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 28.dp, horizontal = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = if (sessionCount == 1) "1 session completed" else "$sessionCount sessions completed",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    text = "TOTAL FOCUS TIME",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    letterSpacing = 1.4.sp,
+                                    color = SlateGray
                                 )
+
+                                val hours = totalTimeMs / (1000 * 60 * 60)
+                                val minutes = (totalTimeMs % (1000 * 60 * 60)) / (1000 * 60)
+                                val seconds = (totalTimeMs % (1000 * 60)) / 1000
+                                val formattedTime = when {
+                                    hours > 0 -> "${hours}h ${minutes}m"
+                                    minutes > 0 -> "${minutes}m ${seconds}s"
+                                    else -> "${seconds}s"
+                                }
+
+                                Text(
+                                    text = if (totalTimeMs > 0) formattedTime else "0s",
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 44.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PureWhite
+                                )
+
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = CrimsonContainer,
+                                    border = BorderStroke(1.dp, CrimsonBorderTint)
+                                ) {
+                                    Text(
+                                        text = if (sessionCount == 1) "1 session completed" else "$sessionCount sessions completed",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = PureWhite,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -411,8 +469,8 @@ fun StatsScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        color = ObsidianSurface,
+                        border = BorderStroke(1.dp, ObsidianBorder)
                     ) {
                         Column(
                             modifier = Modifier.padding(18.dp),
@@ -430,14 +488,14 @@ fun StatsScreen(
                                     Icon(
                                         imageVector = Icons.Outlined.CheckCircle,
                                         contentDescription = null,
-                                        tint = if (progressPercentage >= 100) FocusEmerald else MaterialTheme.colorScheme.primary,
+                                        tint = if (progressPercentage >= 100) FocusEmerald else CrimsonPrimary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Text(
                                         text = "Daily Goal",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontSize = 15.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = PureWhite
                                     )
                                 }
                                 Text(
@@ -445,19 +503,33 @@ fun StatsScreen(
                                     fontFamily = JetBrainsMono,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (progressPercentage >= 100) FocusEmerald else MaterialTheme.colorScheme.primary
+                                    color = if (progressPercentage >= 100) FocusEmerald else CrimsonPrimary
                                 )
                             }
 
-                            LinearProgressIndicator(
-                                progress = { progressFraction },
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(7.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = if (progressPercentage >= 100) FocusEmerald else MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(ObsidianElevated)
+                            ) {
+                                if (animatedProgress > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(animatedProgress.coerceAtLeast(0.02f))
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(
+                                                if (progressPercentage >= 100) {
+                                                    Brush.horizontalGradient(listOf(FocusEmerald, FocusEmerald))
+                                                } else {
+                                                    Brush.horizontalGradient(listOf(CrimsonDeep, CrimsonPrimary))
+                                                }
+                                            )
+                                    )
+                                }
+                            }
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -474,15 +546,16 @@ fun StatsScreen(
                                 Text(
                                     text = "Target: $goalText / day",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = SlateGray
                                 )
                                 Text(
                                     text = "Edit Goal",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = CrimsonPrimary,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
                                         .clickable {
+                                            view.performKeyTapHaptic()
                                             goalInputText = settingsState.dailyGoalMinutes.toString()
                                             showGoalDialog = true
                                         }
@@ -531,15 +604,15 @@ fun StatsScreen(
                             days = currentStreak,
                             icon = Icons.Outlined.LocalFireDepartment,
                             tint = StreakAmber,
-                            badgeBg = MaterialTheme.colorScheme.tertiaryContainer,
+                            badgeBg = ObsidianElevated,
                             modifier = Modifier.weight(1f)
                         )
                         StreakCard(
                             title = "Best Streak",
                             days = maxStreak,
                             icon = Icons.Outlined.EmojiEvents,
-                            tint = MaterialTheme.colorScheme.primary,
-                            badgeBg = MaterialTheme.colorScheme.primaryContainer,
+                            tint = CrimsonPrimary,
+                            badgeBg = CrimsonContainer,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -564,13 +637,16 @@ fun StatsScreen(
     if (showGoalDialog) {
         AlertDialog(
             onDismissRequest = { showGoalDialog = false },
+            containerColor = ObsidianSurface,
+            titleContentColor = PureWhite,
+            textContentColor = SlateGray,
             title = { Text("Daily Focus Goal", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Set your daily target focus duration (minutes):",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = SlateGray
                     )
                     OutlinedTextField(
                         value = goalInputText,
@@ -588,19 +664,24 @@ fun StatsScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        view.performKeyTapHaptic()
                         val parsed = goalInputText.toLongOrNull() ?: 60L
                         if (parsed > 0) {
                             FocusSettingsRepository.setDailyGoalMinutes(context, parsed)
                         }
                         showGoalDialog = false
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CrimsonPrimary,
+                        contentColor = PureWhite
+                    )
                 ) {
                     Text("Save")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showGoalDialog = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = SlateGray)
                 }
             }
         )
@@ -616,8 +697,8 @@ private fun StatMiniCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        color = ObsidianSurface,
+        border = BorderStroke(1.dp, ObsidianBorder)
     ) {
         Column(
             modifier = Modifier.padding(vertical = 14.dp, horizontal = 10.dp),
@@ -629,12 +710,12 @@ private fun StatMiniCard(
                 fontFamily = JetBrainsMono,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = PureWhite
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = SlateGray
             )
         }
     }
@@ -652,8 +733,8 @@ private fun StreakCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        color = ObsidianSurface,
+        border = BorderStroke(1.dp, ObsidianBorder)
     ) {
         Row(
             modifier = Modifier
@@ -666,7 +747,8 @@ private fun StreakCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(badgeBg),
+                    .background(badgeBg)
+                    .border(1.dp, ObsidianBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -682,13 +764,13 @@ private fun StreakCard(
                     fontFamily = JetBrainsMono,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = PureWhite
                 )
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = SlateGray,
                     textAlign = TextAlign.Start
                 )
             }
@@ -711,6 +793,7 @@ fun SleekDatePickerDialog(
     )
     DatePickerDialog(
         onDismissRequest = onDismiss,
+        colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
         confirmButton = {
             TextButton(
                 onClick = {
@@ -718,15 +801,18 @@ fun SleekDatePickerDialog(
                     onDismiss()
                 }
             ) {
-                Text("OK")
+                Text("OK", color = CrimsonPrimary)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Cancel", color = SlateGray)
             }
         }
     ) {
-        DatePicker(state = datePickerState)
+        DatePicker(
+            state = datePickerState,
+            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface)
+        )
     }
 }
