@@ -23,11 +23,11 @@ jobs:
           if [ ! -f debug.keystore ]; then
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
-      - name: Build Debug APK
-        run: gradle assembleDebug -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }}
+      - name: Build Optimized Release APK
+        run: gradle assembleRelease
       - name: Publish Private Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Focus Lock v1.0.${{ github.run_number }}
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/release/app-release.apk
