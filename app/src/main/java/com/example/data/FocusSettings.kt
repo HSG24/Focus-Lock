@@ -12,7 +12,6 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
-import android.util.LruCache
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -24,6 +23,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 
 enum class LockAppLayout(
     val title: String,
@@ -111,7 +112,9 @@ object FocusSettingsRepository {
     @Volatile
     private var listener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
-    private val appIconCache = LruCache<String, ImageBitmap>(72)
+    private val appIconMap = ConcurrentHashMap<String, ImageBitmap>()
+    private val _appIconsState = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
+    val appIconsState: StateFlow<Map<String, ImageBitmap>> = _appIconsState.asStateFlow()
     private val missingAppIconPackages = Collections.synchronizedSet(HashSet<String>())
 
     fun observe(context: Context): StateFlow<FocusSettingsState> {
@@ -293,19 +296,23 @@ object FocusSettingsRepository {
 
     fun getCachedAppIconBitmap(packageName: String): ImageBitmap? {
         if (packageName.startsWith("__builtin_")) return null
-        return appIconCache.get(packageName)
+        return appIconMap[packageName]
     }
 
     fun loadAppIconBitmap(context: Context, packageName: String): ImageBitmap? {
         if (packageName.startsWith("__builtin_") || missingAppIconPackages.contains(packageName)) {
             return null
         }
-        appIconCache.get(packageName)?.let { return it }
+        appIconMap[packageName]?.let { return it }
         return try {
-            val drawable = context.packageManager.getApplicationIcon(packageName)
-            val imageBitmap = drawableToBitmap(drawable).asImageBitmap()
-            appIconCache.put(packageName, imageBitmap)
-            imageBitmap
+            val appCtx = context.applicationContext
+            val targetPx = (48f * appCtx.resources.displayMetrics.density).roundToInt().coerceIn(48, 192)
+            val drawable = appCtx.packageManager.getApplicationIcon(packageName)
+            val imageBitmap = drawableToFixedBitmap(drawable, targetPx).asImageBitmap()
+            appIconMap.putIfAbsent(packageName, imageBitmap)
+            val cached = appIconMap[packageName] ?: imageBitmap
+            _appIconsState.value = HashMap(appIconMap)
+            cached
         } catch (_: Exception) {
             missingAppIconPackages.add(packageName)
             null
@@ -316,7 +323,7 @@ object FocusSettingsRepository {
         if (packageName.startsWith("__builtin_") || missingAppIconPackages.contains(packageName)) {
             return null
         }
-        appIconCache.get(packageName)?.let { return it }
+        appIconMap[packageName]?.let { return it }
         return withContext(Dispatchers.IO) {
             loadAppIconBitmap(context.applicationContext, packageName)
         }
@@ -324,13 +331,28 @@ object FocusSettingsRepository {
 
     suspend fun preloadAppIcons(context: Context, apps: List<AllowedApp>) = withContext(Dispatchers.IO) {
         val appContext = context.applicationContext
+        val targetPx = (48f * appContext.resources.displayMetrics.density).roundToInt().coerceIn(48, 192)
+        val pm = appContext.packageManager
+        var addedAny = false
         for (app in apps) {
-            if (!app.packageName.startsWith("__builtin_") &&
-                appIconCache.get(app.packageName) == null &&
-                !missingAppIconPackages.contains(app.packageName)
+            val pkg = app.packageName
+            if (!pkg.startsWith("__builtin_") &&
+                !appIconMap.containsKey(pkg) &&
+                !missingAppIconPackages.contains(pkg)
             ) {
-                loadAppIconBitmap(appContext, app.packageName)
+                try {
+                    val drawable = pm.getApplicationIcon(pkg)
+                    val imageBitmap = drawableToFixedBitmap(drawable, targetPx).asImageBitmap()
+                    if (appIconMap.putIfAbsent(pkg, imageBitmap) == null) {
+                        addedAny = true
+                    }
+                } catch (_: Exception) {
+                    missingAppIconPackages.add(pkg)
+                }
             }
+        }
+        if (addedAny) {
+            _appIconsState.value = HashMap(appIconMap)
         }
     }
 
@@ -352,17 +374,15 @@ object FocusSettingsRepository {
         }.getOrDefault(true)
     }
 
-    private fun drawableToBitmap(drawable: Drawable): Bitmap {
+    private fun drawableToFixedBitmap(drawable: Drawable, targetPx: Int): Bitmap {
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             val bmp = drawable.bitmap
-            if (bmp.width <= 128 && bmp.height <= 128) return bmp
-            return Bitmap.createScaledBitmap(bmp, 96, 96, true)
+            if (bmp.width == targetPx && bmp.height == targetPx) return bmp
+            return Bitmap.createScaledBitmap(bmp, targetPx, targetPx, true)
         }
-        val width = drawable.intrinsicWidth.takeIf { it > 0 }?.coerceAtMost(96) ?: 96
-        val height = drawable.intrinsicHeight.takeIf { it > 0 }?.coerceAtMost(96) ?: 96
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(targetPx, targetPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.setBounds(0, 0, targetPx, targetPx)
         drawable.draw(canvas)
         return bitmap
     }

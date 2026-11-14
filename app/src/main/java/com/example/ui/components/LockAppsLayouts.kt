@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,14 +10,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,11 +28,10 @@ import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -57,6 +53,7 @@ import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.LockAppLayout
 
+@Immutable
 data class LockPalette(
     val background: Color,
     val surface: Color,
@@ -91,30 +88,37 @@ fun AllowedAppIconBadge(
     badgeBackground: Color,
     iconSize: Dp = 18.dp,
     containerSize: Dp = 32.dp,
-    shape: RoundedCornerShape = CircleShape
+    shape: RoundedCornerShape = CircleShape,
+    preloadedIcon: ImageBitmap? = null,
+    loadIfMissing: Boolean = false
 ) {
-    val context = LocalContext.current
-    val cachedBitmap = FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
-    val bitmap by produceState<ImageBitmap?>(
-        initialValue = cachedBitmap,
-        key1 = app.packageName
-    ) {
-        if (value == null && !app.packageName.startsWith("__builtin_")) {
-            value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName)
+    val resolvedIcon: ImageBitmap? = if (loadIfMissing) {
+        val context = LocalContext.current
+        val initial = preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
+        val asyncLoaded by produceState<ImageBitmap?>(
+            initialValue = initial,
+            key1 = app.packageName,
+            key2 = preloadedIcon
+        ) {
+            if (value == null && !app.packageName.startsWith("__builtin_")) {
+                value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName)
+            }
         }
+        asyncLoaded
+    } else {
+        preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
     }
 
     Box(
         modifier = Modifier
             .size(containerSize)
             .clip(shape)
-            .background(badgeBackground),
+            .background(badgeBackground, shape),
         contentAlignment = Alignment.Center
     ) {
-        val loaded = bitmap
-        if (loaded != null) {
+        if (resolvedIcon != null) {
             Image(
-                bitmap = loaded,
+                bitmap = resolvedIcon,
                 contentDescription = app.label,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -154,52 +158,54 @@ fun LockAllowedAppsSection(
     palette: LockPalette,
     onAppClick: (AllowedApp) -> Unit,
     modifier: Modifier = Modifier,
-    isPreview: Boolean = false
+    isPreview: Boolean = false,
+    iconCache: Map<String, ImageBitmap> = emptyMap(),
+    readFromCacheOnly: Boolean = true
 ) {
     if (apps.isEmpty()) return
 
     when (layout) {
         LockAppLayout.PILL_ROW -> {
+            val pillShape = RoundedCornerShape(50)
             FlowRow(
                 modifier = modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 apps.forEach { app ->
-                    Surface(
-                        onClick = { onAppClick(app) },
-                        shape = RoundedCornerShape(50),
-                        color = palette.surface,
-                        contentColor = palette.primaryText,
-                        border = BorderStroke(1.dp, palette.border),
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier
                             .height(if (isPreview) 36.dp else 48.dp)
-                            .testTag(testTagForApp(app))
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(
+                            .clip(pillShape)
+                            .background(palette.surface, pillShape)
+                            .border(1.dp, palette.border, pillShape)
+                            .clickable(enabled = !isPreview) { onAppClick(app) }
+                            .padding(
                                 start = if (isPreview) 8.dp else 10.dp,
                                 end = if (isPreview) 12.dp else 14.dp
                             )
-                        ) {
-                            AllowedAppIconBadge(
-                                app = app,
-                                tint = palette.accent,
-                                badgeBackground = palette.surfaceElevated,
-                                iconSize = if (isPreview) 14.dp else 16.dp,
-                                containerSize = if (isPreview) 22.dp else 28.dp
-                            )
-                            Text(
-                                text = app.label,
-                                fontSize = if (isPreview) 11.sp else 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 100.dp)
-                            )
-                        }
+                            .testTag(testTagForApp(app))
+                    ) {
+                        AllowedAppIconBadge(
+                            app = app,
+                            tint = palette.accent,
+                            badgeBackground = palette.surfaceElevated,
+                            iconSize = if (isPreview) 14.dp else 16.dp,
+                            containerSize = if (isPreview) 22.dp else 28.dp,
+                            preloadedIcon = iconCache[app.packageName],
+                            loadIfMissing = !readFromCacheOnly
+                        )
+                        Text(
+                            text = app.label,
+                            fontSize = if (isPreview) 11.sp else 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.primaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 100.dp)
+                        )
                     }
                 }
             }
@@ -208,6 +214,7 @@ fun LockAllowedAppsSection(
         LockAppLayout.GLASS_GRID -> {
             val columns = if (apps.size <= 2) apps.size else 3
             val rows = apps.chunked(columns)
+            val tileShape = RoundedCornerShape(if (isPreview) 14.dp else 18.dp)
             Column(
                 modifier = modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -219,42 +226,41 @@ fun LockAllowedAppsSection(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         rowApps.forEach { app ->
-                            Surface(
-                                onClick = { onAppClick(app) },
-                                shape = RoundedCornerShape(if (isPreview) 14.dp else 18.dp),
-                                color = palette.surface,
-                                border = BorderStroke(1.dp, palette.border),
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(if (isPreview) 5.dp else 7.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag(testTagForApp(app))
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(if (isPreview) 5.dp else 7.dp),
-                                    modifier = Modifier.padding(
+                                    .then(if (isPreview) Modifier else Modifier.minimumInteractiveComponentSize())
+                                    .clip(tileShape)
+                                    .background(palette.surface, tileShape)
+                                    .border(1.dp, palette.border, tileShape)
+                                    .clickable(enabled = !isPreview) { onAppClick(app) }
+                                    .padding(
                                         horizontal = 6.dp,
                                         vertical = if (isPreview) 8.dp else 12.dp
                                     )
-                                ) {
-                                    AllowedAppIconBadge(
-                                        app = app,
-                                        tint = palette.accent,
-                                        badgeBackground = palette.surfaceElevated,
-                                        iconSize = if (isPreview) 16.dp else 20.dp,
-                                        containerSize = if (isPreview) 28.dp else 36.dp,
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                    Text(
-                                        text = app.label,
-                                        fontSize = if (isPreview) 10.sp else 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = palette.primaryText,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                                    .testTag(testTagForApp(app))
+                            ) {
+                                AllowedAppIconBadge(
+                                    app = app,
+                                    tint = palette.accent,
+                                    badgeBackground = palette.surfaceElevated,
+                                    iconSize = if (isPreview) 16.dp else 20.dp,
+                                    containerSize = if (isPreview) 28.dp else 36.dp,
+                                    shape = RoundedCornerShape(12.dp),
+                                    preloadedIcon = iconCache[app.packageName],
+                                    loadIfMissing = !readFromCacheOnly
+                                )
+                                Text(
+                                    text = app.label,
+                                    fontSize = if (isPreview) 10.sp else 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = palette.primaryText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
                         repeat(columns - rowApps.size) {
@@ -266,50 +272,49 @@ fun LockAllowedAppsSection(
         }
 
         LockAppLayout.ICON_DOCK -> {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = palette.surface,
-                border = BorderStroke(1.dp, palette.border),
+            val dockShape = RoundedCornerShape(50)
+            Row(
                 modifier = modifier
+                    .clip(dockShape)
+                    .background(palette.surface, dockShape)
+                    .border(1.dp, palette.border, dockShape)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(
+                        horizontal = if (isPreview) 10.dp else 14.dp,
+                        vertical = if (isPreview) 6.dp else 8.dp
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(if (isPreview) 10.dp else 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(
-                            horizontal = if (isPreview) 10.dp else 14.dp,
-                            vertical = if (isPreview) 6.dp else 8.dp
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(if (isPreview) 10.dp else 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    apps.forEach { app ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(3.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { onAppClick(app) }
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                                .testTag(testTagForApp(app))
-                        ) {
-                            AllowedAppIconBadge(
-                                app = app,
-                                tint = palette.primaryText,
-                                badgeBackground = palette.surfaceElevated,
-                                iconSize = if (isPreview) 18.dp else 22.dp,
-                                containerSize = if (isPreview) 34.dp else 44.dp,
-                                shape = CircleShape
-                            )
-                            Text(
-                                text = app.label,
-                                fontSize = if (isPreview) 9.sp else 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = palette.secondaryText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 56.dp)
-                            )
-                        }
+                apps.forEach { app ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(enabled = !isPreview) { onAppClick(app) }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .testTag(testTagForApp(app))
+                    ) {
+                        AllowedAppIconBadge(
+                            app = app,
+                            tint = palette.primaryText,
+                            badgeBackground = palette.surfaceElevated,
+                            iconSize = if (isPreview) 18.dp else 22.dp,
+                            containerSize = if (isPreview) 34.dp else 44.dp,
+                            shape = CircleShape,
+                            preloadedIcon = iconCache[app.packageName],
+                            loadIfMissing = !readFromCacheOnly
+                        )
+                        Text(
+                            text = app.label,
+                            fontSize = if (isPreview) 9.sp else 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.secondaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 56.dp)
+                        )
                     }
                 }
             }
@@ -317,54 +322,56 @@ fun LockAllowedAppsSection(
 
         LockAppLayout.COMPACT_LIST -> {
             val visibleApps = if (isPreview) apps.take(3) else apps
-            Surface(
-                shape = RoundedCornerShape(if (isPreview) 14.dp else 18.dp),
-                color = palette.surface,
-                border = BorderStroke(1.dp, palette.border),
-                modifier = modifier.fillMaxWidth()
+            val cardShape = RoundedCornerShape(if (isPreview) 14.dp else 18.dp)
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clip(cardShape)
+                    .background(palette.surface, cardShape)
+                    .border(1.dp, palette.border, cardShape)
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    visibleApps.forEachIndexed { index, app ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onAppClick(app) }
-                                .height(if (isPreview) 36.dp else 48.dp)
-                                .padding(horizontal = 12.dp)
-                                .testTag(testTagForApp(app)),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            AllowedAppIconBadge(
-                                app = app,
-                                tint = palette.accent,
-                                badgeBackground = palette.surfaceElevated,
-                                iconSize = if (isPreview) 14.dp else 16.dp,
-                                containerSize = if (isPreview) 24.dp else 30.dp,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            Text(
-                                text = app.label,
-                                fontSize = if (isPreview) 11.sp else 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = palette.primaryText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Open ${app.label}",
-                                tint = palette.secondaryText,
-                                modifier = Modifier.size(if (isPreview) 16.dp else 18.dp)
-                            )
-                        }
-                        if (index < visibleApps.lastIndex) {
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = palette.border
-                            )
-                        }
+                visibleApps.forEachIndexed { index, app ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isPreview) { onAppClick(app) }
+                            .height(if (isPreview) 36.dp else 48.dp)
+                            .padding(horizontal = 12.dp)
+                            .testTag(testTagForApp(app)),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AllowedAppIconBadge(
+                            app = app,
+                            tint = palette.accent,
+                            badgeBackground = palette.surfaceElevated,
+                            iconSize = if (isPreview) 14.dp else 16.dp,
+                            containerSize = if (isPreview) 24.dp else 30.dp,
+                            shape = RoundedCornerShape(8.dp),
+                            preloadedIcon = iconCache[app.packageName],
+                            loadIfMissing = !readFromCacheOnly
+                        )
+                        Text(
+                            text = app.label,
+                            fontSize = if (isPreview) 11.sp else 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.primaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Open ${app.label}",
+                            tint = palette.secondaryText,
+                            modifier = Modifier.size(if (isPreview) 16.dp else 18.dp)
+                        )
+                    }
+                    if (index < visibleApps.lastIndex) {
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = palette.border
+                        )
                     }
                 }
             }
@@ -372,6 +379,7 @@ fun LockAllowedAppsSection(
 
         LockAppLayout.SPLIT_CHIPS -> {
             val rows = apps.chunked(2)
+            val chipShape = RoundedCornerShape(14.dp)
             Column(
                 modifier = modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -382,38 +390,37 @@ fun LockAllowedAppsSection(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         pair.forEach { app ->
-                            Surface(
-                                onClick = { onAppClick(app) },
-                                shape = RoundedCornerShape(14.dp),
-                                color = palette.surfaceElevated,
-                                border = BorderStroke(1.dp, palette.border),
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(if (isPreview) 36.dp else 48.dp)
+                                    .clip(chipShape)
+                                    .background(palette.surfaceElevated, chipShape)
+                                    .border(1.dp, palette.border, chipShape)
+                                    .clickable(enabled = !isPreview) { onAppClick(app) }
+                                    .padding(horizontal = 10.dp)
                                     .testTag(testTagForApp(app))
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(horizontal = 10.dp)
-                                ) {
-                                    AllowedAppIconBadge(
-                                        app = app,
-                                        tint = palette.accent,
-                                        badgeBackground = palette.surface,
-                                        iconSize = if (isPreview) 14.dp else 16.dp,
-                                        containerSize = if (isPreview) 22.dp else 28.dp,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    Text(
-                                        text = app.label,
-                                        fontSize = if (isPreview) 11.sp else 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = palette.primaryText,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                                AllowedAppIconBadge(
+                                    app = app,
+                                    tint = palette.accent,
+                                    badgeBackground = palette.surface,
+                                    iconSize = if (isPreview) 14.dp else 16.dp,
+                                    containerSize = if (isPreview) 22.dp else 28.dp,
+                                    shape = RoundedCornerShape(8.dp),
+                                    preloadedIcon = iconCache[app.packageName],
+                                    loadIfMissing = !readFromCacheOnly
+                                )
+                                Text(
+                                    text = app.label,
+                                    fontSize = if (isPreview) 11.sp else 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = palette.primaryText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                         if (pair.size == 1) {

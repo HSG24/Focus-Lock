@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,9 +24,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -50,7 +50,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
@@ -64,6 +63,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -83,6 +84,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusSettingsState
@@ -124,6 +126,8 @@ fun SettingsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
 
+    val iconCache by FocusSettingsRepository.appIconsState.collectAsStateWithLifecycle()
+
     var showAddAppDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
     var goalInputText by remember(settingsState.dailyGoalMinutes) {
@@ -155,7 +159,77 @@ fun SettingsScreen(
         FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
     }
 
-    val noopPreviewClick = remember<((AllowedApp) -> Unit)> { {} }
+    val onResetDefaults = remember(context, view) {
+        {
+            view.performKeyTapHaptic()
+            FocusSettingsRepository.resetAllowedAppsToDefaults(context)
+        }
+    }
+    val onRemoveApp = remember(context, view) {
+        { appId: String ->
+            view.performKeyTapHaptic()
+            FocusSettingsRepository.removeAllowedApp(context, appId)
+        }
+    }
+    val onOpenAddApp = remember(view) {
+        {
+            view.performKeyTapHaptic()
+            showAddAppDialog = true
+        }
+    }
+    val onSelectLayout = remember(context, view) {
+        { layout: LockAppLayout ->
+            view.performClockTickHaptic()
+            FocusSettingsRepository.setLockAppLayout(context, layout)
+        }
+    }
+    val onOpenGoalDialog = remember(view, settingsState.dailyGoalMinutes) {
+        {
+            view.performKeyTapHaptic()
+            goalInputText = settingsState.dailyGoalMinutes.toString()
+            showGoalDialog = true
+        }
+    }
+    val onToggleSessionTimer = remember(context, view) {
+        { enabled: Boolean ->
+            view.performClockTickHaptic()
+            FocusSettingsRepository.setShowSessionTimer(context, enabled)
+        }
+    }
+    val onToggleHapticKeypad = remember(context, view) {
+        { enabled: Boolean ->
+            view.performClockTickHaptic()
+            FocusSettingsRepository.setHapticKeypad(context, enabled)
+        }
+    }
+    val onToggleAutoClearWrongPin = remember(context, view) {
+        { enabled: Boolean ->
+            view.performClockTickHaptic()
+            FocusSettingsRepository.setAutoClearWrongPin(context, enabled)
+        }
+    }
+    val onSelectGraceSeconds = remember(context, view) {
+        { sec: Int ->
+            view.performClockTickHaptic()
+            FocusSettingsRepository.setAppSwitchGraceSeconds(context, sec)
+        }
+    }
+    val onOpenOverlaySettings = remember(context, view) {
+        {
+            view.performKeyTapHaptic()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            context.startActivity(intent)
+        }
+    }
+    val onOpenUsageSettings = remember(context, view) {
+        {
+            view.performKeyTapHaptic()
+            context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+    }
 
     Column(
         modifier = modifier
@@ -185,105 +259,150 @@ fun SettingsScreen(
             )
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // 1. Locked State Allowed Apps Section (flattened & keyed for smooth 120Hz scroll)
-            item(key = "allowed_apps_header", contentType = "section_header") {
-                Row(
+            AllowedAppsSection(
+                allowedApps = settingsState.allowedApps,
+                iconCache = iconCache,
+                onResetDefaults = onResetDefaults,
+                onRemoveApp = onRemoveApp,
+                onOpenAddApp = onOpenAddApp
+            )
+
+            LockScreenLayoutSection(
+                allowedApps = settingsState.allowedApps,
+                selectedLayout = settingsState.lockAppLayout,
+                iconCache = iconCache,
+                onSelectLayout = onSelectLayout
+            )
+
+            FocusBehaviorSection(
+                dailyGoalMinutes = settingsState.dailyGoalMinutes,
+                showSessionTimer = settingsState.showSessionTimer,
+                hapticKeypad = settingsState.hapticKeypad,
+                autoClearWrongPin = settingsState.autoClearWrongPin,
+                appSwitchGraceSeconds = settingsState.appSwitchGraceSeconds,
+                onOpenGoalDialog = onOpenGoalDialog,
+                onToggleSessionTimer = onToggleSessionTimer,
+                onToggleHapticKeypad = onToggleHapticKeypad,
+                onToggleAutoClearWrongPin = onToggleAutoClearWrongPin,
+                onSelectGraceSeconds = onSelectGraceSeconds
+            )
+
+            AppUpdatesSection(
+                installedVersion = installedVersion,
+                updateUiState = updateUiState,
+                onCheckForUpdates = onCheckForUpdates,
+                onOpenUpdateSheet = onOpenUpdateSheet
+            )
+
+            PermissionsSection(
+                hasOverlayPermission = hasOverlayPermission,
+                hasUsagePermission = hasUsagePermission,
+                onOpenOverlaySettings = onOpenOverlaySettings,
+                onOpenUsageSettings = onOpenUsageSettings
+            )
+        }
+    }
+
+    if (showAddAppDialog) {
+        AddAllowedAppDialog(
+            currentlyAllowed = settingsState.allowedApps,
+            onAddApp = { app ->
+                view.performKeyTapHaptic()
+                FocusSettingsRepository.addAllowedApp(context, app)
+                showAddAppDialog = false
+            },
+            onDismiss = { showAddAppDialog = false }
+        )
+    }
+
+    if (showGoalDialog) {
+        DailyGoalDialog(
+            goalInputText = goalInputText,
+            onGoalInputChange = { goalInputText = it },
+            onSave = {
+                view.performKeyTapHaptic()
+                val parsed = goalInputText.toLongOrNull() ?: 60L
+                if (parsed > 0) {
+                    FocusSettingsRepository.setDailyGoalMinutes(context, parsed)
+                }
+                showGoalDialog = false
+            },
+            onDismiss = { showGoalDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun AllowedAppsSection(
+    allowedApps: List<AllowedApp>,
+    iconCache: Map<String, ImageBitmap>,
+    onResetDefaults: () -> Unit,
+    onRemoveApp: (String) -> Unit,
+    onOpenAddApp: () -> Unit
+) {
+    val iconShape = remember { RoundedCornerShape(10.dp) }
+
+    SettingsSection(
+        title = "ALLOWED APPS IN LOCK MODE",
+        trailingAction = {
+            TextButton(
+                onClick = onResetDefaults,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.testTag("reset_apps_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.RestartAlt,
+                    contentDescription = null,
+                    tint = CrimsonPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Defaults", fontSize = 12.sp, color = CrimsonPrimary)
+            }
+        }
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (allowedApps.isEmpty()) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp)
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "ALLOWED APPS IN LOCK MODE",
-                        style = MaterialTheme.typography.labelSmall,
-                        letterSpacing = 1.2.sp,
+                        text = "Strict Lock Mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 14.sp,
+                        color = PureWhite
+                    )
+                    Text(
+                        text = "No apps allowed during focus sessions. Add essential apps below.",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = SlateGray
                     )
-                    TextButton(
-                        onClick = {
-                            view.performKeyTapHaptic()
-                            FocusSettingsRepository.resetAllowedAppsToDefaults(context)
-                        },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.testTag("reset_apps_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.RestartAlt,
-                            contentDescription = null,
-                            tint = CrimsonPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Defaults", fontSize = 12.sp, color = CrimsonPrimary)
-                    }
-                }
-            }
-
-            if (settingsState.allowedApps.isEmpty()) {
-                item(key = "allowed_apps_empty", contentType = "empty_card") {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
-                        color = ObsidianSurface,
-                        border = BorderStroke(1.dp, ObsidianBorder)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "Strict Lock Mode",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontSize = 14.sp,
-                                color = PureWhite
-                            )
-                            Text(
-                                text = "No apps allowed during focus sessions. Add essential apps below.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SlateGray
-                            )
-                        }
-                    }
                 }
             } else {
-                itemsIndexed(
-                    items = settingsState.allowedApps,
-                    key = { _, app -> "allowed_app_${app.id}" },
-                    contentType = { _, _ -> "allowed_app_row" }
-                ) { index, app ->
-                    val isFirst = index == 0
-                    val cardShape = if (isFirst) {
-                        RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
-                    } else {
-                        RoundedCornerShape(0.dp)
-                    }
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                view.performKeyTapHaptic()
-                                FocusSettingsRepository.removeAllowedApp(context, app.id)
-                                true
-                            } else {
-                                false
+                allowedApps.forEachIndexed { index, app ->
+                    key(app.id) {
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                if (value == SwipeToDismissBoxValue.EndToStart) {
+                                    onRemoveApp(app.id)
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        }
-                    )
+                        )
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(cardShape)
-                            .background(ObsidianSurface)
-                    ) {
                         SwipeToDismissBox(
                             state = dismissState,
                             enableDismissFromStartToEnd = false,
@@ -329,7 +448,9 @@ fun SettingsScreen(
                                     badgeBackground = ObsidianElevated,
                                     iconSize = 18.dp,
                                     containerSize = 36.dp,
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = iconShape,
+                                    preloadedIcon = iconCache[app.packageName],
+                                    loadIfMissing = false
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
@@ -341,7 +462,11 @@ fun SettingsScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = if (app.isPreset) "Built-in essential · Swipe left to remove" else app.packageName,
+                                        text = if (app.isPreset) {
+                                            "Built-in essential · Swipe left to remove"
+                                        } else {
+                                            app.packageName
+                                        },
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontSize = 11.sp,
                                         color = SlateGray,
@@ -350,10 +475,7 @@ fun SettingsScreen(
                                     )
                                 }
                                 IconButton(
-                                    onClick = {
-                                        view.performKeyTapHaptic()
-                                        FocusSettingsRepository.removeAllowedApp(context, app.id)
-                                    },
+                                    onClick = { onRemoveApp(app.id) },
                                     modifier = Modifier.testTag("remove_app_${app.id}")
                                 ) {
                                     Icon(
@@ -365,7 +487,8 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                        if (index < settingsState.allowedApps.lastIndex) {
+
+                        if (index < allowedApps.lastIndex) {
                             HorizontalDivider(
                                 thickness = 0.5.dp,
                                 color = ObsidianBorder,
@@ -376,630 +499,598 @@ fun SettingsScreen(
                 }
             }
 
-            item(key = "allowed_apps_add_footer", contentType = "footer_button") {
-                Surface(
-                    shape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
-                    color = ObsidianSurface,
-                    border = BorderStroke(0.5.dp, ObsidianBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp)
+            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp))
+                    .clickable(onClick = onOpenAddApp)
+                    .padding(horizontal = 14.dp, vertical = 14.dp)
+                    .testTag("add_allowed_app_button"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = null,
+                    tint = CrimsonPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Add Allowed App",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontSize = 13.sp,
+                    color = CrimsonPrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LockScreenLayoutSection(
+    allowedApps: List<AllowedApp>,
+    selectedLayout: LockAppLayout,
+    iconCache: Map<String, ImageBitmap>,
+    onSelectLayout: (LockAppLayout) -> Unit
+) {
+    val previewShape = remember { RoundedCornerShape(16.dp) }
+    val optionShape = remember { RoundedCornerShape(12.dp) }
+    val noopPreviewClick = remember<((AllowedApp) -> Unit)> { {} }
+    val previewPalette = LockPalette.StealthDark
+    val previewApps = remember(allowedApps) {
+        allowedApps.ifEmpty { FocusSettingsRepository.DEFAULT_ALLOWED_APPS }
+    }
+
+    SettingsSection(title = "LOCK SCREEN APPS LAYOUT") {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(previewShape)
+                    .background(previewPalette.background, previewShape)
+                    .border(1.dp, ObsidianBorder, previewShape)
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(
+                        text = "LIVE PREVIEW",
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SlateGray
+                    )
+                    Text(
+                        text = selectedLayout.title,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = CrimsonPrimary
+                    )
+                }
+
+                LockAllowedAppsSection(
+                    apps = previewApps,
+                    layout = selectedLayout,
+                    palette = previewPalette,
+                    onAppClick = noopPreviewClick,
+                    isPreview = true,
+                    iconCache = iconCache,
+                    readFromCacheOnly = true
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LockAppLayout.entries.forEach { layout ->
+                    val selected = selectedLayout == layout
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                view.performKeyTapHaptic()
-                                showAddAppDialog = true
-                            }
-                            .padding(horizontal = 14.dp, vertical = 14.dp)
-                            .testTag("add_allowed_app_button"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                            .clip(optionShape)
+                            .background(
+                                color = if (selected) CrimsonContainer else ObsidianElevated.copy(alpha = 0.55f),
+                                shape = optionShape
+                            )
+                            .then(
+                                if (selected) {
+                                    Modifier.border(1.dp, CrimsonBorderTint, optionShape)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable { onSelectLayout(layout) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .testTag("layout_option_${layout.name.lowercase()}"),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = null,
-                            tint = CrimsonPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Add Allowed App",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontSize = 13.sp,
-                            color = CrimsonPrimary
-                        )
-                    }
-                }
-            }
-
-            // 2. Lock Screen App Layout Section (OLED Stealth Dark Live Preview)
-            item(key = "lock_apps_layout_section", contentType = "layout_section") {
-                SettingsSection(
-                    title = "LOCK SCREEN APPS LAYOUT",
-                    modifier = Modifier.padding(bottom = 20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        val previewPalette = LockPalette.StealthDark
-                        val previewApps = settingsState.allowedApps.ifEmpty {
-                            FocusSettingsRepository.DEFAULT_ALLOWED_APPS
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(previewPalette.background)
-                                .border(
-                                    width = 1.dp,
-                                    color = ObsidianBorder,
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-                                .padding(14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "LIVE PREVIEW",
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SlateGray
-                                )
-                                Text(
-                                    text = settingsState.lockAppLayout.title,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = CrimsonPrimary
-                                )
-                            }
-
-                            LockAllowedAppsSection(
-                                apps = previewApps,
-                                layout = settingsState.lockAppLayout,
-                                palette = previewPalette,
-                                onAppClick = noopPreviewClick,
-                                isPreview = true
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = layout.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontSize = 14.sp,
+                                color = PureWhite
+                            )
+                            Text(
+                                text = layout.subtitle,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontSize = 12.sp,
+                                color = SlateGray
                             )
                         }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            LockAppLayout.entries.forEach { layout ->
-                                val selected = settingsState.lockAppLayout == layout
-                                Surface(
-                                    onClick = {
-                                        view.performClockTickHaptic()
-                                        FocusSettingsRepository.setLockAppLayout(context, layout)
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (selected) CrimsonContainer else ObsidianElevated.copy(alpha = 0.55f),
-                                    border = if (selected) {
-                                        BorderStroke(1.dp, CrimsonBorderTint)
-                                    } else {
-                                        BorderStroke(1.dp, Color.Transparent)
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("layout_option_${layout.name.lowercase()}")
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = layout.title,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontSize = 14.sp,
-                                                color = PureWhite
-                                            )
-                                            Text(
-                                                text = layout.subtitle,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontSize = 12.sp,
-                                                color = SlateGray
-                                            )
-                                        }
-                                        RadioButton(
-                                            selected = selected,
-                                            onClick = {
-                                                view.performClockTickHaptic()
-                                                FocusSettingsRepository.setLockAppLayout(context, layout)
-                                            },
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = CrimsonPrimary,
-                                                unselectedColor = SlateGray
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. Focus & Lock Behavior Section
-            item(key = "focus_behavior_section", contentType = "behavior_section") {
-                SettingsSection(
-                    title = "FOCUS & LOCK BEHAVIOR",
-                    modifier = Modifier.padding(bottom = 20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    view.performKeyTapHaptic()
-                                    goalInputText = settingsState.dailyGoalMinutes.toString()
-                                    showGoalDialog = true
-                                }
-                                .padding(vertical = 4.dp)
-                                .testTag("settings_daily_goal_row"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Daily Focus Goal",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontSize = 15.sp,
-                                    color = PureWhite
-                                )
-                                Text(
-                                    text = "Target study duration per day",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontSize = 12.sp,
-                                    color = SlateGray
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = CrimsonContainer,
-                                border = BorderStroke(1.dp, CrimsonBorderTint)
-                            ) {
-                                Text(
-                                    text = "${settingsState.dailyGoalMinutes} min",
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PureWhite,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-
-                        HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-
-                        SettingsSwitchRow(
-                            title = "Live Session Timer",
-                            subtitle = "Display elapsed focus time on the lock screen",
-                            checked = settingsState.showSessionTimer,
-                            onCheckedChange = {
-                                view.performClockTickHaptic()
-                                FocusSettingsRepository.setShowSessionTimer(context, it)
-                            },
-                            testTag = "switch_session_timer"
-                        )
-
-                        HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-
-                        SettingsSwitchRow(
-                            title = "Keypad Haptic Feedback",
-                            subtitle = "Subtle tactile pulse when entering unlock PIN",
-                            checked = settingsState.hapticKeypad,
-                            onCheckedChange = {
-                                view.performClockTickHaptic()
-                                FocusSettingsRepository.setHapticKeypad(context, it)
-                            },
-                            testTag = "switch_haptic_keypad"
-                        )
-
-                        HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-
-                        SettingsSwitchRow(
-                            title = "Auto-Clear Wrong PIN",
-                            subtitle = "Reset digits automatically after an incorrect attempt",
-                            checked = settingsState.autoClearWrongPin,
-                            onCheckedChange = {
-                                view.performClockTickHaptic()
-                                FocusSettingsRepository.setAutoClearWrongPin(context, it)
-                            },
-                            testTag = "switch_auto_clear_pin"
-                        )
-
-                        HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-
-                        // App Switch Grace Period
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Column {
-                                Text(
-                                    text = "App Launch Grace Period",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontSize = 15.sp,
-                                    color = PureWhite
-                                )
-                                Text(
-                                    text = "Delay before re-locking if you leave an allowed app",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontSize = 12.sp,
-                                    color = SlateGray
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                listOf(1, 2, 3, 5).forEach { sec ->
-                                    val selected = settingsState.appSwitchGraceSeconds == sec
-                                    Surface(
-                                        onClick = {
-                                            view.performClockTickHaptic()
-                                            FocusSettingsRepository.setAppSwitchGraceSeconds(context, sec)
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (selected) CrimsonContainer else ObsidianElevated,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (selected) CrimsonBorderTint else ObsidianBorder
-                                        ),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(42.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = "${sec}s",
-                                                fontFamily = JetBrainsMono,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = if (selected) CrimsonPrimary else SlateGray
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4. Private GitHub In-App Updates Section
-            item(key = "app_updates_section", contentType = "updates_section") {
-                SettingsSection(
-                    title = "APP UPDATES",
-                    modifier = Modifier.padding(bottom = 20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(CrimsonContainer)
-                                        .border(1.dp, CrimsonBorderTint, RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.SystemUpdate,
-                                        contentDescription = "Updates",
-                                        tint = CrimsonPrimary,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = "Focus Lock Releases",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontSize = 15.sp,
-                                        color = PureWhite
-                                    )
-                                    Text(
-                                        text = "Installed: v$installedVersion",
-                                        fontFamily = JetBrainsMono,
-                                        fontSize = 12.sp,
-                                        color = SlateGray
-                                    )
-                                }
-                            }
-
-                            when (updateUiState) {
-                                is UpdateUiState.UpToDate -> {
-                                    Surface(
-                                        shape = RoundedCornerShape(50),
-                                        color = FocusEmerald.copy(alpha = 0.14f)
-                                    ) {
-                                        Text(
-                                            text = "Latest",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = FocusEmerald,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                                is UpdateUiState.UpdateAvailable -> {
-                                    Surface(
-                                        shape = RoundedCornerShape(50),
-                                        color = CrimsonContainer,
-                                        border = BorderStroke(1.dp, CrimsonBorderTint),
-                                        modifier = Modifier.clickable { onOpenUpdateSheet() }
-                                    ) {
-                                        Text(
-                                            text = updateUiState.release.tagName,
-                                            fontFamily = JetBrainsMono,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = CrimsonPrimary,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                                else -> Unit
-                            }
-                        }
-
-                        when (updateUiState) {
-                            is UpdateUiState.UpToDate -> {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = FocusEmerald.copy(alpha = 0.10f),
-                                    border = BorderStroke(1.dp, FocusEmerald.copy(alpha = 0.28f)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("latest_version_banner")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.CheckCircle,
-                                            contentDescription = null,
-                                            tint = FocusEmerald,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "You are using the latest version",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = PureWhite
-                                        )
-                                    }
-                                }
-                            }
-                            is UpdateUiState.Error -> {
-                                Text(
-                                    text = updateUiState.message,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontSize = 12.sp,
-                                    color = CrimsonPrimary
-                                )
-                            }
-                            else -> Unit
-                        }
-
-                        val isChecking = updateUiState is UpdateUiState.Checking
-                        val btnInteraction = remember { MutableInteractionSource() }
-                        val btnScale = rememberSpringPressScale(btnInteraction)
-
-                        Button(
-                            onClick = {
-                                view.performKeyTapHaptic()
-                                if (updateUiState is UpdateUiState.UpdateAvailable) {
-                                    onOpenUpdateSheet()
-                                } else {
-                                    onCheckForUpdates()
-                                }
-                            },
-                            enabled = !isChecking,
-                            interactionSource = btnInteraction,
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ObsidianElevated,
-                                contentColor = PureWhite
-                            ),
-                            border = BorderStroke(1.dp, CrimsonBorderTint),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .graphicsLayer {
-                                    scaleX = btnScale
-                                    scaleY = btnScale
-                                }
-                                .testTag("check_updates_button")
-                        ) {
-                            if (isChecking) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = CrimsonPrimary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Checking GitHub...", fontSize = 13.5.sp)
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Outlined.Refresh,
-                                    contentDescription = null,
-                                    tint = CrimsonPrimary,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (updateUiState is UpdateUiState.UpdateAvailable) {
-                                        "View Update (${updateUiState.release.tagName})"
-                                    } else {
-                                        "Check for Updates"
-                                    },
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 5. System Permissions Status
-            item(key = "permissions_section", contentType = "permissions_section") {
-                SettingsSection(title = "PERMISSIONS") {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        PermissionStatusRow(
-                            title = "Display Over Other Apps",
-                            granted = hasOverlayPermission,
-                            onClick = {
-                                view.performKeyTapHaptic()
-                                val intent = Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${context.packageName}")
-                                )
-                                context.startActivity(intent)
-                            }
-                        )
-                        HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-                        PermissionStatusRow(
-                            title = "Usage Access Monitoring",
-                            granted = hasUsagePermission,
-                            onClick = {
-                                view.performKeyTapHaptic()
-                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                            }
+                        RadioButton(
+                            selected = selected,
+                            onClick = { onSelectLayout(layout) },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = CrimsonPrimary,
+                                unselectedColor = SlateGray
+                            )
                         )
                     }
                 }
             }
         }
     }
+}
 
-    if (showAddAppDialog) {
-        AddAllowedAppDialog(
-            currentlyAllowed = settingsState.allowedApps,
-            onAddApp = { app ->
-                view.performKeyTapHaptic()
-                FocusSettingsRepository.addAllowedApp(context, app)
-                showAddAppDialog = false
-            },
-            onDismiss = { showAddAppDialog = false }
-        )
-    }
+@Composable
+private fun FocusBehaviorSection(
+    dailyGoalMinutes: Long,
+    showSessionTimer: Boolean,
+    hapticKeypad: Boolean,
+    autoClearWrongPin: Boolean,
+    appSwitchGraceSeconds: Int,
+    onOpenGoalDialog: () -> Unit,
+    onToggleSessionTimer: (Boolean) -> Unit,
+    onToggleHapticKeypad: (Boolean) -> Unit,
+    onToggleAutoClearWrongPin: (Boolean) -> Unit,
+    onSelectGraceSeconds: (Int) -> Unit
+) {
+    val pillShape = remember { RoundedCornerShape(50) }
+    val chipShape = remember { RoundedCornerShape(10.dp) }
 
-    if (showGoalDialog) {
-        AlertDialog(
-            onDismissRequest = { showGoalDialog = false },
-            containerColor = ObsidianSurface,
-            titleContentColor = PureWhite,
-            textContentColor = SlateGray,
-            title = { Text("Daily Focus Goal", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SettingsSection(title = "FOCUS & LOCK BEHAVIOR") {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(chipShape)
+                    .clickable(onClick = onOpenGoalDialog)
+                    .padding(vertical = 4.dp)
+                    .testTag("settings_daily_goal_row"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Choose a preset or enter custom minutes:",
+                        text = "Daily Focus Goal",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 15.sp,
+                        color = PureWhite
+                    )
+                    Text(
+                        text = "Target study duration per day",
                         style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 12.sp,
                         color = SlateGray
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(30L, 60L, 90L, 120L).forEach { preset ->
-                            val isChosen = goalInputText == preset.toString()
-                            Surface(
-                                onClick = {
-                                    view.performClockTickHaptic()
-                                    goalInputText = preset.toString()
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isChosen) CrimsonContainer else ObsidianElevated,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isChosen) CrimsonBorderTint else ObsidianBorder
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier.padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${preset}m",
-                                        fontFamily = JetBrainsMono,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = PureWhite
-                                    )
-                                }
-                            }
+                }
+                Text(
+                    text = "${dailyGoalMinutes} min",
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PureWhite,
+                    modifier = Modifier
+                        .clip(pillShape)
+                        .background(CrimsonContainer, pillShape)
+                        .border(1.dp, CrimsonBorderTint, pillShape)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+
+            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+
+            SettingsSwitchRow(
+                title = "Live Session Timer",
+                subtitle = "Display elapsed focus time on the lock screen",
+                checked = showSessionTimer,
+                onCheckedChange = onToggleSessionTimer,
+                testTag = "switch_session_timer"
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+
+            SettingsSwitchRow(
+                title = "Keypad Haptic Feedback",
+                subtitle = "Subtle tactile pulse when entering unlock PIN",
+                checked = hapticKeypad,
+                onCheckedChange = onToggleHapticKeypad,
+                testTag = "switch_haptic_keypad"
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+
+            SettingsSwitchRow(
+                title = "Auto-Clear Wrong PIN",
+                subtitle = "Reset digits automatically after an incorrect attempt",
+                checked = autoClearWrongPin,
+                onCheckedChange = onToggleAutoClearWrongPin,
+                testTag = "switch_auto_clear_pin"
+            )
+
+            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column {
+                    Text(
+                        text = "App Launch Grace Period",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 15.sp,
+                        color = PureWhite
+                    )
+                    Text(
+                        text = "Delay before re-locking if you leave an allowed app",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 12.sp,
+                        color = SlateGray
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(1, 2, 3, 5).forEach { sec ->
+                        val selected = appSwitchGraceSeconds == sec
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(chipShape)
+                                .background(
+                                    color = if (selected) CrimsonContainer else ObsidianElevated,
+                                    shape = chipShape
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (selected) CrimsonBorderTint else ObsidianBorder,
+                                    shape = chipShape
+                                )
+                                .clickable { onSelectGraceSeconds(sec) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${sec}s",
+                                fontFamily = JetBrainsMono,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) CrimsonPrimary else SlateGray
+                            )
                         }
                     }
-                    OutlinedTextField(
-                        value = goalInputText,
-                        onValueChange = { newValue ->
-                            if (newValue.all { it.isDigit() } && newValue.length <= 4) {
-                                goalInputText = newValue
-                            }
-                        },
-                        label = { Text("Minutes") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        view.performKeyTapHaptic()
-                        val parsed = goalInputText.toLongOrNull() ?: 60L
-                        if (parsed > 0) {
-                            FocusSettingsRepository.setDailyGoalMinutes(context, parsed)
-                        }
-                        showGoalDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = CrimsonPrimary,
-                        contentColor = PureWhite
-                    )
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showGoalDialog = false }) {
-                    Text("Cancel", color = SlateGray)
                 }
             }
-        )
+        }
     }
+}
+
+@Composable
+private fun AppUpdatesSection(
+    installedVersion: String,
+    updateUiState: UpdateUiState,
+    onCheckForUpdates: () -> Unit,
+    onOpenUpdateSheet: () -> Unit
+) {
+    val view = LocalView.current
+    val pillShape = remember { RoundedCornerShape(50) }
+    val bannerShape = remember { RoundedCornerShape(12.dp) }
+    val iconShape = remember { RoundedCornerShape(10.dp) }
+
+    SettingsSection(title = "APP UPDATES") {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(iconShape)
+                            .background(CrimsonContainer, iconShape)
+                            .border(1.dp, CrimsonBorderTint, iconShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.SystemUpdate,
+                            contentDescription = "Updates",
+                            tint = CrimsonPrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Focus Lock Releases",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 15.sp,
+                            color = PureWhite
+                        )
+                        Text(
+                            text = "Installed: v$installedVersion",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            color = SlateGray
+                        )
+                    }
+                }
+
+                when (updateUiState) {
+                    is UpdateUiState.UpToDate -> {
+                        Text(
+                            text = "Latest",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = FocusEmerald,
+                            modifier = Modifier
+                                .clip(pillShape)
+                                .background(FocusEmerald.copy(alpha = 0.14f), pillShape)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    is UpdateUiState.UpdateAvailable -> {
+                        Text(
+                            text = updateUiState.release.tagName,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CrimsonPrimary,
+                            modifier = Modifier
+                                .clip(pillShape)
+                                .background(CrimsonContainer, pillShape)
+                                .border(1.dp, CrimsonBorderTint, pillShape)
+                                .clickable { onOpenUpdateSheet() }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+
+            when (updateUiState) {
+                is UpdateUiState.UpToDate -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(bannerShape)
+                            .background(FocusEmerald.copy(alpha = 0.10f), bannerShape)
+                            .border(1.dp, FocusEmerald.copy(alpha = 0.28f), bannerShape)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .testTag("latest_version_banner"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = FocusEmerald,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "You are using the latest version",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PureWhite
+                        )
+                    }
+                }
+                is UpdateUiState.Error -> {
+                    Text(
+                        text = updateUiState.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 12.sp,
+                        color = CrimsonPrimary
+                    )
+                }
+                else -> Unit
+            }
+
+            val isChecking = updateUiState is UpdateUiState.Checking
+            val btnInteraction = remember { MutableInteractionSource() }
+            val btnScale = rememberSpringPressScale(btnInteraction)
+
+            Button(
+                onClick = {
+                    view.performKeyTapHaptic()
+                    if (updateUiState is UpdateUiState.UpdateAvailable) {
+                        onOpenUpdateSheet()
+                    } else {
+                        onCheckForUpdates()
+                    }
+                },
+                enabled = !isChecking,
+                interactionSource = btnInteraction,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ObsidianElevated,
+                    contentColor = PureWhite
+                ),
+                border = BorderStroke(1.dp, CrimsonBorderTint),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .graphicsLayer {
+                        scaleX = btnScale
+                        scaleY = btnScale
+                    }
+                    .testTag("check_updates_button")
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = CrimsonPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Checking GitHub...", fontSize = 13.5.sp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Refresh,
+                        contentDescription = null,
+                        tint = CrimsonPrimary,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (updateUiState is UpdateUiState.UpdateAvailable) {
+                            "View Update (${updateUiState.release.tagName})"
+                        } else {
+                            "Check for Updates"
+                        },
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionsSection(
+    hasOverlayPermission: Boolean,
+    hasUsagePermission: Boolean,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenUsageSettings: () -> Unit
+) {
+    SettingsSection(title = "PERMISSIONS") {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            PermissionStatusRow(
+                title = "Display Over Other Apps",
+                granted = hasOverlayPermission,
+                onClick = onOpenOverlaySettings
+            )
+            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+            PermissionStatusRow(
+                title = "Usage Access Monitoring",
+                granted = hasUsagePermission,
+                onClick = onOpenUsageSettings
+            )
+        }
+    }
+}
+
+@Composable
+private fun DailyGoalDialog(
+    goalInputText: String,
+    onGoalInputChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val view = LocalView.current
+    val chipShape = remember { RoundedCornerShape(8.dp) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = ObsidianSurface,
+        titleContentColor = PureWhite,
+        textContentColor = SlateGray,
+        title = { Text("Daily Focus Goal", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Choose a preset or enter custom minutes:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SlateGray
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(30L, 60L, 90L, 120L).forEach { preset ->
+                        val isChosen = goalInputText == preset.toString()
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(chipShape)
+                                .background(
+                                    color = if (isChosen) CrimsonContainer else ObsidianElevated,
+                                    shape = chipShape
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isChosen) CrimsonBorderTint else ObsidianBorder,
+                                    shape = chipShape
+                                )
+                                .clickable {
+                                    view.performClockTickHaptic()
+                                    onGoalInputChange(preset.toString())
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${preset}m",
+                                fontFamily = JetBrainsMono,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PureWhite
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = goalInputText,
+                    onValueChange = { newValue ->
+                        if (newValue.all { it.isDigit() } && newValue.length <= 4) {
+                            onGoalInputChange(newValue)
+                        }
+                    },
+                    label = { Text("Minutes") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSave,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CrimsonPrimary,
+                    contentColor = PureWhite
+                )
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = SlateGray)
+            }
+        }
+    )
 }
 
 @Composable
@@ -1009,6 +1100,7 @@ private fun SettingsSection(
     trailingAction: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
+    val cardShape = remember { RoundedCornerShape(18.dp) }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1028,11 +1120,12 @@ private fun SettingsSection(
             )
             trailingAction?.invoke()
         }
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = ObsidianSurface,
-            border = BorderStroke(1.dp, ObsidianBorder)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .background(ObsidianSurface, cardShape)
+                .border(1.dp, ObsidianBorder, cardShape)
         ) {
             content()
         }
@@ -1091,6 +1184,7 @@ private fun PermissionStatusRow(
     granted: Boolean,
     onClick: () -> Unit
 ) {
+    val pillShape = remember { RoundedCornerShape(50) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1118,19 +1212,22 @@ private fun PermissionStatusRow(
                 color = PureWhite
             )
         }
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = if (granted) FocusEmerald.copy(alpha = 0.14f) else CrimsonContainer,
-            border = if (granted) null else BorderStroke(1.dp, CrimsonBorderTint)
-        ) {
-            Text(
-                text = if (granted) "Granted" else "Configure",
-                style = MaterialTheme.typography.labelMedium,
-                fontSize = 11.sp,
-                color = if (granted) FocusEmerald else CrimsonPrimary,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-            )
-        }
+        Text(
+            text = if (granted) "Granted" else "Configure",
+            style = MaterialTheme.typography.labelMedium,
+            fontSize = 11.sp,
+            color = if (granted) FocusEmerald else CrimsonPrimary,
+            modifier = Modifier
+                .clip(pillShape)
+                .background(
+                    color = if (granted) FocusEmerald.copy(alpha = 0.14f) else CrimsonContainer,
+                    shape = pillShape
+                )
+                .then(
+                    if (granted) Modifier else Modifier.border(1.dp, CrimsonBorderTint, pillShape)
+                )
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        )
     }
 }
 
@@ -1218,7 +1315,7 @@ private fun AddAllowedAppDialog(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (missingPresets.isNotEmpty() && searchQuery.isBlank()) {
-                            item {
+                            item(key = "presets_header", contentType = "dialog_header") {
                                 Text(
                                     text = "BUILT-IN ESSENTIALS",
                                     style = MaterialTheme.typography.labelSmall,
@@ -1226,7 +1323,11 @@ private fun AddAllowedAppDialog(
                                     modifier = Modifier.padding(vertical = 4.dp)
                                 )
                             }
-                            items(missingPresets, key = { it.id }) { preset ->
+                            items(
+                                items = missingPresets,
+                                key = { it.id },
+                                contentType = { "preset_row" }
+                            ) { preset ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1242,7 +1343,8 @@ private fun AddAllowedAppDialog(
                                         badgeBackground = CrimsonContainer,
                                         iconSize = 18.dp,
                                         containerSize = 34.dp,
-                                        shape = CircleShape
+                                        shape = CircleShape,
+                                        loadIfMissing = false
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
@@ -1305,7 +1407,8 @@ private fun AddAllowedAppDialog(
                                         badgeBackground = ObsidianElevated,
                                         iconSize = 18.dp,
                                         containerSize = 34.dp,
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(10.dp),
+                                        loadIfMissing = true
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
@@ -1334,7 +1437,7 @@ private fun AddAllowedAppDialog(
                                 }
                             }
                         } else if (missingPresets.isEmpty()) {
-                            item {
+                            item(key = "no_matching_apps") {
                                 Text(
                                     text = "No matching apps available to add.",
                                     style = MaterialTheme.typography.bodyMedium,

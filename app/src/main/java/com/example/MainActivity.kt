@@ -242,6 +242,11 @@ class MainActivity : ComponentActivity() {
                 triggerUpdateCheck(silent = true)
             }
 
+            // Pre-decode allowed app icons on Dispatchers.IO so Settings renders zero PackageManager calls
+            LaunchedEffect(settingsState.allowedApps) {
+                FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
+            }
+
             // Resume APK download automatically after granting unknown-sources permission
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->

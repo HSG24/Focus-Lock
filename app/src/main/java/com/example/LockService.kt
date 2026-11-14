@@ -61,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -632,9 +633,15 @@ fun LockScreen(
     onLaunchApp: ((AllowedApp) -> Unit)? = null
 ) {
     val palette = LockPalette.StealthDark
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val iconCache by FocusSettingsRepository.appIconsState.collectAsState()
     var enteredPin by remember { mutableStateOf("") }
     var wrongPinError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(allowedApps) {
+        FocusSettingsRepository.preloadAppIcons(context, allowedApps)
+    }
 
     val backdropGlowBrush = remember {
         Brush.radialGradient(
@@ -760,7 +767,9 @@ fun LockScreen(
                     apps = allowedApps,
                     layout = layout,
                     palette = palette,
-                    onAppClick = resolvedAppClick
+                    onAppClick = resolvedAppClick,
+                    iconCache = iconCache,
+                    readFromCacheOnly = true
                 )
             }
 
