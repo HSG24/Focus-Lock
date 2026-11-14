@@ -1,7 +1,9 @@
-name: Build Android APK
+name: Build and Publish APK
 on:
   push:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,12 +18,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
-      - name: Generate Debug Keystore
-        run: keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
       - name: Build Debug APK
         run: gradle assembleDebug
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Publish Private Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: focus-lock-apk
-          path: app/build/outputs/apk/debug/*.apk
+          tag_name: v1.0.${{ github.run_number }}
+          name: Focus Lock v1.0.${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk
