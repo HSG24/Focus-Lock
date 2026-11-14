@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import com.example.LockService
 import com.example.Session
 import com.example.fetchAllSessions
@@ -30,6 +31,7 @@ enum class RangePreset(val label: String) {
     LAST_30_DAYS("Last 30 Days")
 }
 
+@Immutable
 data class SharedStatsSummary(
     val totalFocusMs: Long,
     val sessionCount: Int,
@@ -37,6 +39,7 @@ data class SharedStatsSummary(
     val longestMs: Long
 )
 
+@Immutable
 data class ShareLinkResult(
     val shareId: String,
     val url: String,
@@ -46,6 +49,7 @@ data class ShareLinkResult(
     val stats: SharedStatsSummary
 )
 
+@Immutable
 data class SharedLinkItem(
     val shareId: String,
     val url: String,

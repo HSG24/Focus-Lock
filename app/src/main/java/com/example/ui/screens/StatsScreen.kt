@@ -70,6 +70,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -85,7 +87,6 @@ import com.example.Session
 import com.example.calculateMaxStreak
 import com.example.calculateStreak
 import com.example.data.FocusSettingsRepository
-import com.example.data.FocusSettingsState
 import com.example.fetchAllSessions
 import com.example.formatDurationMinutes
 import com.example.getFormattedDate
@@ -114,7 +115,7 @@ import java.util.Calendar
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
-    settingsState: FocusSettingsState,
+    dailyGoalMinutes: Long,
     onOpenShare: (Long?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -129,17 +130,20 @@ fun StatsScreen(
     var showDatePicker by remember { mutableStateOf(false) }
 
     var showGoalDialog by remember { mutableStateOf(false) }
-    var goalInputText by remember(settingsState.dailyGoalMinutes) {
-        mutableStateOf(settingsState.dailyGoalMinutes.toString())
+    var goalInputText by remember(dailyGoalMinutes) {
+        mutableStateOf(dailyGoalMinutes.toString())
     }
 
-    val refreshStats = {
-        coroutineScope.launch {
-            if (allSessions.isEmpty()) {
-                isLoadingStats = true
+    val refreshStats = remember {
+        {
+            coroutineScope.launch {
+                if (allSessions.isEmpty()) {
+                    isLoadingStats = true
+                }
+                allSessions = fetchAllSessions()
+                isLoadingStats = false
             }
-            allSessions = fetchAllSessions()
-            isLoadingStats = false
+            Unit
         }
     }
 
@@ -153,30 +157,32 @@ fun StatsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val today = Calendar.getInstance()
-    val isSelectedToday = isSameDayCalendar(selectedDate, today)
+    val today = remember(selectedDate) { Calendar.getInstance() }
+    val isSelectedToday = remember(selectedDate, today) { isSameDayCalendar(selectedDate, today) }
 
     val sessionsForDay = remember(allSessions, selectedDate) {
         allSessions.filter { isSameDay(it.startTime, selectedDate) }
     }
-    val totalTimeMs = sessionsForDay.sumOf { it.duration }
+    val totalTimeMs = remember(sessionsForDay) { sessionsForDay.sumOf { it.duration } }
     val sessionCount = sessionsForDay.size
     val avgTimeMs = if (sessionCount > 0) totalTimeMs / sessionCount else 0L
-    val longestTimeMs = if (sessionCount > 0) sessionsForDay.maxOf { it.duration } else 0L
+    val longestTimeMs = remember(sessionsForDay) {
+        if (sessionsForDay.isNotEmpty()) sessionsForDay.maxOf { it.duration } else 0L
+    }
     val currentStreak = remember(allSessions) { calculateStreak(allSessions) }
     val maxStreak = remember(allSessions) { calculateMaxStreak(allSessions) }
 
-    val dailyGoalMs = settingsState.dailyGoalMinutes * 60 * 1000L
+    val dailyGoalMs = dailyGoalMinutes * 60 * 1000L
     val progressFraction = (totalTimeMs.toFloat() / dailyGoalMs.toFloat()).coerceIn(0f, 1f)
-    val animatedProgress by animateFloatAsState(
-        targetValue = progressFraction,
-        animationSpec = spring(
-            dampingRatio = 0.78f,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "daily_goal_progress"
-    )
     val progressPercentage = (progressFraction * 100).toInt()
+    val heroGlowBrush = remember {
+        Brush.radialGradient(
+            colors = listOf(
+                CrimsonGlow.copy(alpha = 0.35f),
+                Color.Transparent
+            )
+        )
+    }
 
     Column(
         modifier = modifier
@@ -289,10 +295,16 @@ fun StatsScreen(
                     AnimatedVisibility(
                         visible = !isSelectedToday,
                         enter = fadeIn() + expandHorizontally(
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
                         ),
                         exit = fadeOut() + shrinkHorizontally(
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
                         )
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -393,14 +405,7 @@ fun StatsScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            CrimsonGlow.copy(alpha = 0.35f),
-                                            Color.Transparent
-                                        )
-                                    )
-                                )
+                                .background(heroGlowBrush)
                         ) {
                             Column(
                                 modifier = Modifier
@@ -493,37 +498,18 @@ fun StatsScreen(
                                 )
                             }
 
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(ObsidianElevated)
-                            ) {
-                                if (animatedProgress > 0f) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth(animatedProgress.coerceAtLeast(0.02f))
-                                            .fillMaxHeight()
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(
-                                                if (progressPercentage >= 100) {
-                                                    Brush.horizontalGradient(listOf(FocusEmerald, FocusEmerald))
-                                                } else {
-                                                    Brush.horizontalGradient(listOf(CrimsonDeep, CrimsonPrimary))
-                                                }
-                                            )
-                                    )
-                                }
-                            }
+                            DailyGoalProgressBar(
+                                progressFraction = progressFraction,
+                                goalReached = progressPercentage >= 100
+                            )
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val goalHours = settingsState.dailyGoalMinutes / 60
-                                val goalMinutes = settingsState.dailyGoalMinutes % 60
+                                val goalHours = dailyGoalMinutes / 60
+                                val goalMinutes = dailyGoalMinutes % 60
                                 val goalText = if (goalHours > 0) {
                                     "${goalHours}h" + if (goalMinutes > 0) " ${goalMinutes}m" else ""
                                 } else {
@@ -542,7 +528,7 @@ fun StatsScreen(
                                         .clip(RoundedCornerShape(6.dp))
                                         .clickable {
                                             view.performKeyTapHaptic()
-                                            goalInputText = settingsState.dailyGoalMinutes.toString()
+                                            goalInputText = dailyGoalMinutes.toString()
                                             showGoalDialog = true
                                         }
                                         .padding(horizontal = 6.dp, vertical = 4.dp)
@@ -671,6 +657,52 @@ fun StatsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun DailyGoalProgressBar(
+    progressFraction: Float,
+    goalReached: Boolean
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progressFraction.coerceIn(0f, 1f),
+        animationSpec = spring(
+            dampingRatio = 0.85f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "daily_goal_progress"
+    )
+    val crimsonBrush = remember {
+        Brush.horizontalGradient(listOf(CrimsonDeep, CrimsonPrimary))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(ObsidianElevated)
+    ) {
+        if (animatedProgress > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                        scaleX = animatedProgress.coerceAtLeast(0.02f)
+                    }
+                    .clip(RoundedCornerShape(4.dp))
+                    .then(
+                        if (goalReached) {
+                            Modifier.background(FocusEmerald)
+                        } else {
+                            Modifier.background(crimsonBrush)
+                        }
+                    )
+            )
+        }
     }
 }
 

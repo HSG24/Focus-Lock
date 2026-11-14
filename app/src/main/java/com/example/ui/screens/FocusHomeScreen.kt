@@ -43,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +67,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.LockService
 import com.example.MainActivity
+import com.example.data.FocusSettingsRepository
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.performKeyTapHaptic
 import com.example.ui.components.rememberSpringPressScale
@@ -97,16 +99,21 @@ fun FocusHomeScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    var hasUsagePermission by remember {
-        mutableStateOf((context as? MainActivity)?.hasUsageStatsPermission(context) ?: true)
+    var hasOverlayPermission by remember { mutableStateOf(true) }
+    var hasUsagePermission by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        hasOverlayPermission = FocusSettingsRepository.canDrawOverlaysAsync(context)
+        hasUsagePermission = FocusSettingsRepository.hasUsageStatsPermissionAsync(context)
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasOverlayPermission = Settings.canDrawOverlays(context)
-                hasUsagePermission = (context as? MainActivity)?.hasUsageStatsPermission(context) ?: true
+                coroutineScope.launch {
+                    hasOverlayPermission = FocusSettingsRepository.canDrawOverlaysAsync(context)
+                    hasUsagePermission = FocusSettingsRepository.hasUsageStatsPermissionAsync(context)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

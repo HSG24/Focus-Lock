@@ -1,5 +1,6 @@
 package com.example.data
 
+import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -8,7 +9,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.os.Build
+import android.os.Process
+import android.provider.Settings
 import android.util.LruCache
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +36,7 @@ enum class LockAppLayout(
     SPLIT_CHIPS("Split Chips", "2-column tonal badges")
 }
 
+@Immutable
 data class AllowedApp(
     val id: String,
     val label: String,
@@ -38,11 +44,13 @@ data class AllowedApp(
     val isPreset: Boolean = false
 )
 
+@Immutable
 data class InstalledAppInfo(
     val label: String,
     val packageName: String
 )
 
+@Immutable
 data class FocusSettingsState(
     val lockAppLayout: LockAppLayout = LockAppLayout.PILL_ROW,
     val allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
@@ -324,6 +332,24 @@ object FocusSettingsRepository {
                 loadAppIconBitmap(appContext, app.packageName)
             }
         }
+    }
+
+    suspend fun canDrawOverlaysAsync(context: Context): Boolean = withContext(Dispatchers.IO) {
+        runCatching { Settings.canDrawOverlays(context.applicationContext) }.getOrDefault(false)
+    }
+
+    suspend fun hasUsageStatsPermissionAsync(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        runCatching {
+            val appOps = appContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), appContext.packageName)
+            } else {
+                @Suppress("DEPRECATION")
+                appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), appContext.packageName)
+            }
+            mode == AppOpsManager.MODE_ALLOWED
+        }.getOrDefault(true)
     }
 
     private fun drawableToBitmap(drawable: Drawable): Bitmap {

@@ -66,6 +66,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,7 +83,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.MainActivity
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusSettingsState
@@ -107,6 +107,7 @@ import com.example.ui.theme.ObsidianSurface
 import com.example.ui.theme.OledBlack
 import com.example.ui.theme.PureWhite
 import com.example.ui.theme.SlateGray
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,6 +122,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
 
     var showAddAppDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
@@ -128,16 +130,21 @@ fun SettingsScreen(
         mutableStateOf(settingsState.dailyGoalMinutes.toString())
     }
 
-    var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    var hasUsagePermission by remember {
-        mutableStateOf((context as? MainActivity)?.hasUsageStatsPermission(context) ?: true)
+    var hasOverlayPermission by remember { mutableStateOf(true) }
+    var hasUsagePermission by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        hasOverlayPermission = FocusSettingsRepository.canDrawOverlaysAsync(context)
+        hasUsagePermission = FocusSettingsRepository.hasUsageStatsPermissionAsync(context)
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasOverlayPermission = Settings.canDrawOverlays(context)
-                hasUsagePermission = (context as? MainActivity)?.hasUsageStatsPermission(context) ?: true
+                coroutineScope.launch {
+                    hasOverlayPermission = FocusSettingsRepository.canDrawOverlaysAsync(context)
+                    hasUsagePermission = FocusSettingsRepository.hasUsageStatsPermissionAsync(context)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1262,7 +1269,7 @@ private fun AddAllowedAppDialog(
                         }
 
                         if (filteredInstalled.isNotEmpty()) {
-                            item {
+                            item(key = "installed_apps_header", contentType = "dialog_header") {
                                 Text(
                                     text = "INSTALLED APPS",
                                     style = MaterialTheme.typography.labelSmall,
@@ -1270,7 +1277,11 @@ private fun AddAllowedAppDialog(
                                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                                 )
                             }
-                            items(filteredInstalled, key = { it.packageName }) { info ->
+                            items(
+                                items = filteredInstalled,
+                                key = { it.packageName },
+                                contentType = { "installed_app_row" }
+                            ) { info ->
                                 val previewAllowedApp = remember(info) {
                                     AllowedApp(
                                         id = "pkg_${info.packageName}",

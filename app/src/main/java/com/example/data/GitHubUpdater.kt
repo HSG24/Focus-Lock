@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.runtime.Immutable
 import androidx.core.content.FileProvider
 import com.example.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
+@Immutable
 data class GitHubReleaseInfo(
     val tagName: String,
     val releaseName: String,
@@ -27,6 +29,7 @@ data class GitHubReleaseInfo(
     val apkSizeBytes: Long
 )
 
+@Immutable
 sealed interface UpdateUiState {
     data object Idle : UpdateUiState
     data object Checking : UpdateUiState

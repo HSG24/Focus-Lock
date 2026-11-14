@@ -92,11 +92,14 @@ import com.example.data.ShareRepository
 import com.example.data.SharedLinkItem
 import com.example.data.SharedStatsSummary
 import com.example.fetchAllSessions
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.runtime.key
 import androidx.compose.ui.platform.LocalView
 import com.example.ui.components.performKeyTapHaptic
 import com.example.ui.theme.CrimsonContainer
@@ -304,7 +307,19 @@ fun ShareScreen(
     ) { innerPadding ->
         AnimatedContent(
             targetState = currentStep,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            transitionSpec = {
+                fadeIn(
+                    animationSpec = spring(
+                        dampingRatio = 0.85f,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) togetherWith fadeOut(
+                    animationSpec = spring(
+                        dampingRatio = 0.85f,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            },
             label = "share_step_transition",
             modifier = Modifier
                 .fillMaxSize()
@@ -1758,213 +1773,226 @@ private fun YourLinksSection(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+    val view = LocalView.current
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         if (errorMessage != null) {
-            ErrorBanner(message = errorMessage)
+            item(key = "links_error", contentType = "error_banner") {
+                ErrorBanner(message = errorMessage)
+            }
         }
 
         if (isLoading && links.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
-                    strokeWidth = 2.5.dp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        } else if (links.isEmpty()) {
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
+            item(key = "links_loading", contentType = "loading") {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        } else if (links.isEmpty()) {
+            item(key = "links_empty", contentType = "empty_card") {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
                         modifier = Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Link,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Link,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Text(
+                            text = "No shared links yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    }
-                    Text(
-                        text = "No shared links yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Create a Live Share or Range Share link to manage and view it here.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (errorMessage != null) {
-                        TextButton(onClick = onRetry) {
-                            Text("Retry")
+                        Text(
+                            text = "Create a Live Share or Range Share link to manage and view it here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (errorMessage != null) {
+                            TextButton(onClick = onRetry) {
+                                Text("Retry")
+                            }
                         }
                     }
                 }
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LinksFilter.entries.forEach { filter ->
-                    val count = when (filter) {
-                        LinksFilter.ALL -> links.size
-                        LinksFilter.LIVE -> links.count { it.mode == ShareMode.LIVE }
-                        LinksFilter.SNAPSHOT -> links.count { it.mode == ShareMode.RANGE }
+            item(key = "links_filters", contentType = "filters_row") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LinksFilter.entries.forEach { filter ->
+                        val count = when (filter) {
+                            LinksFilter.ALL -> links.size
+                            LinksFilter.LIVE -> links.count { it.mode == ShareMode.LIVE }
+                            LinksFilter.SNAPSHOT -> links.count { it.mode == ShareMode.RANGE }
+                        }
+                        FilterChip(
+                            selected = selectedFilter == filter,
+                            onClick = { selectedFilter = filter },
+                            label = {
+                                Text(
+                                    text = "${filter.label} ($count)",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier
+                                .heightIn(min = 40.dp)
+                                .testTag("links_filter_${filter.name.lowercase()}")
+                        )
                     }
-                    FilterChip(
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
-                        label = {
-                            Text(
-                                text = "${filter.label} ($count)",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier
-                            .heightIn(min = 40.dp)
-                            .testTag("links_filter_${filter.name.lowercase()}")
-                    )
                 }
             }
 
             if (filteredLinks.isEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "No links in this category.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(20.dp)
-                    )
+                item(key = "links_category_empty", contentType = "empty_category") {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "No links in this category.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(20.dp)
+                        )
+                    }
                 }
             } else {
-                val view = LocalView.current
-                filteredLinks.forEach { item ->
-                    key(item.shareId) {
-                        val swipeState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { value ->
-                                when (value) {
-                                    SwipeToDismissBoxValue.EndToStart -> {
-                                        view.performKeyTapHaptic()
-                                        onRequestDelete(item)
-                                        false // Keep card until confirmation dialog deletes it
-                                    }
-                                    SwipeToDismissBoxValue.StartToEnd -> {
-                                        view.performKeyTapHaptic()
-                                        onCopyLink(item)
-                                        false // Snap back after copying
-                                    }
-                                    SwipeToDismissBoxValue.Settled -> false
+                items(
+                    items = filteredLinks,
+                    key = { it.shareId },
+                    contentType = { "shared_link_card" }
+                ) { item ->
+                    val swipeState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            when (value) {
+                                SwipeToDismissBoxValue.EndToStart -> {
+                                    view.performKeyTapHaptic()
+                                    onRequestDelete(item)
+                                    false
                                 }
-                            }
-                        )
-                        SwipeToDismissBox(
-                            state = swipeState,
-                            backgroundContent = {
-                                val direction = swipeState.dismissDirection
-                                val isCopy = direction == SwipeToDismissBoxValue.StartToEnd
-                                val isDelete = direction == SwipeToDismissBoxValue.EndToStart
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(
-                                            when {
-                                                isCopy -> FocusEmerald.copy(alpha = 0.18f)
-                                                isDelete -> CrimsonContainer
-                                                else -> Color.Transparent
-                                            }
-                                        )
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = if (isCopy) Alignment.CenterStart else Alignment.CenterEnd
-                                ) {
-                                    if (isCopy) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.ContentCopy,
-                                                contentDescription = "Copy Link",
-                                                tint = FocusEmerald
-                                            )
-                                            Text(
-                                                text = "Copy Link",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = FocusEmerald
-                                            )
-                                        }
-                                    } else if (isDelete) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                text = "Delete",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = CrimsonPrimary
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Outlined.DeleteOutline,
-                                                contentDescription = "Delete Link",
-                                                tint = CrimsonPrimary
-                                            )
-                                        }
-                                    }
+                                SwipeToDismissBoxValue.StartToEnd -> {
+                                    view.performKeyTapHaptic()
+                                    onCopyLink(item)
+                                    false
                                 }
+                                SwipeToDismissBoxValue.Settled -> false
                             }
-                        ) {
-                            SharedLinkItemCard(
-                                item = item,
-                                isBusy = busyLinkId == item.shareId,
-                                isCopied = copiedLinkId == item.shareId,
-                                onCopy = { onCopyLink(item) },
-                                onView = { onViewLink(item) },
-                                onDisableLive = { onDisableLive(item) },
-                                onDelete = { onRequestDelete(item) }
-                            )
                         }
+                    )
+                    SwipeToDismissBox(
+                        state = swipeState,
+                        backgroundContent = {
+                            val direction = swipeState.dismissDirection
+                            val isCopy = direction == SwipeToDismissBoxValue.StartToEnd
+                            val isDelete = direction == SwipeToDismissBoxValue.EndToStart
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(
+                                        when {
+                                            isCopy -> FocusEmerald.copy(alpha = 0.18f)
+                                            isDelete -> CrimsonContainer
+                                            else -> Color.Transparent
+                                        }
+                                    )
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = if (isCopy) Alignment.CenterStart else Alignment.CenterEnd
+                            ) {
+                                if (isCopy) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ContentCopy,
+                                            contentDescription = "Copy Link",
+                                            tint = FocusEmerald
+                                        )
+                                        Text(
+                                            text = "Copy Link",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = FocusEmerald
+                                        )
+                                    }
+                                } else if (isDelete) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Delete",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = CrimsonPrimary
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Outlined.DeleteOutline,
+                                            contentDescription = "Delete Link",
+                                            tint = CrimsonPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        SharedLinkItemCard(
+                            item = item,
+                            isBusy = busyLinkId == item.shareId,
+                            isCopied = copiedLinkId == item.shareId,
+                            onCopy = { onCopyLink(item) },
+                            onView = { onViewLink(item) },
+                            onDisableLive = { onDisableLive(item) },
+                            onDelete = { onRequestDelete(item) }
+                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        item(key = "links_bottom_spacer", contentType = "spacer") {
+            Spacer(modifier = Modifier.height(12.dp))
+        }
     }
 }
 

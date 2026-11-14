@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -257,10 +258,18 @@ fun UpdateBottomSheet(
                 is UpdateUiState.Downloading -> {
                     val animatedProgress by animateFloatAsState(
                         targetValue = updateState.progress.coerceIn(0f, 1f),
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        animationSpec = spring(
+                            dampingRatio = 0.85f,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
                         label = "apk_download_progress"
                     )
                     val pct = (animatedProgress * 100).toInt()
+                    val barBrush = remember {
+                        Brush.horizontalGradient(
+                            colors = listOf(CrimsonDeep, CrimsonPrimary)
+                        )
+                    }
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -297,14 +306,14 @@ fun UpdateBottomSheet(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(animatedProgress.coerceAtLeast(0.03f))
+                                    .fillMaxWidth()
                                     .fillMaxHeight()
+                                    .graphicsLayer {
+                                        transformOrigin = TransformOrigin(0f, 0.5f)
+                                        scaleX = animatedProgress.coerceAtLeast(0.03f)
+                                    }
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(CrimsonDeep, CrimsonPrimary)
-                                        )
-                                    )
+                                    .background(barBrush)
                             )
                         }
                     }

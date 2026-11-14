@@ -230,6 +230,8 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             var sessionAllowedPkg: String? = null
             var lastObservedForegroundPkg: String? = null
             var unauthorizedStreak = 0
+            var cachedHomePackages: Set<String> = emptySet()
+            var cachedAllowedPackages: Set<String> = emptySet()
 
             while (isActive) {
                 if (isMinimizedState.value) {
@@ -240,12 +242,14 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         sessionAllowedPkg = null
                         lastObservedForegroundPkg = null
                         unauthorizedStreak = 0
+                        cachedHomePackages = getHomeLauncherPackages()
+                        cachedAllowedPackages = getAllowedPackages()
                     }
 
                     val settings = FocusSettingsRepository.getCurrent(this@LockService)
                     val graceMs = settings.appSwitchGraceSeconds * 1000L
                     val now = System.currentTimeMillis()
-                    val homePackages = getHomeLauncherPackages()
+                    val homePackages = cachedHomePackages
 
                     val queryStart = minOf(lastQueryTime, now)
                     val events = usageStatsManager.queryEvents(queryStart, now)
@@ -259,9 +263,6 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
                             val pkg = event.packageName
                             if (pkg != null && pkg != packageName && pkg !in transientSystemPackages) {
-                                // Capture the actual runtime foreground package of the app just launched
-                                // (handles activity-aliases, trampolines, or split system packages),
-                                // while never auto-trusting a Home Launcher.
                                 if (sessionAllowedPkg == null &&
                                     pkg !in homePackages &&
                                     event.timeStamp <= currentMinimizeTs + graceMs
@@ -269,8 +270,6 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                     sessionAllowedPkg = pkg
                                 }
 
-                                // Ignore the initial 800ms overlay-minimize transition window for escape detection
-                                // so brief Launcher flickers during launch never poison lastObservedForegroundPkg.
                                 if (event.timeStamp >= currentMinimizeTs + 800L) {
                                     lastObservedForegroundPkg = pkg
                                 }
@@ -281,8 +280,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
                     if (now > currentMinimizeTs + graceMs) {
                         val fgPkg = lastObservedForegroundPkg
-                        val allowedPackages = getAllowedPackages() + listOfNotNull(sessionAllowedPkg)
-                        if (fgPkg != null && fgPkg !in allowedPackages) {
+                        val isAllowed = fgPkg == null ||
+                            fgPkg in cachedAllowedPackages ||
+                            fgPkg == sessionAllowedPkg
+                        if (!isAllowed) {
                             unauthorizedStreak++
                             if (unauthorizedStreak >= 2) {
                                 unauthorizedStreak = 0
@@ -299,6 +300,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     sessionAllowedPkg = null
                     lastObservedForegroundPkg = null
                     unauthorizedStreak = 0
+                    cachedAllowedPackages = emptySet()
                 }
                 delay(400)
             }
@@ -572,7 +574,6 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val appCtx = applicationContext
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val client = okhttp3.OkHttpClient()
                     val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/sessions.json"
                     val bodyStr = """{"startTime": $startTime, "duration": $duration}"""
                     val body = bodyStr.toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -580,7 +581,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         .url(url)
                         .post(body)
                         .build()
-                    client.newCall(request).execute().close()
+                    sharedHttpClient.newCall(request).execute().close()
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -635,19 +636,13 @@ fun LockScreen(
     var enteredPin by remember { mutableStateOf("") }
     var wrongPinError by remember { mutableStateOf(false) }
 
-    var elapsedSeconds by remember(sessionStartTimeMs) {
-        mutableLongStateOf(
-            if (sessionStartTimeMs > 0L) ((System.currentTimeMillis() - sessionStartTimeMs) / 1000L).coerceAtLeast(0L) else 0L
+    val backdropGlowBrush = remember {
+        Brush.radialGradient(
+            colors = listOf(
+                CrimsonGlow.copy(alpha = 0.28f),
+                Color.Transparent
+            )
         )
-    }
-
-    LaunchedEffect(showSessionTimer, sessionStartTimeMs) {
-        if (showSessionTimer && sessionStartTimeMs > 0L) {
-            while (true) {
-                elapsedSeconds = ((System.currentTimeMillis() - sessionStartTimeMs) / 1000L).coerceAtLeast(0L)
-                delay(1000L)
-            }
-        }
     }
 
     LaunchedEffect(wrongPinError, autoClearWrongPin) {
@@ -658,14 +653,16 @@ fun LockScreen(
         }
     }
 
-    val resolvedAppClick: (AllowedApp) -> Unit = { app ->
-        if (onLaunchApp != null) {
-            onLaunchApp(app)
-        } else {
-            when (app.packageName) {
-                FocusSettingsRepository.PRESET_GOOGLE_PKG -> onLaunchGoogleLens()
-                FocusSettingsRepository.PRESET_PHONE_PKG -> onLaunchPhone()
-                FocusSettingsRepository.PRESET_XIAOMI_PKG -> onLaunchXiaomiHome()
+    val resolvedAppClick: (AllowedApp) -> Unit = remember(onLaunchApp, onLaunchGoogleLens, onLaunchPhone, onLaunchXiaomiHome) {
+        { app ->
+            if (onLaunchApp != null) {
+                onLaunchApp(app)
+            } else {
+                when (app.packageName) {
+                    FocusSettingsRepository.PRESET_GOOGLE_PKG -> onLaunchGoogleLens()
+                    FocusSettingsRepository.PRESET_PHONE_PKG -> onLaunchPhone()
+                    FocusSettingsRepository.PRESET_XIAOMI_PKG -> onLaunchXiaomiHome()
+                }
             }
         }
     }
@@ -674,14 +671,7 @@ fun LockScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.background)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        CrimsonGlow.copy(alpha = 0.28f),
-                        Color.Transparent
-                    )
-                )
-            )
+            .background(backdropGlowBrush)
             .padding(horizontal = 24.dp, vertical = 28.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -693,7 +683,7 @@ fun LockScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Minimal Lock Header + Optional Live Timer
+            // Minimal Lock Header + Isolated Live Timer Child
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -720,28 +710,10 @@ fun LockScreen(
                 )
 
                 if (showSessionTimer) {
-                    val hrs = elapsedSeconds / 3600
-                    val mins = (elapsedSeconds % 3600) / 60
-                    val secs = elapsedSeconds % 60
-                    val timerFormatted = if (hrs > 0) {
-                        String.format(Locale.US, "%02d:%02d:%02d", hrs, mins, secs)
-                    } else {
-                        String.format(Locale.US, "%02d:%02d", mins, secs)
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = palette.surface,
-                        border = BorderStroke(1.dp, palette.border)
-                    ) {
-                        Text(
-                            text = timerFormatted,
-                            fontFamily = JetBrainsMono,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.accent,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
-                        )
-                    }
+                    SessionTimerBadge(
+                        sessionStartTimeMs = sessionStartTimeMs,
+                        palette = palette
+                    )
                 }
 
                 Text(
@@ -897,7 +869,7 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
         contentColor = PureWhite,
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, CrimsonBorderTint),
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier
             .padding(8.dp)
             .wrapContentSize()
@@ -922,3 +894,47 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun SessionTimerBadge(
+    sessionStartTimeMs: Long,
+    palette: LockPalette
+) {
+    var elapsedSeconds by remember(sessionStartTimeMs) {
+        mutableLongStateOf(
+            if (sessionStartTimeMs > 0L) {
+                ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
+            } else {
+                0L
+            }
+        )
+    }
+
+    LaunchedEffect(sessionStartTimeMs) {
+        while (isActive) {
+            if (sessionStartTimeMs > 0L) {
+                elapsedSeconds = ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
+            }
+            delay(1000L)
+        }
+    }
+
+    val mins = elapsedSeconds / 60L
+    val secs = elapsedSeconds % 60L
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = CrimsonContainer,
+        border = BorderStroke(1.dp, CrimsonBorderTint)
+    ) {
+        Text(
+            text = String.format(Locale.US, "FOCUS  %02d:%02d", mins, secs),
+            fontFamily = JetBrainsMono,
+            color = palette.primaryText,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.8.sp,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+        )
+    }
+}
+

@@ -11,14 +11,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +75,15 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+internal val sharedHttpClient: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+}
 
 class MainActivity : ComponentActivity() {
     fun hasUsageStatsPermission(context: Context): Boolean {
@@ -287,107 +296,129 @@ class MainActivity : ComponentActivity() {
                     }
             }
 
+            val onOpenShareHome = remember {
+                {
+                    shareInitialDateMs = null
+                    showShare = true
+                }
+            }
+            val onOpenShareStats = remember {
+                { dateMs: Long? ->
+                    shareInitialDateMs = dateMs
+                    showShare = true
+                }
+            }
+            val onCloseShare = remember {
+                { showShare = false }
+            }
+            val onCheckForUpdates = remember {
+                { triggerUpdateCheck(silent = false) }
+            }
+            val onOpenUpdateSheet = remember {
+                {
+                    if (activeUpdateRelease != null) {
+                        showUpdateSheet = true
+                    }
+                }
+            }
+            val pagerPositionProvider = remember(pagerState) {
+                { pagerState.currentPage + pagerState.currentPageOffsetFraction }
+            }
+            val onSelectTab = remember(pagerState, view, coroutineScope) {
+                { targetIndex: Int ->
+                    if (targetIndex != pagerState.currentPage) {
+                        view.performClockTickHaptic()
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(
+                                page = targetIndex,
+                                animationSpec = spring(
+                                    dampingRatio = 0.85f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
             MyApplicationTheme {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(OledBlack)
                 ) {
-                    AnimatedContent(
-                        targetState = showShare,
-                        transitionSpec = {
-                            if (targetState) {
-                                (slideInVertically(
-                                    animationSpec = spring(
-                                        dampingRatio = 0.85f,
-                                        stiffness = Spring.StiffnessMediumLow
-                                    ),
-                                    initialOffsetY = { it / 6 }
-                                ) + fadeIn()) togetherWith fadeOut()
-                            } else {
-                                fadeIn() togetherWith (slideOutVertically(
-                                    animationSpec = spring(
-                                        dampingRatio = 0.9f,
-                                        stiffness = Spring.StiffnessMedium
-                                    ),
-                                    targetOffsetY = { it / 6 }
-                                ) + fadeOut())
-                            }
-                        },
-                        label = "share_overlay_transition"
-                    ) { isShareOpen ->
-                        if (isShareOpen) {
-                            ShareScreen(
-                                settingsState = settingsState,
-                                initialDateMs = shareInitialDateMs,
-                                onBack = { showShare = false }
-                            )
-                        } else {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                HorizontalPager(
-                                    state = pagerState,
-                                    beyondViewportPageCount = 1,
-                                    flingBehavior = PagerDefaults.flingBehavior(
-                                        state = pagerState,
-                                        snapAnimationSpec = spring(
-                                            dampingRatio = 0.88f,
-                                            stiffness = 480f
-                                        )
-                                    ),
-                                    modifier = Modifier.fillMaxSize()
-                                ) { page ->
-                                    when (page) {
-                                        0 -> FocusHomeScreen(
-                                            onOpenShare = {
-                                                shareInitialDateMs = null
-                                                showShare = true
-                                            }
-                                        )
-                                        1 -> StatsScreen(
-                                            settingsState = settingsState,
-                                            onOpenShare = { dateMs ->
-                                                shareInitialDateMs = dateMs
-                                                showShare = true
-                                            }
-                                        )
-                                        else -> SettingsScreen(
-                                            settingsState = settingsState,
-                                            installedVersion = installedVersion,
-                                            updateUiState = updateState,
-                                            onCheckForUpdates = { triggerUpdateCheck(silent = false) },
-                                            onOpenUpdateSheet = {
-                                                if (activeUpdateRelease != null) {
-                                                    showUpdateSheet = true
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
-
-                                FloatingPillBottomBar(
-                                    tabs = navTabs,
-                                    selectedIndex = pagerState.currentPage,
-                                    pagerPositionProvider = {
-                                        pagerState.currentPage + pagerState.currentPageOffsetFraction
-                                    },
-                                    onSelectTab = { targetIndex ->
-                                        if (targetIndex != pagerState.currentPage) {
-                                            view.performClockTickHaptic()
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    page = targetIndex,
-                                                    animationSpec = spring(
-                                                        dampingRatio = 0.88f,
-                                                        stiffness = 480f
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.align(Alignment.BottomCenter)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        HorizontalPager(
+                            state = pagerState,
+                            beyondViewportPageCount = 1,
+                            flingBehavior = PagerDefaults.flingBehavior(
+                                state = pagerState,
+                                snapAnimationSpec = spring(
+                                    dampingRatio = 0.85f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            ),
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            when (page) {
+                                0 -> FocusHomeScreen(
+                                    onOpenShare = onOpenShareHome
+                                )
+                                1 -> StatsScreen(
+                                    dailyGoalMinutes = settingsState.dailyGoalMinutes,
+                                    onOpenShare = onOpenShareStats
+                                )
+                                else -> SettingsScreen(
+                                    settingsState = settingsState,
+                                    installedVersion = installedVersion,
+                                    updateUiState = updateState,
+                                    onCheckForUpdates = onCheckForUpdates,
+                                    onOpenUpdateSheet = onOpenUpdateSheet
                                 )
                             }
                         }
+
+                        FloatingPillBottomBar(
+                            tabs = navTabs,
+                            selectedIndex = pagerState.currentPage,
+                            pagerPositionProvider = pagerPositionProvider,
+                            onSelectTab = onSelectTab,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = showShare,
+                        enter = slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            initialOffsetY = { it / 6 }
+                        ) + fadeIn(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ),
+                        exit = slideOutVertically(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            targetOffsetY = { it / 6 }
+                        ) + fadeOut(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )
+                    ) {
+                        ShareScreen(
+                            settingsState = settingsState,
+                            initialDateMs = shareInitialDateMs,
+                            onBack = onCloseShare
+                        )
                     }
 
                     val sheetRelease = activeUpdateRelease
@@ -434,29 +465,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Immutable
 data class Session(val startTime: Long, val duration: Long)
 
 suspend fun fetchAllSessions(): List<Session> {
     return withContext(Dispatchers.IO) {
         val list = mutableListOf<Session>()
         try {
-            val client = OkHttpClient()
             val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/sessions.json"
             val request = Request.Builder().url(url).get().build()
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string() ?: return@withContext list
-                if (responseBody == "null") return@withContext list
+            sharedHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string() ?: return@withContext list
+                    if (responseBody == "null") return@withContext list
 
-                val jsonObject = org.json.JSONObject(responseBody)
-                val keys = jsonObject.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val sessionObj = jsonObject.getJSONObject(key)
-                    val startTime = sessionObj.optLong("startTime", 0L)
-                    val duration = sessionObj.optLong("duration", 0L)
-                    if (startTime > 0 && duration > 0) {
-                        list.add(Session(startTime, duration))
+                    val jsonObject = org.json.JSONObject(responseBody)
+                    val keys = jsonObject.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val sessionObj = jsonObject.getJSONObject(key)
+                        val startTime = sessionObj.optLong("startTime", 0L)
+                        val duration = sessionObj.optLong("duration", 0L)
+                        if (startTime > 0 && duration > 0) {
+                            list.add(Session(startTime, duration))
+                        }
                     }
                 }
             }
@@ -582,7 +614,6 @@ fun calculateMaxStreak(allSessions: List<Session>): Int {
 suspend fun uploadPinToFirebase(pin: String): Boolean {
     return withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient()
             val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/current_lock/pin.json"
             val body = "\"$pin\"".toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
@@ -590,8 +621,9 @@ suspend fun uploadPinToFirebase(pin: String): Boolean {
                 .put(body)
                 .build()
 
-            val response = client.newCall(request).execute()
-            response.isSuccessful
+            sharedHttpClient.newCall(request).execute().use { response ->
+                response.isSuccessful
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             false
