@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhoneInTalk
 import androidx.compose.material3.Button
@@ -30,7 +29,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -64,7 +62,7 @@ import java.util.Locale
 @Composable
 fun BlockedSummaryBottomSheet(
     blockerState: NotificationBlockerState,
-    onClearLog: () -> Unit,
+    onDoneClearLog: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
@@ -205,51 +203,22 @@ fun BlockedSummaryBottomSheet(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Button(
+                onClick = {
+                    view.performClockTickHaptic()
+                    onDoneClearLog()
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.primary,
+                    contentColor = palette.onPrimary
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .testTag("dismiss_blocked_summary_button")
             ) {
-                if (groups.isNotEmpty()) {
-                    OutlinedButton(
-                        onClick = {
-                            view.performKeyTapHaptic()
-                            onClearLog()
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, palette.borderHighlight),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .testTag("clear_blocked_summary_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.DeleteSweep,
-                            contentDescription = null,
-                            tint = palette.textSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Clear Log", color = palette.textPrimary, fontWeight = FontWeight.Medium)
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        view.performClockTickHaptic()
-                        onDismiss()
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.primary,
-                        contentColor = palette.onPrimary
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp)
-                        .testTag("dismiss_blocked_summary_button")
-                ) {
-                    Text("Done", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                }
+                Text("Done", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
         }
     }

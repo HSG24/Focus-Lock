@@ -511,7 +511,7 @@ class MainActivity : ComponentActivity() {
                     if (blockerState.showSummarySheet) {
                         BlockedSummaryBottomSheet(
                             blockerState = blockerState,
-                            onClearLog = {
+                            onDoneClearLog = {
                                 NotificationBlockerRepository.clearSummaryLog(context)
                             },
                             onDismiss = {
