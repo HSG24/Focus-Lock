@@ -25,11 +25,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Refresh
@@ -63,7 +64,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,7 +72,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -83,7 +82,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.BuildConfig
 import com.example.MainActivity
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
@@ -114,6 +112,7 @@ import com.example.ui.theme.SlateGray
 @Composable
 fun SettingsScreen(
     settingsState: FocusSettingsState,
+    installedVersion: String,
     updateUiState: UpdateUiState,
     onCheckForUpdates: () -> Unit,
     onOpenUpdateSheet: () -> Unit,
@@ -145,6 +144,12 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    LaunchedEffect(settingsState.allowedApps) {
+        FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
+    }
+
+    val noopPreviewClick = remember<((AllowedApp) -> Unit)> { {} }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -175,196 +180,239 @@ fun SettingsScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp)
         ) {
-            // 1. Locked State Allowed Apps Section (with Swipe-to-Remove)
-            item {
-                SettingsSection(
-                    title = "ALLOWED APPS IN LOCK MODE",
-                    trailingAction = {
-                        TextButton(
-                            onClick = {
-                                view.performKeyTapHaptic()
-                                FocusSettingsRepository.resetAllowedAppsToDefaults(context)
-                            },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.testTag("reset_apps_button")
+            // 1. Locked State Allowed Apps Section (flattened & keyed for smooth 120Hz scroll)
+            item(key = "allowed_apps_header", contentType = "section_header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "ALLOWED APPS IN LOCK MODE",
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 1.2.sp,
+                        color = SlateGray
+                    )
+                    TextButton(
+                        onClick = {
+                            view.performKeyTapHaptic()
+                            FocusSettingsRepository.resetAllowedAppsToDefaults(context)
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.testTag("reset_apps_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.RestartAlt,
+                            contentDescription = null,
+                            tint = CrimsonPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Defaults", fontSize = 12.sp, color = CrimsonPrimary)
+                    }
+                }
+            }
+
+            if (settingsState.allowedApps.isEmpty()) {
+                item(key = "allowed_apps_empty", contentType = "empty_card") {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                        color = ObsidianSurface,
+                        border = BorderStroke(1.dp, ObsidianBorder)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.RestartAlt,
-                                contentDescription = null,
-                                tint = CrimsonPrimary,
-                                modifier = Modifier.size(14.dp)
+                            Text(
+                                text = "Strict Lock Mode",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontSize = 14.sp,
+                                color = PureWhite
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Defaults", fontSize = 12.sp, color = CrimsonPrimary)
+                            Text(
+                                text = "No apps allowed during focus sessions. Add essential apps below.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateGray
+                            )
                         }
                     }
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        if (settingsState.allowedApps.isEmpty()) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "Strict Lock Mode",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontSize = 14.sp,
-                                    color = PureWhite
-                                )
-                                Text(
-                                    text = "No apps allowed during focus sessions. Add essential apps below.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = SlateGray
-                                )
+                }
+            } else {
+                itemsIndexed(
+                    items = settingsState.allowedApps,
+                    key = { _, app -> "allowed_app_${app.id}" },
+                    contentType = { _, _ -> "allowed_app_row" }
+                ) { index, app ->
+                    val isFirst = index == 0
+                    val cardShape = if (isFirst) {
+                        RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+                    } else {
+                        RoundedCornerShape(0.dp)
+                    }
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart) {
+                                view.performKeyTapHaptic()
+                                FocusSettingsRepository.removeAllowedApp(context, app.id)
+                                true
+                            } else {
+                                false
                             }
-                        } else {
-                            settingsState.allowedApps.forEachIndexed { index, app ->
-                                key(app.id) {
-                                    val dismissState = rememberSwipeToDismissBoxState(
-                                        confirmValueChange = { value ->
-                                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                                view.performKeyTapHaptic()
-                                                FocusSettingsRepository.removeAllowedApp(context, app.id)
-                                                true
-                                            } else {
-                                                false
-                                            }
-                                        }
-                                    )
+                        }
+                    )
 
-                                    SwipeToDismissBox(
-                                        state = dismissState,
-                                        enableDismissFromStartToEnd = false,
-                                        enableDismissFromEndToStart = true,
-                                        backgroundContent = {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(CrimsonContainer)
-                                                    .padding(horizontal = 20.dp),
-                                                contentAlignment = Alignment.CenterEnd
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Remove",
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        color = CrimsonPrimary
-                                                    )
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.DeleteOutline,
-                                                        contentDescription = "Remove ${app.label}",
-                                                        tint = CrimsonPrimary,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(cardShape)
+                            .background(ObsidianSurface)
+                    ) {
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            enableDismissFromStartToEnd = false,
+                            enableDismissFromEndToStart = true,
+                            backgroundContent = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(CrimsonContainer)
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .background(ObsidianSurface)
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            AllowedAppIconBadge(
-                                                app = app,
-                                                tint = CrimsonPrimary,
-                                                badgeBackground = ObsidianElevated,
-                                                iconSize = 18.dp,
-                                                containerSize = 36.dp,
-                                                shape = RoundedCornerShape(10.dp)
-                                            )
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = app.label,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontSize = 14.sp,
-                                                    color = PureWhite,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = if (app.isPreset) "Built-in essential · Swipe left to remove" else app.packageName,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontSize = 11.sp,
-                                                    color = SlateGray,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = {
-                                                    view.performKeyTapHaptic()
-                                                    FocusSettingsRepository.removeAllowedApp(context, app.id)
-                                                },
-                                                modifier = Modifier.testTag("remove_app_${app.id}")
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.Close,
-                                                    contentDescription = "Remove ${app.label}",
-                                                    tint = SlateGray,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                    if (index < settingsState.allowedApps.lastIndex) {
-                                        HorizontalDivider(
-                                            thickness = 0.5.dp,
-                                            color = ObsidianBorder,
-                                            modifier = Modifier.padding(horizontal = 14.dp)
+                                        Text(
+                                            text = "Remove",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = CrimsonPrimary
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Outlined.DeleteOutline,
+                                            contentDescription = "Remove ${app.label}",
+                                            tint = CrimsonPrimary,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
                             }
-                        }
-
-                        HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    view.performKeyTapHaptic()
-                                    showAddAppDialog = true
-                                }
-                                .padding(horizontal = 14.dp, vertical = 14.dp)
-                                .testTag("add_allowed_app_button"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Add,
-                                contentDescription = null,
-                                tint = CrimsonPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Add Allowed App",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontSize = 13.sp,
-                                color = CrimsonPrimary
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(ObsidianSurface)
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                AllowedAppIconBadge(
+                                    app = app,
+                                    tint = CrimsonPrimary,
+                                    badgeBackground = ObsidianElevated,
+                                    iconSize = 18.dp,
+                                    containerSize = 36.dp,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = app.label,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontSize = 14.sp,
+                                        color = PureWhite,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = if (app.isPreset) "Built-in essential · Swipe left to remove" else app.packageName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontSize = 11.sp,
+                                        color = SlateGray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        view.performKeyTapHaptic()
+                                        FocusSettingsRepository.removeAllowedApp(context, app.id)
+                                    },
+                                    modifier = Modifier.testTag("remove_app_${app.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Remove ${app.label}",
+                                        tint = SlateGray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                        if (index < settingsState.allowedApps.lastIndex) {
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = ObsidianBorder,
+                                modifier = Modifier.padding(horizontal = 14.dp)
                             )
                         }
                     }
                 }
             }
 
+            item(key = "allowed_apps_add_footer", contentType = "footer_button") {
+                Surface(
+                    shape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
+                    color = ObsidianSurface,
+                    border = BorderStroke(0.5.dp, ObsidianBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                view.performKeyTapHaptic()
+                                showAddAppDialog = true
+                            }
+                            .padding(horizontal = 14.dp, vertical = 14.dp)
+                            .testTag("add_allowed_app_button"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null,
+                            tint = CrimsonPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Add Allowed App",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontSize = 13.sp,
+                            color = CrimsonPrimary
+                        )
+                    }
+                }
+            }
+
             // 2. Lock Screen App Layout Section (OLED Stealth Dark Live Preview)
-            item {
-                SettingsSection(title = "LOCK SCREEN APPS LAYOUT") {
+            item(key = "lock_apps_layout_section", contentType = "layout_section") {
+                SettingsSection(
+                    title = "LOCK SCREEN APPS LAYOUT",
+                    modifier = Modifier.padding(bottom = 20.dp)
+                ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -412,7 +460,7 @@ fun SettingsScreen(
                                 apps = previewApps,
                                 layout = settingsState.lockAppLayout,
                                 palette = previewPalette,
-                                onAppClick = {},
+                                onAppClick = noopPreviewClick,
                                 isPreview = true
                             )
                         }
@@ -476,8 +524,11 @@ fun SettingsScreen(
             }
 
             // 3. Focus & Lock Behavior Section
-            item {
-                SettingsSection(title = "FOCUS & LOCK BEHAVIOR") {
+            item(key = "focus_behavior_section", contentType = "behavior_section") {
+                SettingsSection(
+                    title = "FOCUS & LOCK BEHAVIOR",
+                    modifier = Modifier.padding(bottom = 20.dp)
+                ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -622,8 +673,11 @@ fun SettingsScreen(
             }
 
             // 4. Private GitHub In-App Updates Section
-            item {
-                SettingsSection(title = "APP UPDATES") {
+            item(key = "app_updates_section", contentType = "updates_section") {
+                SettingsSection(
+                    title = "APP UPDATES",
+                    modifier = Modifier.padding(bottom = 20.dp)
+                ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -661,7 +715,7 @@ fun SettingsScreen(
                                         color = PureWhite
                                     )
                                     Text(
-                                        text = "Installed: v${BuildConfig.VERSION_NAME}",
+                                        text = "Installed: v$installedVersion",
                                         fontFamily = JetBrainsMono,
                                         fontSize = 12.sp,
                                         color = SlateGray
@@ -676,7 +730,7 @@ fun SettingsScreen(
                                         color = FocusEmerald.copy(alpha = 0.14f)
                                     ) {
                                         Text(
-                                            text = "Up to date",
+                                            text = "Latest",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = FocusEmerald,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -704,13 +758,46 @@ fun SettingsScreen(
                             }
                         }
 
-                        if (updateUiState is UpdateUiState.Error) {
-                            Text(
-                                text = updateUiState.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontSize = 12.sp,
-                                color = CrimsonPrimary
-                            )
+                        when (updateUiState) {
+                            is UpdateUiState.UpToDate -> {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = FocusEmerald.copy(alpha = 0.10f),
+                                    border = BorderStroke(1.dp, FocusEmerald.copy(alpha = 0.28f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("latest_version_banner")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.CheckCircle,
+                                            contentDescription = null,
+                                            tint = FocusEmerald,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "You are using the latest version",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = PureWhite
+                                        )
+                                    }
+                                }
+                            }
+                            is UpdateUiState.Error -> {
+                                Text(
+                                    text = updateUiState.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontSize = 12.sp,
+                                    color = CrimsonPrimary
+                                )
+                            }
+                            else -> Unit
                         }
 
                         val isChecking = updateUiState is UpdateUiState.Checking
@@ -775,7 +862,7 @@ fun SettingsScreen(
             }
 
             // 5. System Permissions Status
-            item {
+            item(key = "permissions_section", contentType = "permissions_section") {
                 SettingsSection(title = "PERMISSIONS") {
                     Column(
                         modifier = Modifier.padding(14.dp),
@@ -911,10 +998,14 @@ fun SettingsScreen(
 @Composable
 private fun SettingsSection(
     title: String,
+    modifier: Modifier = Modifier,
     trailingAction: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1180,50 +1271,31 @@ private fun AddAllowedAppDialog(
                                 )
                             }
                             items(filteredInstalled, key = { it.packageName }) { info ->
-                                val iconBitmap = remember(info.packageName) {
-                                    FocusSettingsRepository.loadAppIconBitmap(context, info.packageName)
+                                val previewAllowedApp = remember(info) {
+                                    AllowedApp(
+                                        id = "pkg_${info.packageName}",
+                                        label = info.label,
+                                        packageName = info.packageName,
+                                        isPreset = false
+                                    )
                                 }
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            onAddApp(
-                                                AllowedApp(
-                                                    id = "pkg_${info.packageName}",
-                                                    label = info.label,
-                                                    packageName = info.packageName,
-                                                    isPreset = false
-                                                )
-                                            )
-                                        }
+                                        .clickable { onAddApp(previewAllowedApp) }
                                         .padding(horizontal = 8.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(ObsidianElevated),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (iconBitmap != null) {
-                                            Image(
-                                                bitmap = iconBitmap,
-                                                contentDescription = info.label,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Check,
-                                                contentDescription = null,
-                                                tint = CrimsonPrimary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
+                                    AllowedAppIconBadge(
+                                        app = previewAllowedApp,
+                                        tint = CrimsonPrimary,
+                                        badgeBackground = ObsidianElevated,
+                                        iconSize = 18.dp,
+                                        containerSize = 34.dp,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = info.label,

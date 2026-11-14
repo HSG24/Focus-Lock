@@ -17,8 +17,12 @@ android {
     applicationId = "com.aistudio.focuslock.xzvqw"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    val ghRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    val propVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull()
+    val propVersionName = (project.findProperty("versionName") as? String)?.takeIf { it.isNotBlank() }
+
+    versionCode = propVersionCode ?: ghRunNumber ?: 1
+    versionName = propVersionName ?: if (ghRunNumber != null) "1.0.$ghRunNumber" else "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

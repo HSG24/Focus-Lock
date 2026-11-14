@@ -36,7 +36,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,8 +94,14 @@ fun AllowedAppIconBadge(
     shape: RoundedCornerShape = CircleShape
 ) {
     val context = LocalContext.current
-    val bitmap: ImageBitmap? = remember(app.packageName) {
-        FocusSettingsRepository.loadAppIconBitmap(context, app.packageName)
+    val cachedBitmap = FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
+    val bitmap by produceState<ImageBitmap?>(
+        initialValue = cachedBitmap,
+        key1 = app.packageName
+    ) {
+        if (value == null && !app.packageName.startsWith("__builtin_")) {
+            value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName)
+        }
     }
 
     Box(
@@ -104,9 +111,10 @@ fun AllowedAppIconBadge(
             .background(badgeBackground),
         contentAlignment = Alignment.Center
     ) {
-        if (bitmap != null) {
+        val loaded = bitmap
+        if (loaded != null) {
             Image(
-                bitmap = bitmap,
+                bitmap = loaded,
                 contentDescription = app.label,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

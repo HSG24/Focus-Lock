@@ -2,6 +2,8 @@ package com.example.data
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -53,6 +55,14 @@ object GitHubUpdater {
     private const val GITHUB_LATEST_RELEASE_URL =
         "https://api.github.com/repos/HSG24/Focus-Lock/releases/latest"
 
+    private const val PREFS_NAME = "github_updater_state"
+    private const val KEY_PENDING_TAG = "pending_install_tag"
+    private const val KEY_PENDING_PRE_UPDATE_TIME = "pending_pre_install_update_time"
+    private const val KEY_CONFIRMED_TAG = "confirmed_installed_tag"
+    private const val KEY_CONFIRMED_UPDATE_TIME = "confirmed_update_time"
+
+    private val VERSION_TOKEN_REGEX = Regex("""\d+(?:\.\d+)*""")
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -62,6 +72,77 @@ object GitHubUpdater {
 
     @Volatile
     private var cachedToken: String? = null
+
+    private fun readPackageInfo(context: Context): PackageInfo? {
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Resolves the currently running app version cleanly from PackageManager / BuildConfig,
+     * and also reconciles an in-app update install whose PackageInfo.lastUpdateTime advanced
+     * after the package installer was launched (protecting against unbumped APK metadata).
+     */
+    fun getInstalledVersion(context: Context): String {
+        val pkgInfo = readPackageInfo(context)
+        val rawPkgVersion = pkgInfo?.versionName?.trim().orEmpty().ifBlank { BuildConfig.VERSION_NAME }
+        val normalizedPkgVersion = normalizeVersionString(rawPkgVersion)
+        val lastUpdateTime = pkgInfo?.lastUpdateTime ?: 0L
+
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val pendingTag = prefs.getString(KEY_PENDING_TAG, null)?.takeIf { it.isNotBlank() }
+        val pendingPreTime = prefs.getLong(KEY_PENDING_PRE_UPDATE_TIME, -1L)
+
+        if (pendingTag != null && lastUpdateTime > 0L && pendingPreTime in 1L until lastUpdateTime) {
+            prefs.edit()
+                .putString(KEY_CONFIRMED_TAG, pendingTag)
+                .putLong(KEY_CONFIRMED_UPDATE_TIME, lastUpdateTime)
+                .remove(KEY_PENDING_TAG)
+                .remove(KEY_PENDING_PRE_UPDATE_TIME)
+                .apply()
+        }
+
+        val confirmedTag = prefs.getString(KEY_CONFIRMED_TAG, null)?.takeIf { it.isNotBlank() }
+        val confirmedTime = prefs.getLong(KEY_CONFIRMED_UPDATE_TIME, -1L)
+
+        if (confirmedTag != null && lastUpdateTime > 0L) {
+            if (confirmedTime == lastUpdateTime) {
+                val normalizedConfirmed = normalizeVersionString(confirmedTag)
+                return if (compareVersions(normalizedConfirmed, normalizedPkgVersion) > 0) {
+                    normalizedConfirmed
+                } else {
+                    normalizedPkgVersion
+                }
+            } else if (lastUpdateTime > confirmedTime) {
+                // Another manual APK install occurred outside our tracked update flow;
+                // drop stale confirmed tag and trust the new APK's own PackageInfo.versionName.
+                prefs.edit()
+                    .remove(KEY_CONFIRMED_TAG)
+                    .remove(KEY_CONFIRMED_UPDATE_TIME)
+                    .apply()
+            }
+        }
+
+        return normalizedPkgVersion
+    }
+
+    fun normalizeVersionString(raw: String): String {
+        val trimmed = raw.trim()
+            .removePrefix("v")
+            .removePrefix("V")
+        if (trimmed.isBlank()) return "1.0"
+        val match = VERSION_TOKEN_REGEX.find(trimmed)
+        return match?.value ?: trimmed
+    }
 
     suspend fun fetchGitHubToken(forceRefresh: Boolean = false): Result<String> = withContext(Dispatchers.IO) {
         if (!forceRefresh) {
@@ -99,9 +180,15 @@ object GitHubUpdater {
         return trimmed.removeSurrounding("\"").trim()
     }
 
+    suspend fun checkForUpdates(context: Context): UpdateCheckResult {
+        val installedVersion = getInstalledVersion(context)
+        return checkForUpdates(installedVersion)
+    }
+
     suspend fun checkForUpdates(
         currentVersion: String = BuildConfig.VERSION_NAME
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
+        val normalizedCurrent = normalizeVersionString(currentVersion)
         val tokenResult = fetchGitHubToken()
         val token = tokenResult.getOrElse { err ->
             return@withContext UpdateCheckResult.Failed(err.message ?: "Could not reach update server.")
@@ -127,11 +214,11 @@ object GitHubUpdater {
                 val json = JSONObject(body)
                 val tagName = json.optString("tag_name", "").trim()
                 if (tagName.isBlank()) {
-                    return@withContext UpdateCheckResult.AlreadyLatest(currentVersion)
+                    return@withContext UpdateCheckResult.AlreadyLatest(normalizedCurrent)
                 }
 
-                if (!isNewerVersion(remoteTag = tagName, localVersion = currentVersion)) {
-                    return@withContext UpdateCheckResult.AlreadyLatest(currentVersion)
+                if (!isNewerVersion(remoteTag = tagName, localVersion = normalizedCurrent)) {
+                    return@withContext UpdateCheckResult.AlreadyLatest(normalizedCurrent)
                 }
 
                 val releaseName = json.optString("name", "").trim().ifBlank { tagName }
@@ -263,7 +350,20 @@ object GitHubUpdater {
         }
     }
 
-    fun launchPackageInstaller(context: Context, apkFile: File): Result<Unit> = runCatching {
+    fun launchPackageInstaller(
+        context: Context,
+        apkFile: File,
+        targetTag: String? = null
+    ): Result<Unit> = runCatching {
+        if (!targetTag.isNullOrBlank()) {
+            val lastUpdateTime = readPackageInfo(context)?.lastUpdateTime ?: System.currentTimeMillis()
+            context.applicationContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_PENDING_TAG, targetTag)
+                .putLong(KEY_PENDING_PRE_UPDATE_TIME, lastUpdateTime)
+                .apply()
+        }
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -277,28 +377,27 @@ object GitHubUpdater {
     }
 
     internal fun parseVersionSegments(raw: String): List<Int> {
-        val cleaned = raw.trim()
-            .removePrefix("v")
-            .removePrefix("V")
-            .substringBefore("-")
-            .substringBefore("+")
-        if (cleaned.isBlank()) return listOf(0)
-        return cleaned.split(".").map { segment ->
-            segment.filter { it.isDigit() }.toIntOrNull() ?: 0
+        val token = VERSION_TOKEN_REGEX.find(raw.trim())?.value ?: return listOf(0)
+        return token.split(".").map { segment ->
+            segment.toIntOrNull() ?: 0
         }
     }
 
-    fun isNewerVersion(remoteTag: String, localVersion: String): Boolean {
-        val remoteParts = parseVersionSegments(remoteTag)
-        val localParts = parseVersionSegments(localVersion)
-        val maxLen = maxOf(remoteParts.size, localParts.size)
+    fun compareVersions(first: String, second: String): Int {
+        val firstParts = parseVersionSegments(first)
+        val secondParts = parseVersionSegments(second)
+        val maxLen = maxOf(firstParts.size, secondParts.size)
         for (i in 0 until maxLen) {
-            val r = remoteParts.getOrElse(i) { 0 }
-            val l = localParts.getOrElse(i) { 0 }
-            if (r > l) return true
-            if (r < l) return false
+            val a = firstParts.getOrElse(i) { 0 }
+            val b = secondParts.getOrElse(i) { 0 }
+            if (a > b) return 1
+            if (a < b) return -1
         }
-        return false
+        return 0
+    }
+
+    fun isNewerVersion(remoteTag: String, localVersion: String): Boolean {
+        return compareVersions(remoteTag, localVersion) > 0
     }
 
     fun formatBytesReadable(bytes: Long): String {

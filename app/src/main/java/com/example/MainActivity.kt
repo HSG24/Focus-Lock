@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
                 val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
                 dm?.getDisplay(Display.DEFAULT_DISPLAY)
             }
+            var bestRefreshRate = 120f
             if (activeDisplay != null) {
                 val currentMode = activeDisplay.mode
                 val bestMode = activeDisplay.supportedModes
@@ -104,17 +105,36 @@ class MainActivity : ComponentActivity() {
                             it.physicalHeight == currentMode.physicalHeight
                     }
                     .maxByOrNull { it.refreshRate }
-                if (bestMode != null && bestMode.modeId != currentMode.modeId) {
-                    window.attributes = window.attributes.apply {
-                        preferredDisplayModeId = bestMode.modeId
+                    ?: activeDisplay.supportedModes.maxByOrNull { it.refreshRate }
+                if (bestMode != null) {
+                    bestRefreshRate = bestMode.refreshRate
+                    val params = window.attributes
+                    if (params.preferredDisplayModeId != bestMode.modeId ||
+                        params.preferredRefreshRate != bestMode.refreshRate
+                    ) {
+                        params.preferredDisplayModeId = bestMode.modeId
+                        params.preferredRefreshRate = bestMode.refreshRate
+                        window.attributes = params
                     }
                 }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 window.frameRateBoostOnTouchEnabled = true
                 window.isFrameRatePowerSavingsBalanced = false
-                window.decorView.requestedFrameRate = 120f
+                window.decorView.requestedFrameRate = bestRefreshRate.coerceAtLeast(120f)
             }
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        configureHighRefreshRate()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            configureHighRefreshRate()
         }
     }
 
@@ -135,9 +155,9 @@ class MainActivity : ComponentActivity() {
             val settingsState by FocusSettingsRepository.observe(this).collectAsStateWithLifecycle()
             var showShare by remember { mutableStateOf(false) }
             var shareInitialDateMs by remember { mutableStateOf<Long?>(null) }
-            val isLiveShareActive = !settingsState.activeLiveShareId.isNullOrBlank()
 
             // GitHub In-App Updater state
+            var installedVersion by remember { mutableStateOf(GitHubUpdater.getInstalledVersion(context)) }
             var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
             var activeUpdateRelease by remember { mutableStateOf<GitHubReleaseInfo?>(null) }
             var showUpdateSheet by remember { mutableStateOf(false) }
@@ -165,7 +185,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }.onSuccess { apkFile ->
                         updateState = UpdateUiState.ReadyToInstall(release, apkFile)
-                        GitHubUpdater.launchPackageInstaller(context, apkFile)
+                        GitHubUpdater.launchPackageInstaller(context, apkFile, release.tagName)
                             .onFailure { err ->
                                 updateState = UpdateUiState.Error(
                                     message = err.message ?: "Could not open package installer.",
@@ -184,19 +204,20 @@ class MainActivity : ComponentActivity() {
             fun triggerUpdateCheck(silent: Boolean) {
                 if (updateState is UpdateUiState.Checking || updateState is UpdateUiState.Downloading) return
                 coroutineScope.launch {
+                    val currentVer = GitHubUpdater.getInstalledVersion(context)
+                    installedVersion = currentVer
                     if (!silent) {
                         updateState = UpdateUiState.Checking
                     }
-                    when (val result = GitHubUpdater.checkForUpdates(BuildConfig.VERSION_NAME)) {
+                    when (val result = GitHubUpdater.checkForUpdates(currentVer)) {
                         is UpdateCheckResult.Available -> {
                             activeUpdateRelease = result.release
                             updateState = UpdateUiState.UpdateAvailable(result.release)
                             showUpdateSheet = true
                         }
                         is UpdateCheckResult.AlreadyLatest -> {
-                            if (!silent) {
-                                updateState = UpdateUiState.UpToDate(result.currentVersion)
-                            }
+                            activeUpdateRelease = null
+                            updateState = UpdateUiState.UpToDate(result.currentVersion)
                         }
                         is UpdateCheckResult.Failed -> {
                             if (!silent) {
@@ -217,6 +238,7 @@ class MainActivity : ComponentActivity() {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
                         configureHighRefreshRate()
+                        installedVersion = GitHubUpdater.getInstalledVersion(context)
                         if (awaitingInstallPermission) {
                             awaitingInstallPermission = false
                             val release = activeUpdateRelease
@@ -308,8 +330,8 @@ class MainActivity : ComponentActivity() {
                                     flingBehavior = PagerDefaults.flingBehavior(
                                         state = pagerState,
                                         snapAnimationSpec = spring(
-                                            dampingRatio = 0.84f,
-                                            stiffness = Spring.StiffnessMediumLow
+                                            dampingRatio = 0.88f,
+                                            stiffness = 480f
                                         )
                                     ),
                                     modifier = Modifier.fillMaxSize()
@@ -319,19 +341,18 @@ class MainActivity : ComponentActivity() {
                                             onOpenShare = {
                                                 shareInitialDateMs = null
                                                 showShare = true
-                                            },
-                                            isLiveShareActive = isLiveShareActive
+                                            }
                                         )
                                         1 -> StatsScreen(
                                             settingsState = settingsState,
                                             onOpenShare = { dateMs ->
                                                 shareInitialDateMs = dateMs
                                                 showShare = true
-                                            },
-                                            isLiveShareActive = isLiveShareActive
+                                            }
                                         )
                                         else -> SettingsScreen(
                                             settingsState = settingsState,
+                                            installedVersion = installedVersion,
                                             updateUiState = updateState,
                                             onCheckForUpdates = { triggerUpdateCheck(silent = false) },
                                             onOpenUpdateSheet = {
@@ -346,7 +367,9 @@ class MainActivity : ComponentActivity() {
                                 FloatingPillBottomBar(
                                     tabs = navTabs,
                                     selectedIndex = pagerState.currentPage,
-                                    pagerPosition = pagerState.currentPage + pagerState.currentPageOffsetFraction,
+                                    pagerPositionProvider = {
+                                        pagerState.currentPage + pagerState.currentPageOffsetFraction
+                                    },
                                     onSelectTab = { targetIndex ->
                                         if (targetIndex != pagerState.currentPage) {
                                             view.performClockTickHaptic()
@@ -354,8 +377,8 @@ class MainActivity : ComponentActivity() {
                                                 pagerState.animateScrollToPage(
                                                     page = targetIndex,
                                                     animationSpec = spring(
-                                                        dampingRatio = 0.82f,
-                                                        stiffness = Spring.StiffnessMediumLow
+                                                        dampingRatio = 0.88f,
+                                                        stiffness = 480f
                                                     )
                                                 )
                                             }
@@ -370,6 +393,7 @@ class MainActivity : ComponentActivity() {
                     val sheetRelease = activeUpdateRelease
                     if (showUpdateSheet && sheetRelease != null) {
                         UpdateBottomSheet(
+                            installedVersion = installedVersion,
                             updateState = updateState,
                             release = sheetRelease,
                             onUpdateNow = {
@@ -388,7 +412,7 @@ class MainActivity : ComponentActivity() {
                             onInstallDownloaded = {
                                 val ready = updateState as? UpdateUiState.ReadyToInstall
                                 if (ready != null) {
-                                    GitHubUpdater.launchPackageInstaller(context, ready.apkFile)
+                                    GitHubUpdater.launchPackageInstaller(context, ready.apkFile, sheetRelease.tagName)
                                         .onFailure { err ->
                                             updateState = UpdateUiState.Error(
                                                 message = err.message ?: "Could not launch installer.",

@@ -1,8 +1,5 @@
 package com.example.ui.components
 
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.animation.animateColorAsState
@@ -17,14 +14,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,11 +30,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -47,10 +43,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -87,8 +84,8 @@ fun rememberSpringPressScale(
     val scale by animateFloatAsState(
         targetValue = if (isPressed) pressedScale else 1f,
         animationSpec = spring(
-            dampingRatio = 0.55f,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = 0.62f,
+            stiffness = 650f
         ),
         label = "spring_press_scale"
     )
@@ -257,19 +254,52 @@ data class PillNavTab(
 )
 
 /**
- * Floating translucent frosted-glass pill bottom bar with sliding crimson indicator
- * synchronized smoothly to the HorizontalPager position.
+ * Floating translucent pill bottom bar with GPU-translated sliding crimson indicator.
+ * Uses a lambda provider and graphicsLayer so horizontal pager swipes incur zero
+ * recompositions and zero relayouts per frame for locked 120Hz responsiveness.
  */
 @Composable
 fun FloatingPillBottomBar(
     tabs: List<PillNavTab>,
     selectedIndex: Int,
-    pagerPosition: Float,
+    pagerPositionProvider: () -> Float,
     onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val pillShape = RoundedCornerShape(32.dp)
-    val clampedPosition = pagerPosition.coerceIn(0f, (tabs.size - 1).coerceAtLeast(0).toFloat())
+    val pillShape = remember { RoundedCornerShape(32.dp) }
+    val indicatorShape = remember { RoundedCornerShape(26.dp) }
+    val backdropBrush = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                ObsidianGlass,
+                Color(0xE80D0D10)
+            )
+        )
+    }
+    val borderBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                CrimsonBorderTint,
+                ObsidianBorder,
+                CrimsonBorderTint.copy(alpha = 0.25f)
+            )
+        )
+    }
+    val indicatorBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                CrimsonPrimary.copy(alpha = 0.94f),
+                CrimsonDeep.copy(alpha = 0.94f)
+            )
+        )
+    }
+
+    val density = LocalDensity.current
+    val tabCount = tabs.size.coerceAtLeast(1)
+    var trackWidthPx by remember { mutableIntStateOf(0) }
+    val tabWidthDp = remember(trackWidthPx, tabCount, density) {
+        with(density) { (trackWidthPx.toFloat() / tabCount).toDp() }
+    }
 
     Box(
         modifier = modifier
@@ -283,134 +313,91 @@ fun FloatingPillBottomBar(
                 .widthIn(max = 420.dp)
                 .fillMaxWidth()
                 .height(64.dp)
-                .shadow(
-                    elevation = 18.dp,
-                    shape = pillShape,
-                    ambientColor = CrimsonPrimary.copy(alpha = 0.28f),
-                    spotColor = CrimsonDeep.copy(alpha = 0.35f)
-                )
                 .clip(pillShape)
+                .background(backdropBrush)
+                .border(
+                    width = 1.dp,
+                    brush = borderBrush,
+                    shape = pillShape
+                )
+                .padding(5.dp)
         ) {
-            // Frosted glass backdrop plate (blurred on Android 12+ without blurring foreground icons)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            Modifier.graphicsLayer {
-                                renderEffect = RenderEffect
-                                    .createBlurEffect(28f, 28f, Shader.TileMode.CLAMP)
-                                    .asComposeRenderEffect()
-                            }
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .background(ObsidianGlass)
-            )
-
-            // Crisp translucent surface + subtle red-tinted hairline border
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                ObsidianGlass,
-                                Color(0xDB0D0D10)
-                            )
-                        )
-                    )
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                CrimsonBorderTint,
-                                ObsidianBorder,
-                                CrimsonBorderTint.copy(alpha = 0.25f)
-                            )
-                        ),
-                        shape = pillShape
-                    )
-                    .padding(5.dp)
+                    .onSizeChanged { trackWidthPx = it.width }
             ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val tabCount = tabs.size.coerceAtLeast(1)
-                    val tabWidth = maxWidth / tabCount
-
-                    // Sliding crimson pill indicator synced directly with pager scroll/spring
+                if (trackWidthPx > 0) {
+                    // Sliding crimson pill indicator moved strictly in GPU graphicsLayer phase
                     Box(
                         modifier = Modifier
-                            .offset(x = tabWidth * clampedPosition)
-                            .width(tabWidth)
+                            .graphicsLayer {
+                                val maxIdx = (tabCount - 1).coerceAtLeast(0).toFloat()
+                                val clamped = pagerPositionProvider().coerceIn(0f, maxIdx)
+                                translationX = (trackWidthPx.toFloat() / tabCount) * clamped
+                            }
+                            .width(tabWidthDp)
                             .fillMaxHeight()
                             .padding(1.dp)
-                            .clip(RoundedCornerShape(26.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        CrimsonPrimary.copy(alpha = 0.92f),
-                                        CrimsonDeep.copy(alpha = 0.92f)
-                                    )
-                                )
-                            )
+                            .clip(indicatorShape)
+                            .background(indicatorBrush)
                             .border(
                                 width = 0.75.dp,
                                 color = PureWhite.copy(alpha = 0.16f),
-                                shape = RoundedCornerShape(26.dp)
+                                shape = indicatorShape
                             )
                     )
+                }
 
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        tabs.forEachIndexed { index, tab ->
-                            val isSelected = selectedIndex == index
-                            val interactionSource = remember { MutableInteractionSource() }
-                            val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.94f)
-                            val contentColor by animateColorAsState(
-                                targetValue = if (isSelected) PureWhite else SlateGray,
-                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                label = "pill_tab_color"
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        val isSelected = selectedIndex == index
+                        val interactionSource = remember { MutableInteractionSource() }
+                        val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.94f)
+                        val contentColor by animateColorAsState(
+                            targetValue = if (isSelected) PureWhite else SlateGray,
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            label = "pill_tab_color"
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                                .clip(indicatorShape)
+                                .clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null,
+                                    onClick = { onSelectTab(index) }
+                                )
+                                .testTag(tab.testTag),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
+                                contentDescription = tab.label,
+                                tint = contentColor,
+                                modifier = Modifier.size(19.dp)
                             )
-
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .graphicsLayer {
-                                        scaleX = scale
-                                        scaleY = scale
-                                    }
-                                    .clip(RoundedCornerShape(26.dp))
-                                    .clickable(
-                                        interactionSource = interactionSource,
-                                        indication = null,
-                                        onClick = { onSelectTab(index) }
-                                    )
-                                    .testTag(tab.testTag),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                    contentDescription = tab.label,
-                                    tint = contentColor,
-                                    modifier = Modifier.size(19.dp)
-                                )
-                                Box(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = tab.label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = contentColor,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Box(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontSize = 12.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = contentColor,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }

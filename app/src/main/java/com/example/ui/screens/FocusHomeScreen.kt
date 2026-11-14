@@ -4,11 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -92,7 +87,6 @@ import kotlin.random.Random
 @Composable
 fun FocusHomeScreen(
     onOpenShare: () -> Unit,
-    isLiveShareActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -121,16 +115,29 @@ fun FocusHomeScreen(
 
     val permissionsReady = hasOverlayPermission && hasUsagePermission
 
-    val infiniteTransition = rememberInfiniteTransition(label = "ambient_crimson_glow")
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.22f,
-        targetValue = 0.42f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_alpha"
-    )
+    val screenBackdropBrush = remember {
+        Brush.radialGradient(
+            colors = listOf(
+                CrimsonGlow.copy(alpha = 0.28f),
+                CrimsonDeep.copy(alpha = 0.06f),
+                OledBlack
+            )
+        )
+    }
+    val emblemAuraBrush = remember {
+        Brush.radialGradient(
+            colors = listOf(
+                CrimsonPrimary.copy(alpha = 0.20f),
+                CrimsonGlow.copy(alpha = 0.14f),
+                Color.Transparent
+            )
+        )
+    }
+    val ringBorderBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(CrimsonBorderTint, ObsidianBorder)
+        )
+    }
 
     Box(
         modifier = modifier
@@ -141,15 +148,7 @@ fun FocusHomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            CrimsonGlow.copy(alpha = glowAlpha),
-                            CrimsonDeep.copy(alpha = 0.06f),
-                            OledBlack
-                        )
-                    )
-                )
+                .background(screenBackdropBrush)
         )
 
         Box(
@@ -178,15 +177,7 @@ fun FocusHomeScreen(
                         modifier = Modifier
                             .size(156.dp)
                             .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        CrimsonPrimary.copy(alpha = glowAlpha * 0.55f),
-                                        CrimsonGlow.copy(alpha = 0.16f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
+                            .background(emblemAuraBrush)
                     )
                     Box(
                         modifier = Modifier
@@ -195,9 +186,7 @@ fun FocusHomeScreen(
                             .background(ObsidianSurface)
                             .border(
                                 width = 1.dp,
-                                brush = Brush.linearGradient(
-                                    colors = listOf(CrimsonBorderTint, ObsidianBorder)
-                                ),
+                                brush = ringBorderBrush,
                                 shape = CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -372,26 +361,11 @@ fun FocusHomeScreen(
                     },
                     modifier = Modifier.testTag("home_share_button")
                 ) {
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        Icon(
-                            imageVector = Icons.Outlined.Share,
-                            contentDescription = "Share Stats",
-                            tint = PureWhite
-                        )
-                        if (isLiveShareActive) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(FocusEmerald)
-                                    .border(
-                                        width = 1.dp,
-                                        color = OledBlack,
-                                        shape = CircleShape
-                                    )
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = "Share Stats",
+                        tint = PureWhite
+                    )
                 }
                 Spacer(modifier = Modifier.width(4.dp))
             },

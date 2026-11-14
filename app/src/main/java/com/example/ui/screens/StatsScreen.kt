@@ -116,7 +116,6 @@ import java.util.Calendar
 fun StatsScreen(
     settingsState: FocusSettingsState,
     onOpenShare: (Long?) -> Unit,
-    isLiveShareActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -136,7 +135,9 @@ fun StatsScreen(
 
     val refreshStats = {
         coroutineScope.launch {
-            isLoadingStats = true
+            if (allSessions.isEmpty()) {
+                isLoadingStats = true
+            }
             allSessions = fetchAllSessions()
             isLoadingStats = false
         }
@@ -208,26 +209,11 @@ fun StatsScreen(
                     },
                     modifier = Modifier.testTag("stats_share_button")
                 ) {
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        Icon(
-                            imageVector = Icons.Outlined.Share,
-                            contentDescription = "Share Stats",
-                            tint = PureWhite
-                        )
-                        if (isLiveShareActive) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(FocusEmerald)
-                                    .border(
-                                        width = 1.dp,
-                                        color = OledBlack,
-                                        shape = CircleShape
-                                    )
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = "Share Stats",
+                        tint = PureWhite
+                    )
                 }
                 IconButton(
                     onClick = {
@@ -397,7 +383,7 @@ fun StatsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Hero Total Focus Time Card with subtle crimson radial sheen
-                item {
+                item(key = "hero_focus_time", contentType = "hero_card") {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(22.dp),
@@ -465,7 +451,7 @@ fun StatsScreen(
                 }
 
                 // Daily Focus Goal Card
-                item {
+                item(key = "daily_goal_card", contentType = "goal_card") {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
@@ -568,7 +554,7 @@ fun StatsScreen(
                 }
 
                 // 3-Column Summary Metrics
-                item {
+                item(key = "summary_metrics", contentType = "metrics_row") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -592,7 +578,7 @@ fun StatsScreen(
                 }
 
                 // Streaks Row
-                item {
+                item(key = "streaks_row", contentType = "streaks_row") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

@@ -73,6 +73,7 @@ import com.example.ui.theme.SlateGray
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UpdateBottomSheet(
+    installedVersion: String,
     updateState: UpdateUiState,
     release: GitHubReleaseInfo,
     onUpdateNow: () -> Unit,
@@ -152,7 +153,7 @@ fun UpdateBottomSheet(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "v${BuildConfig.VERSION_NAME}",
+                            text = "v$installedVersion",
                             fontFamily = JetBrainsMono,
                             fontSize = 12.sp,
                             color = SlateGray

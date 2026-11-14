@@ -10,8 +10,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.IBinder
+import android.view.Display
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -373,6 +375,25 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         return START_STICKY
     }
 
+    private fun applyHighRefreshRate(params: WindowManager.LayoutParams) {
+        runCatching {
+            val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+            val display = dm?.getDisplay(Display.DEFAULT_DISPLAY) ?: return
+            val currentMode = display.mode
+            val bestMode = display.supportedModes
+                .filter {
+                    it.physicalWidth == currentMode.physicalWidth &&
+                        it.physicalHeight == currentMode.physicalHeight
+                }
+                .maxByOrNull { it.refreshRate }
+                ?: display.supportedModes.maxByOrNull { it.refreshRate }
+            if (bestMode != null) {
+                params.preferredDisplayModeId = bestMode.modeId
+                params.preferredRefreshRate = bestMode.refreshRate
+            }
+        }
+    }
+
     private fun updateOverlayState(minimized: Boolean) {
         val view = composeView ?: return
         val wm = windowManager ?: return
@@ -404,6 +425,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
+                applyHighRefreshRate(this)
             }
         }
 
@@ -512,8 +534,12 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
+            applyHighRefreshRate(this)
         }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            composeView?.requestedFrameRate = 120f
+        }
         composeView?.isFocusableInTouchMode = true
 
         @Suppress("DEPRECATION")
