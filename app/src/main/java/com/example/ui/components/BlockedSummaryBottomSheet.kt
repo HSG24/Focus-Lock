@@ -262,11 +262,12 @@ private fun BlockedAppGroupCard(group: BlockedAppGroup) {
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
 
     val iconBitmap by produceState<ImageBitmap?>(
-        initialValue = FocusSettingsRepository.getCachedAppIconBitmap(group.packageName),
-        key1 = group.packageName
+        initialValue = FocusSettingsRepository.getCachedAppIconBitmap(group.packageName, palette.theme),
+        key1 = group.packageName,
+        key2 = palette.theme
     ) {
         if (value == null) {
-            value = FocusSettingsRepository.loadAppIconBitmapAsync(context, group.packageName)
+            value = FocusSettingsRepository.loadAppIconBitmapAsync(context, group.packageName, palette.theme)
         }
     }
 

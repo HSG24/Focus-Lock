@@ -105,21 +105,23 @@ fun AllowedAppIconBadge(
     preloadedIcon: ImageBitmap? = null,
     loadIfMissing: Boolean = false
 ) {
+    val activeTheme = LocalFocusTheme.current.theme
+    val iconKey = FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)
     val resolvedIcon: ImageBitmap? = if (loadIfMissing) {
         val context = LocalContext.current
-        val initial = preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
+        val initial = preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName, activeTheme)
         val asyncLoaded by produceState<ImageBitmap?>(
             initialValue = initial,
-            key1 = app.packageName,
+            key1 = iconKey,
             key2 = preloadedIcon
         ) {
             if (value == null && !app.packageName.startsWith("__builtin_")) {
-                value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName)
+                value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName, activeTheme)
             }
         }
         asyncLoaded
     } else {
-        preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
+        preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName, activeTheme)
     }
 
     Box(
@@ -133,10 +135,8 @@ fun AllowedAppIconBadge(
             Image(
                 bitmap = resolvedIcon,
                 contentDescription = app.label,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(containerSize * 0.72f)
-                    .clip(RoundedCornerShape(6.dp))
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(iconSize * 1.12f)
             )
         } else {
             Icon(
@@ -176,6 +176,7 @@ fun LockAllowedAppsSection(
     readFromCacheOnly: Boolean = true
 ) {
     if (apps.isEmpty()) return
+    val activeTheme = LocalFocusTheme.current.theme
 
     when (layout) {
         LockAppLayout.PILL_ROW -> {
@@ -207,7 +208,7 @@ fun LockAllowedAppsSection(
                             badgeBackground = palette.surfaceElevated,
                             iconSize = if (isPreview) 14.dp else 16.dp,
                             containerSize = if (isPreview) 22.dp else 28.dp,
-                            preloadedIcon = iconCache[app.packageName],
+                            preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                             loadIfMissing = !readFromCacheOnly
                         )
                         Text(
@@ -262,7 +263,7 @@ fun LockAllowedAppsSection(
                                     iconSize = if (isPreview) 16.dp else 20.dp,
                                     containerSize = if (isPreview) 28.dp else 36.dp,
                                     shape = RoundedCornerShape(12.dp),
-                                    preloadedIcon = iconCache[app.packageName],
+                                    preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                                     loadIfMissing = !readFromCacheOnly
                                 )
                                 Text(
@@ -311,12 +312,12 @@ fun LockAllowedAppsSection(
                     ) {
                         AllowedAppIconBadge(
                             app = app,
-                            tint = palette.primaryText,
+                            tint = palette.accent,
                             badgeBackground = palette.surfaceElevated,
                             iconSize = if (isPreview) 18.dp else 22.dp,
                             containerSize = if (isPreview) 34.dp else 44.dp,
                             shape = CircleShape,
-                            preloadedIcon = iconCache[app.packageName],
+                            preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                             loadIfMissing = !readFromCacheOnly
                         )
                         Text(
@@ -361,7 +362,7 @@ fun LockAllowedAppsSection(
                             iconSize = if (isPreview) 14.dp else 16.dp,
                             containerSize = if (isPreview) 24.dp else 30.dp,
                             shape = RoundedCornerShape(8.dp),
-                            preloadedIcon = iconCache[app.packageName],
+                            preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                             loadIfMissing = !readFromCacheOnly
                         )
                         Text(
@@ -423,7 +424,7 @@ fun LockAllowedAppsSection(
                                     iconSize = if (isPreview) 14.dp else 16.dp,
                                     containerSize = if (isPreview) 22.dp else 28.dp,
                                     shape = RoundedCornerShape(8.dp),
-                                    preloadedIcon = iconCache[app.packageName],
+                                    preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                                     loadIfMissing = !readFromCacheOnly
                                 )
                                 Text(

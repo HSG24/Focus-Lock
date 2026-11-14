@@ -666,8 +666,8 @@ fun LockScreen(
     var enteredPin by remember { mutableStateOf("") }
     var wrongPinError by remember { mutableStateOf(false) }
 
-    LaunchedEffect(allowedApps) {
-        FocusSettingsRepository.preloadAppIcons(context, allowedApps)
+    LaunchedEffect(allowedApps, themePalette.theme) {
+        FocusSettingsRepository.preloadAppIcons(context, allowedApps, themePalette.theme)
     }
 
     LaunchedEffect(wrongPinError, autoClearWrongPin) {
@@ -745,7 +745,6 @@ fun LockScreen(
                 val lockHeaderLabel = when (themePalette.theme) {
                     AppVisualTheme.NOTHING_CRIMSON -> "FOCUS MODE ACTIVE"
                     AppVisualTheme.CYBER_ICE -> "HUD LOCK // ENGAGED"
-                    AppVisualTheme.EMERALD_TERMINAL -> "[SYS_LOCK_ACTIVE]"
                     AppVisualTheme.SOLAR_AMBER -> "CHRONO LOCK ACTIVE"
                     AppVisualTheme.ULTRAVIOLET_PULSE -> "Focus Mode Active"
                 }

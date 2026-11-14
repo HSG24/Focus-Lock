@@ -178,7 +178,7 @@ fun FocusHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = if (palette.useTerminalBrackets) "[DEEP FOCUS]" else "Deep Focus",
+                        text = "Deep Focus",
                         style = MaterialTheme.typography.headlineMedium,
                         fontFamily = palette.displayFont,
                         fontSize = 32.sp,

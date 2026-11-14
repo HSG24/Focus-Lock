@@ -601,12 +601,6 @@ fun StatsScreen(
                             )
                         }
                     }
-
-                    if (xpState.history.isNotEmpty()) {
-                        item(key = "xp_history_card", contentType = "xp_history") {
-                            XpHistoryLedgerCard(xpState = xpState)
-                        }
-                    }
                 }
             }
         }
@@ -875,60 +869,6 @@ private fun FocusRankXpCard(
                         fontWeight = FontWeight.SemiBold,
                         color = if (goalSafe) palette.success else palette.primary
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun XpHistoryLedgerCard(xpState: FocusXpState) {
-    val palette = LocalFocusTheme.current
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = palette.surface,
-        border = BorderStroke(1.dp, palette.border)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "RECENT XP LEDGER",
-                style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 1.2.sp,
-                color = palette.textSecondary
-            )
-
-            xpState.history.take(5).forEachIndexed { index, entry ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = entry.reason,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 12.5.sp,
-                        color = palette.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp)
-                    )
-                    val isPositive = entry.deltaXp >= 0
-                    Text(
-                        text = if (isPositive) "+${entry.deltaXp} XP" else "${entry.deltaXp} XP",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isPositive) palette.success else palette.primary
-                    )
-                }
-                if (index < xpState.history.take(5).lastIndex) {
-                    ThemedDivider(palette = palette)
                 }
             }
         }

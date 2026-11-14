@@ -23,12 +23,6 @@ enum class AppVisualTheme(
         subtitle = "Abyssal navy, slate glass & glacier cyan HUD",
         badgeTag = "HUD GRID"
     ),
-    EMERALD_TERMINAL(
-        id = "emerald_terminal",
-        displayName = "Emerald Terminal",
-        subtitle = "True black matrix & phosphor telemetry",
-        badgeTag = "TERMINAL"
-    ),
     SOLAR_AMBER(
         id = "solar_amber",
         displayName = "Solar Amber",
@@ -77,7 +71,6 @@ data class FocusThemePalette(
     val bodyFont: FontFamily,
     val useDottedDividers: Boolean = false,
     val useHudGridBackdrop: Boolean = false,
-    val useTerminalBrackets: Boolean = false,
     val useChronographTicks: Boolean = false,
     val useRadialAuraRings: Boolean = false
 ) {
@@ -130,31 +123,6 @@ data class FocusThemePalette(
             numeralFont = Orbitron,
             bodyFont = PlusJakartaSans,
             useHudGridBackdrop = true
-        )
-
-        val EmeraldTerminal = FocusThemePalette(
-            theme = AppVisualTheme.EMERALD_TERMINAL,
-            background = Color(0xFF000000),
-            surface = Color(0xFF0A120E),
-            surfaceElevated = Color(0xFF101D16),
-            pillGlassFill = Color(0xEB0A120E),
-            border = Color(0xFF1A3326),
-            borderHighlight = Color(0xFF274D3A),
-            primary = Color(0xFF00E676),
-            primarySecondary = Color(0xFF00C853),
-            primaryDeep = Color(0xFF006B34),
-            primaryGlow = Color(0xFF032414),
-            primaryContainer = Color(0xFF072617),
-            primaryBorderTint = Color(0x6600E676),
-            onPrimary = Color(0xFF001A0C),
-            textPrimary = Color(0xFFE8FFF2),
-            textSecondary = Color(0xFF7CA890),
-            success = Color(0xFF00E676),
-            warning = Color(0xFFFFD54F),
-            displayFont = JetBrainsMono,
-            numeralFont = JetBrainsMono,
-            bodyFont = JetBrainsMono,
-            useTerminalBrackets = true
         )
 
         val SolarAmber = FocusThemePalette(
@@ -210,7 +178,6 @@ data class FocusThemePalette(
         fun from(theme: AppVisualTheme): FocusThemePalette = when (theme) {
             AppVisualTheme.NOTHING_CRIMSON -> NothingCrimson
             AppVisualTheme.CYBER_ICE -> CyberIce
-            AppVisualTheme.EMERALD_TERMINAL -> EmeraldTerminal
             AppVisualTheme.SOLAR_AMBER -> SolarAmber
             AppVisualTheme.ULTRAVIOLET_PULSE -> UltravioletPulse
         }

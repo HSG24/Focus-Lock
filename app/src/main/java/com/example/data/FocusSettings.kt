@@ -7,7 +7,10 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.drawable.BitmapDrawable
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Process
@@ -15,7 +18,9 @@ import android.provider.Settings
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import com.example.ui.theme.AppVisualTheme
+import com.example.ui.theme.FocusThemePalette
 import com.example.widget.NothingFocusWidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,7 +75,6 @@ data class FocusSettingsState(
     val widgetShowGoalPercent: Boolean = true,
     val widgetShowStreakBadge: Boolean = true,
     val widgetShowRankXpTag: Boolean = true,
-    val widgetShowQuickLockButton: Boolean = true,
     val activeLiveShareId: String? = null,
     val activeLiveShareStartDateMs: Long = 0L
 )
@@ -92,7 +96,6 @@ object FocusSettingsRepository {
     private const val KEY_WIDGET_GOAL_PERCENT = "widget_show_goal_percent"
     private const val KEY_WIDGET_STREAK_BADGE = "widget_show_streak_badge"
     private const val KEY_WIDGET_RANK_XP = "widget_show_rank_xp"
-    private const val KEY_WIDGET_QUICK_LOCK = "widget_show_quick_lock"
     private const val KEY_ACTIVE_LIVE_SHARE_ID = "active_live_share_id"
     private const val KEY_ACTIVE_LIVE_SHARE_START_MS = "active_live_share_start_ms"
 
@@ -193,7 +196,6 @@ object FocusSettingsRepository {
             widgetShowGoalPercent = prefs.getBoolean(KEY_WIDGET_GOAL_PERCENT, true),
             widgetShowStreakBadge = prefs.getBoolean(KEY_WIDGET_STREAK_BADGE, true),
             widgetShowRankXpTag = prefs.getBoolean(KEY_WIDGET_RANK_XP, true),
-            widgetShowQuickLockButton = prefs.getBoolean(KEY_WIDGET_QUICK_LOCK, true),
             activeLiveShareId = prefs.getString(KEY_ACTIVE_LIVE_SHARE_ID, null)?.takeIf { it.isNotBlank() },
             activeLiveShareStartDateMs = prefs.getLong(KEY_ACTIVE_LIVE_SHARE_START_MS, 0L)
         )
@@ -259,11 +261,6 @@ object FocusSettingsRepository {
 
     fun setWidgetShowRankXpTag(context: Context, enabled: Boolean) {
         update(context) { putBoolean(KEY_WIDGET_RANK_XP, enabled) }
-        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
-    }
-
-    fun setWidgetShowQuickLockButton(context: Context, enabled: Boolean) {
-        update(context) { putBoolean(KEY_WIDGET_QUICK_LOCK, enabled) }
         NothingFocusWidgetUpdater.scheduleUpdateAll(context)
     }
 
@@ -370,23 +367,35 @@ object FocusSettingsRepository {
             .sortedBy { it.label.lowercase() }
     }
 
-    fun getCachedAppIconBitmap(packageName: String): ImageBitmap? {
+    fun iconCacheKey(packageName: String, theme: AppVisualTheme): String =
+        "${packageName}__${theme.id}"
+
+    fun getCachedAppIconBitmap(
+        packageName: String,
+        theme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON
+    ): ImageBitmap? {
         if (packageName.startsWith("__builtin_")) return null
-        return appIconMap[packageName]
+        return appIconMap[iconCacheKey(packageName, theme)]
     }
 
-    fun loadAppIconBitmap(context: Context, packageName: String): ImageBitmap? {
+    fun loadAppIconBitmap(
+        context: Context,
+        packageName: String,
+        theme: AppVisualTheme = getCurrent(context).appTheme
+    ): ImageBitmap? {
         if (packageName.startsWith("__builtin_") || missingAppIconPackages.contains(packageName)) {
             return null
         }
-        appIconMap[packageName]?.let { return it }
+        val key = iconCacheKey(packageName, theme)
+        appIconMap[key]?.let { return it }
         return try {
             val appCtx = context.applicationContext
-            val targetPx = (48f * appCtx.resources.displayMetrics.density).roundToInt().coerceIn(48, 192)
+            val targetPx = (48f * appCtx.resources.displayMetrics.density).roundToInt().coerceIn(64, 192)
             val drawable = appCtx.packageManager.getApplicationIcon(packageName)
-            val imageBitmap = drawableToFixedBitmap(drawable, targetPx).asImageBitmap()
-            appIconMap.putIfAbsent(packageName, imageBitmap)
-            val cached = appIconMap[packageName] ?: imageBitmap
+            val accentColorArgb = FocusThemePalette.from(theme).primary.toArgb()
+            val imageBitmap = toMonochromeTintedBitmap(drawable, targetPx, accentColorArgb).asImageBitmap()
+            appIconMap.putIfAbsent(key, imageBitmap)
+            val cached = appIconMap[key] ?: imageBitmap
             _appIconsState.value = HashMap(appIconMap)
             cached
         } catch (_: Exception) {
@@ -395,31 +404,42 @@ object FocusSettingsRepository {
         }
     }
 
-    suspend fun loadAppIconBitmapAsync(context: Context, packageName: String): ImageBitmap? {
+    suspend fun loadAppIconBitmapAsync(
+        context: Context,
+        packageName: String,
+        theme: AppVisualTheme = getCurrent(context).appTheme
+    ): ImageBitmap? {
         if (packageName.startsWith("__builtin_") || missingAppIconPackages.contains(packageName)) {
             return null
         }
-        appIconMap[packageName]?.let { return it }
+        val key = iconCacheKey(packageName, theme)
+        appIconMap[key]?.let { return it }
         return withContext(Dispatchers.IO) {
-            loadAppIconBitmap(context.applicationContext, packageName)
+            loadAppIconBitmap(context.applicationContext, packageName, theme)
         }
     }
 
-    suspend fun preloadAppIcons(context: Context, apps: List<AllowedApp>) = withContext(Dispatchers.IO) {
+    suspend fun preloadAppIcons(
+        context: Context,
+        apps: List<AllowedApp>,
+        theme: AppVisualTheme = getCurrent(context).appTheme
+    ) = withContext(Dispatchers.IO) {
         val appContext = context.applicationContext
-        val targetPx = (48f * appContext.resources.displayMetrics.density).roundToInt().coerceIn(48, 192)
+        val targetPx = (48f * appContext.resources.displayMetrics.density).roundToInt().coerceIn(64, 192)
         val pm = appContext.packageManager
+        val accentColorArgb = FocusThemePalette.from(theme).primary.toArgb()
         var addedAny = false
         for (app in apps) {
             val pkg = app.packageName
+            val key = iconCacheKey(pkg, theme)
             if (!pkg.startsWith("__builtin_") &&
-                !appIconMap.containsKey(pkg) &&
+                !appIconMap.containsKey(key) &&
                 !missingAppIconPackages.contains(pkg)
             ) {
                 try {
                     val drawable = pm.getApplicationIcon(pkg)
-                    val imageBitmap = drawableToFixedBitmap(drawable, targetPx).asImageBitmap()
-                    if (appIconMap.putIfAbsent(pkg, imageBitmap) == null) {
+                    val imageBitmap = toMonochromeTintedBitmap(drawable, targetPx, accentColorArgb).asImageBitmap()
+                    if (appIconMap.putIfAbsent(key, imageBitmap) == null) {
                         addedAny = true
                     }
                 } catch (_: Exception) {
@@ -450,16 +470,187 @@ object FocusSettingsRepository {
         }.getOrDefault(true)
     }
 
-    private fun drawableToFixedBitmap(drawable: Drawable, targetPx: Int): Bitmap {
-        if (drawable is BitmapDrawable && drawable.bitmap != null) {
-            val bmp = drawable.bitmap
-            if (bmp.width == targetPx && bmp.height == targetPx) return bmp
-            return Bitmap.createScaledBitmap(bmp, targetPx, targetPx, true)
+    internal fun toMonochromeTintedBitmap(
+        drawable: Drawable,
+        targetPx: Int,
+        accentColorArgb: Int
+    ): Bitmap {
+        val size = targetPx.coerceAtLeast(32)
+
+        // 1. Prefer Android 13+ AdaptiveIconDrawable.monochrome native vector layer when present
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && drawable is AdaptiveIconDrawable) {
+            drawable.monochrome?.let { monoLayer ->
+                val rawMono = renderDrawableLayer(monoLayer, size, expandAdaptiveSafeZone = true)
+                return tintAlphaMaskBitmap(rawMono, accentColorArgb)
+            }
         }
-        val bitmap = Bitmap.createBitmap(targetPx, targetPx, Bitmap.Config.ARGB_8888)
+
+        // 2. For AdaptiveIconDrawable without monochrome layer, isolate its foreground glyph layer
+        //    instead of flattening its solid background plate.
+        val rawBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            drawable is AdaptiveIconDrawable &&
+            drawable.foreground != null
+        ) {
+            renderDrawableLayer(drawable.foreground, size, expandAdaptiveSafeZone = true)
+        } else {
+            renderDrawableLayer(drawable, size, expandAdaptiveSafeZone = false)
+        }
+
+        return extractSilhouetteAndTint(rawBitmap, accentColorArgb)
+    }
+
+    private fun renderDrawableLayer(
+        drawable: Drawable,
+        size: Int,
+        expandAdaptiveSafeZone: Boolean
+    ): Bitmap {
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, targetPx, targetPx)
+        val pad = if (expandAdaptiveSafeZone) (size * 0.22f).roundToInt() else 0
+        val oldBounds = drawable.copyBounds()
+        drawable.setBounds(-pad, -pad, size + pad, size + pad)
         drawable.draw(canvas)
+        drawable.bounds = oldBounds
         return bitmap
+    }
+
+    private fun tintAlphaMaskBitmap(maskBitmap: Bitmap, accentColorArgb: Int): Bitmap {
+        val size = maskBitmap.width
+        val output = Bitmap.createBitmap(size, maskBitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            colorFilter = PorterDuffColorFilter(accentColorArgb, PorterDuff.Mode.SRC_IN)
+        }
+        canvas.drawBitmap(maskBitmap, 0f, 0f, paint)
+        return output
+    }
+
+    private fun extractSilhouetteAndTint(src: Bitmap, accentColorArgb: Int): Bitmap {
+        val w = src.width
+        val h = src.height
+        val total = w * h
+        if (total == 0) return src
+
+        val pixels = IntArray(total)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        val lums = FloatArray(total)
+        val alphas = IntArray(total)
+        val hist = IntArray(256)
+        var opaqueCount = 0
+
+        for (i in 0 until total) {
+            val c = pixels[i]
+            val a = (c ushr 24) and 0xFF
+            alphas[i] = a
+            if (a > 24) {
+                val r = (c ushr 16) and 0xFF
+                val g = (c ushr 8) and 0xFF
+                val b = c and 0xFF
+                val lum = (0.299f * r + 0.587f * g + 0.114f * b).coerceIn(0f, 255f)
+                lums[i] = lum
+                hist[lum.toInt().coerceIn(0, 255)]++
+                opaqueCount++
+            }
+        }
+
+        if (opaqueCount == 0) {
+            return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        }
+
+        val opaqueFraction = opaqueCount.toFloat() / total.toFloat()
+
+        // Compute Otsu threshold on opaque pixels to check whether this icon is an opaque badge
+        // enclosing an inner foreground glyph (common in legacy icons or boxed adaptive foregrounds).
+        var sumAll = 0.0
+        for (bin in 0..255) sumAll += bin * hist[bin].toDouble()
+
+        var sumBg = 0.0
+        var weightBg = 0
+        var bestVar = -1.0
+        var threshold = 128f
+        var bestMeanDiff = 0.0
+
+        for (bin in 0..255) {
+            weightBg += hist[bin]
+            if (weightBg == 0) continue
+            val weightFg = opaqueCount - weightBg
+            if (weightFg == 0) break
+
+            sumBg += bin * hist[bin].toDouble()
+            val meanBg = sumBg / weightBg
+            val meanFg = (sumAll - sumBg) / weightFg
+            val diff = meanBg - meanFg
+            val betweenVar = weightBg.toDouble() * weightFg.toDouble() * diff * diff
+            if (betweenVar > bestVar) {
+                bestVar = betweenVar
+                threshold = ((meanBg + meanFg) * 0.5).toFloat()
+                bestMeanDiff = kotlin.math.abs(diff)
+            }
+        }
+
+        var useLuminanceForegroundCutout = false
+        var keepBrightSide = true
+
+        if (opaqueFraction > 0.42f && bestMeanDiff > 58.0) {
+            // Inspect outer-ring opaque pixels to identify the badge background luminance side.
+            var edgeTotal = 0
+            var edgeBright = 0
+            val marginX = (w * 0.22f).roundToInt().coerceAtLeast(2)
+            val marginY = (h * 0.22f).roundToInt().coerceAtLeast(2)
+
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    val idx = y * w + x
+                    if (alphas[idx] <= 24) continue
+                    val inOuterBand = x < marginX || x >= w - marginX || y < marginY || y >= h - marginY
+                    if (inOuterBand) {
+                        edgeTotal++
+                        if (lums[idx] >= threshold) edgeBright++
+                    }
+                }
+            }
+
+            if (edgeTotal > 12) {
+                val edgeBrightRatio = edgeBright.toFloat() / edgeTotal.toFloat()
+                if (edgeBrightRatio >= 0.72f) {
+                    useLuminanceForegroundCutout = true
+                    keepBrightSide = false // Bright background badge, dark inner glyph
+                } else if (edgeBrightRatio <= 0.28f) {
+                    useLuminanceForegroundCutout = true
+                    keepBrightSide = true // Dark/colored background badge, bright inner glyph
+                }
+            }
+        }
+
+        val rAccent = (accentColorArgb ushr 16) and 0xFF
+        val gAccent = (accentColorArgb ushr 8) and 0xFF
+        val bAccent = accentColorArgb and 0xFF
+        val rgbAccent = (rAccent shl 16) or (gAccent shl 8) or bAccent
+        val outPixels = IntArray(total)
+
+        for (i in 0 until total) {
+            val a = alphas[i]
+            if (a <= 4) {
+                outPixels[i] = 0
+                continue
+            }
+            val finalAlpha = if (useLuminanceForegroundCutout) {
+                val lum = lums[i]
+                val maskFactor = if (keepBrightSide) {
+                    ((lum - (threshold - 14f)) / 28f).coerceIn(0f, 1f)
+                } else {
+                    (((threshold + 14f) - lum) / 28f).coerceIn(0f, 1f)
+                }
+                (a * maskFactor).roundToInt().coerceIn(0, 255)
+            } else {
+                a
+            }
+            outPixels[i] = if (finalAlpha > 0) (finalAlpha shl 24) or rgbAccent else 0
+        }
+
+        return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply {
+            setPixels(outPixels, 0, w, 0, 0, w, h)
+        }
     }
 }

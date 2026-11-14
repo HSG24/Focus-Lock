@@ -307,8 +307,7 @@ fun HomeScreenWidgetSection(
     onToggleStudyHours: (Boolean) -> Unit,
     onToggleGoalPercent: (Boolean) -> Unit,
     onToggleStreakBadge: (Boolean) -> Unit,
-    onToggleRankXpTag: (Boolean) -> Unit,
-    onToggleQuickLockButton: (Boolean) -> Unit
+    onToggleRankXpTag: (Boolean) -> Unit
 ) {
     val palette = LocalFocusTheme.current
 
@@ -379,15 +378,6 @@ fun HomeScreenWidgetSection(
                 onCheckedChange = onToggleRankXpTag,
                 testTag = "switch_widget_rank_xp"
             )
-            ThemedDivider(palette = palette)
-
-            ThemedSettingsSwitchRow(
-                title = "Quick Lock Action Button",
-                subtitle = "One-tap TAP TO LOCK / LOCKED bottom pill",
-                checked = settingsState.widgetShowQuickLockButton,
-                onCheckedChange = onToggleQuickLockButton,
-                testTag = "switch_widget_quick_lock"
-            )
         }
     }
 }
@@ -398,101 +388,143 @@ private fun NothingWidgetLivePreview(
     xpState: FocusXpState
 ) {
     val widgetCardBg = Color(0xFF1B1B1D)
-    val widgetChipBg = Color(0xFF26262A)
+    val widgetChipBg = Color(0xFF232327)
+    val widgetChipBorder = Color(0xFF3A3A40)
     val nothingRed = Color(0xFFD71921)
     val widgetBorder = Color(0xFF2D2D32)
 
     val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
-    val sampleMs = xpState.todayFocusMs.takeIf { it > 0L } ?: (165L * 60_000L)
+    val sampleMs = xpState.todayFocusMs.takeIf { it > 0L } ?: (60_000L)
     val fraction = (sampleMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
     val pct = (fraction * 100f).toInt().coerceIn(0, 999)
     val hours = sampleMs / 3_600_000L
     val mins = (sampleMs % 3_600_000L) / 60_000L
     val timeLabel = String.format(Locale.US, "%02dH %02dM", hours, mins)
 
+    val cardSize = 200.dp
+    val ringSize = cardSize * 0.64f
+
     Box(
         modifier = Modifier
-            .size(182.dp)
+            .size(cardSize)
             .clip(RoundedCornerShape(26.dp))
             .background(widgetCardBg)
             .border(1.dp, widgetBorder, RoundedCornerShape(26.dp))
-            .padding(12.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+        // Top Row anchored 14dp from top edge
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(top = 14.dp, start = 14.dp, end = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(nothingRed)
-                    )
-                    Text(
-                        text = "FOCUS LOCK",
-                        fontFamily = DotGothic16,
-                        fontSize = 10.sp,
-                        color = Color.White,
-                        letterSpacing = 0.8.sp
-                    )
-                }
-
-                if (settingsState.widgetShowStreakBadge) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(widgetChipBg)
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "${xpState.currentStreak.coerceAtLeast(1)}D",
-                            fontFamily = JetBrainsMono,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(nothingRed)
+                )
+                Text(
+                    text = "FOCUS LOCK",
+                    fontFamily = DotGothic16,
+                    fontSize = 10.sp,
+                    color = Color.White,
+                    letterSpacing = 0.9.sp
+                )
             }
 
+            if (settingsState.widgetShowStreakBadge) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(widgetChipBg)
+                        .border(1.dp, widgetChipBorder, RoundedCornerShape(9.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${xpState.currentStreak.coerceAtLeast(1)}D",
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+
+        // Center Ring (64% height) or Compact Readout
+        Box(
+            modifier = Modifier.align(Alignment.Center),
+            contentAlignment = Alignment.Center
+        ) {
             if (settingsState.widgetShowDottedRing) {
                 Box(
-                    modifier = Modifier.size(80.dp),
+                    modifier = Modifier.size(ringSize),
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(modifier = Modifier.matchParentSize()) {
                         val cx = size.width / 2f
                         val cy = size.height / 2f
-                        val radius = size.minDimension * 0.42f
-                        val dots = 28
-                        val active = (dots * fraction).toInt().coerceAtLeast(1)
+                        val radius = size.minDimension * 0.44f
+                        val dots = 40
+                        val activeCount = if (fraction > 0f) {
+                            (dots * fraction).toInt().coerceIn(1, dots)
+                        } else {
+                            0
+                        }
+                        val headIndex = (activeCount - 1).coerceAtLeast(0)
+
                         for (i in 0 until dots) {
                             val angle = Math.toRadians(-90.0 + (360.0 / dots) * i)
                             val dx = cx + (radius * cos(angle)).toFloat()
                             val dy = cy + (radius * sin(angle)).toFloat()
+                            val isHead = i == headIndex
+                            val isCompleted = i < activeCount && !isHead
                             drawCircle(
-                                color = if (i < active) nothingRed else Color(0xFF3A3A40),
-                                radius = if (i < active) 2.2.dp.toPx() else 1.7.dp.toPx(),
+                                color = when {
+                                    isHead -> nothingRed
+                                    isCompleted -> Color.White
+                                    else -> Color(0xFF3A3A40)
+                                },
+                                radius = when {
+                                    isHead -> 2.4.dp.toPx()
+                                    isCompleted -> 1.8.dp.toPx()
+                                    else -> 1.75.dp.toPx()
+                                },
                                 center = Offset(dx, dy)
                             )
                         }
+
+                        // 4 subtle cardinal accent ticks inside the ring
+                        val tickOuter = radius - 4.5.dp.toPx()
+                        val tickInner = radius - 8.dp.toPx()
+                        for (deg in listOf(-90.0, 0.0, 90.0, 180.0)) {
+                            val rad = Math.toRadians(deg)
+                            drawLine(
+                                color = Color(0xFF5A5A64),
+                                start = Offset(cx + (tickInner * cos(rad)).toFloat(), cy + (tickInner * sin(rad)).toFloat()),
+                                end = Offset(cx + (tickOuter * cos(rad)).toFloat(), cy + (tickOuter * sin(rad)).toFloat()),
+                                strokeWidth = 1.2.dp.toPx()
+                            )
+                        }
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         if (settingsState.widgetShowStudyHours) {
                             Text(
                                 text = timeLabel,
                                 fontFamily = DotGothic16,
-                                fontSize = 11.sp,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                         }
@@ -500,7 +532,8 @@ private fun NothingWidgetLivePreview(
                             Text(
                                 text = "$pct%",
                                 fontFamily = DotGothic16,
-                                fontSize = 9.sp,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = nothingRed
                             )
                         }
@@ -509,55 +542,55 @@ private fun NothingWidgetLivePreview(
             } else {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(vertical = 12.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (settingsState.widgetShowStudyHours) {
                         Text(
                             text = timeLabel,
                             fontFamily = DotGothic16,
-                            fontSize = 16.sp,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
                     if (settingsState.widgetShowGoalPercent) {
                         Text(
-                            text = "$pct% GOAL",
+                            text = "$pct%",
                             fontFamily = DotGothic16,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
                             color = nothingRed
                         )
                     }
                 }
             }
+        }
 
-            if (settingsState.widgetShowRankXpTag) {
+        // Footer centered 14dp from bottom edge
+        if (settingsState.widgetShowRankXpTag) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 14.dp, start = 12.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
                 Text(
-                    text = "${xpState.rank.title.uppercase(Locale.US)} · ${xpState.totalXp} XP",
+                    text = xpState.rank.title.uppercase(Locale.US),
                     fontFamily = JetBrainsMono,
-                    fontSize = 8.5.sp,
-                    color = Color(0xFF9A9AA3),
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1
+                )
+                Text(
+                    text = " • ${xpState.totalXp} XP",
+                    fontFamily = JetBrainsMono,
+                    fontSize = 10.5.sp,
+                    color = Color(0xFFA0A0A8),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-            }
-
-            if (settingsState.widgetShowQuickLockButton) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(nothingRed)
-                        .padding(vertical = 5.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "TAP TO LOCK",
-                        fontFamily = DotGothic16,
-                        fontSize = 10.sp,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                }
             }
         }
     }

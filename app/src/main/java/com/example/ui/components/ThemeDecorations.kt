@@ -82,16 +82,6 @@ fun ThemeBackdropLayer(
                     y += gridStep
                 }
             }
-            AppVisualTheme.EMERALD_TERMINAL -> {
-                // Subtle phosphor terminal scanlines
-                val lineStep = 6.dp.toPx()
-                val scanColor = palette.primary.copy(alpha = 0.035f)
-                var y = 0f
-                while (y < h) {
-                    drawLine(scanColor, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
-                    y += lineStep
-                }
-            }
             AppVisualTheme.SOLAR_AMBER -> {
                 // Luxury chronograph radial hairline markers near top center
                 val ringRadius = minOf(w, h) * 0.42f
@@ -214,23 +204,6 @@ fun ThemedTimerRing(
                             start = Offset(cx + (inner * cos(rad)).toFloat(), cy + (inner * sin(rad)).toFloat()),
                             end = Offset(cx + (outer * cos(rad)).toFloat(), cy + (outer * sin(rad)).toFloat()),
                             strokeWidth = 1.5.dp.toPx()
-                        )
-                    }
-                }
-                AppVisualTheme.EMERALD_TERMINAL -> {
-                    val segments = 24
-                    val activeSegments = (segments * clamped).toInt()
-                    val segSweep = (360f / segments) * 0.65f
-                    for (i in 0 until segments) {
-                        val start = -90f + (360f / segments) * i
-                        drawArc(
-                            color = if (i < activeSegments) palette.primary else palette.border,
-                            startAngle = start,
-                            sweepAngle = segSweep,
-                            useCenter = false,
-                            topLeft = Offset(cx - radius, cy - radius),
-                            size = Size(radius * 2f, radius * 2f),
-                            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Butt)
                         )
                     }
                 }

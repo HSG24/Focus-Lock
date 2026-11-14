@@ -284,9 +284,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Pre-decode allowed app icons on Dispatchers.IO so Settings renders zero PackageManager calls
-            LaunchedEffect(settingsState.allowedApps) {
-                FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
+            // Pre-decode theme-tinted monochrome allowed app icons on Dispatchers.IO
+            LaunchedEffect(settingsState.allowedApps, settingsState.appTheme) {
+                FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps, settingsState.appTheme)
             }
 
             // Resume APK download automatically after granting unknown-sources permission

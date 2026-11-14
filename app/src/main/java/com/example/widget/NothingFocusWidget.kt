@@ -17,6 +17,7 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -55,6 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 object NothingFocusWidgetUpdater {
@@ -89,6 +91,9 @@ class NothingFocusWidget : GlanceAppWidget() {
         val progressFraction = (xpState.todayFocusMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
         val progressPercent = (progressFraction * 100f).toInt().coerceIn(0, 999)
 
+        val density = context.resources.displayMetrics.density.coerceAtLeast(2f)
+        val canvasSizePx = (180f * density).roundToInt().coerceAtLeast(720)
+
         val ringBitmap = if (settings.widgetShowDottedRing) {
             renderDottedRingBitmap(
                 context = context,
@@ -96,7 +101,7 @@ class NothingFocusWidget : GlanceAppWidget() {
                 studyHoursText = formatWidgetHours(xpState.todayFocusMs, isLocked),
                 percentText = if (settings.widgetShowGoalPercent) "${progressPercent}%" else null,
                 showStudyHours = settings.widgetShowStudyHours,
-                isLocked = isLocked
+                canvasSizePx = canvasSizePx
             )
         } else {
             null
@@ -105,15 +110,16 @@ class NothingFocusWidget : GlanceAppWidget() {
         val headerBitmap = renderDotMatrixHeaderBitmap(
             context = context,
             label = "FOCUS LOCK",
-            isLocked = isLocked
+            isLocked = isLocked,
+            density = density
         )
 
         provideContent {
             NothingWidgetContent(
                 settings = settings,
                 xpState = xpState,
-                isLocked = isLocked,
                 progressPercent = progressPercent,
+                isLocked = isLocked,
                 headerBitmap = headerBitmap,
                 ringBitmap = ringBitmap
             )
@@ -136,103 +142,64 @@ class NothingFocusWidget : GlanceAppWidget() {
     private fun NothingWidgetContent(
         settings: FocusSettingsState,
         xpState: FocusXpState,
-        isLocked: Boolean,
         progressPercent: Int,
+        isLocked: Boolean,
         headerBitmap: Bitmap,
         ringBitmap: Bitmap?
     ) {
+        val widgetSize = LocalSize.current
+        val ringDisplaySize = minOf(widgetSize.height * 0.64f, widgetSize.width * 0.72f)
+            .coerceIn(76.dp, 176.dp)
+
         val cardBg = Color(0xFF1B1B1D)
-        val surfaceChip = Color(0xFF26262A)
+        val chipBg = Color(0xFF232327)
+        val chipBorder = Color(0xFF3A3A40)
         val nothingRed = Color(0xFFD71921)
         val white = Color(0xFFFFFFFF)
-        val muted = Color(0xFF9A9AA3)
-
-        val rootAction = if (isLocked) {
-            actionStartActivity<MainActivity>()
-        } else {
-            actionStartActivity<QuickLockActivity>()
-        }
+        val footerMuted = Color(0xFFA0A0A8)
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
                 .cornerRadius(26.dp)
                 .background(ColorProvider(cardBg))
-                .clickable(actionStartActivity<MainActivity>())
-                .padding(12.dp),
+                .clickable(actionStartActivity<MainActivity>()),
             contentAlignment = Alignment.Center
         ) {
-            Column(
+            // Center: Enlarged Dotted Circular Progress Gauge (62%-66% height) or Compact Readout
+            Box(
                 modifier = GlanceModifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalAlignment = Alignment.CenterVertically
+                contentAlignment = Alignment.Center
             ) {
-                // Top Row: Dot-matrix FOCUS LOCK header + status dot
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Image(
-                        provider = ImageProvider(headerBitmap),
-                        contentDescription = "Focus Lock",
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .height(16.dp)
-                    )
-                    if (settings.widgetShowStreakBadge && xpState.currentStreak > 0) {
-                        Spacer(modifier = GlanceModifier.width(4.dp))
-                        Box(
-                            modifier = GlanceModifier
-                                .cornerRadius(10.dp)
-                                .background(ColorProvider(surfaceChip))
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${xpState.currentStreak}D",
-                                style = TextStyle(
-                                    color = ColorProvider(white),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = GlanceModifier.height(6.dp))
-
-                // Center: Dotted circular ring OR compact study readout
                 if (ringBitmap != null) {
                     Image(
                         provider = ImageProvider(ringBitmap),
                         contentDescription = "Focus progress",
-                        modifier = GlanceModifier.size(84.dp)
+                        modifier = GlanceModifier.size(ringDisplaySize)
                     )
                 } else {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = GlanceModifier.padding(vertical = 8.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (settings.widgetShowStudyHours) {
                             Text(
                                 text = formatWidgetHours(xpState.todayFocusMs, isLocked),
                                 style = TextStyle(
                                     color = ColorProvider(white),
-                                    fontSize = 18.sp,
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
                                 )
                             )
                         }
                         if (settings.widgetShowGoalPercent) {
+                            Spacer(modifier = GlanceModifier.height(2.dp))
                             Text(
-                                text = "${progressPercent}% GOAL",
+                                text = "${progressPercent}%",
                                 style = TextStyle(
                                     color = ColorProvider(nothingRed),
-                                    fontSize = 10.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
                                 )
@@ -240,38 +207,86 @@ class NothingFocusWidget : GlanceAppWidget() {
                         }
                     }
                 }
+            }
 
-                if (settings.widgetShowRankXpTag) {
-                    Spacer(modifier = GlanceModifier.height(4.dp))
-                    Text(
-                        text = "${xpState.rank.title.uppercase(Locale.US)} · ${xpState.totalXp} XP",
-                        style = TextStyle(
-                            color = ColorProvider(muted),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center
-                        ),
-                        maxLines = 1
-                    )
-                }
-
-                if (settings.widgetShowQuickLockButton) {
-                    Spacer(modifier = GlanceModifier.height(6.dp))
-                    Box(
+            // Top Row anchored 14dp from top edge
+            Box(
+                modifier = GlanceModifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Row(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp, start = 14.dp, end = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        provider = ImageProvider(headerBitmap),
+                        contentDescription = "Focus Lock",
                         modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .cornerRadius(14.dp)
-                            .background(ColorProvider(if (isLocked) surfaceChip else nothingRed))
-                            .clickable(rootAction)
-                            .padding(vertical = 6.dp, horizontal = 8.dp),
-                        contentAlignment = Alignment.Center
+                            .defaultWeight()
+                            .height(18.dp)
+                    )
+                    if (settings.widgetShowStreakBadge) {
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        // Bordered streak pill (1dp border + dark interior)
+                        Box(
+                            modifier = GlanceModifier
+                                .cornerRadius(10.dp)
+                                .background(ColorProvider(chipBorder))
+                                .padding(1.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = GlanceModifier
+                                    .cornerRadius(9.dp)
+                                    .background(ColorProvider(chipBg))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${xpState.currentStreak}D",
+                                    style = TextStyle(
+                                        color = ColorProvider(white),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Footer anchored 14dp from bottom edge
+            if (settings.widgetShowRankXpTag) {
+                Box(
+                    modifier = GlanceModifier.fillMaxSize(),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Row(
+                        modifier = GlanceModifier
+                            .padding(bottom = 14.dp, start = 12.dp, end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = if (isLocked) "LOCKED" else "TAP TO LOCK",
+                            text = xpState.rank.title.uppercase(Locale.US),
                             style = TextStyle(
                                 color = ColorProvider(white),
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            ),
+                            maxLines = 1
+                        )
+                        Text(
+                            text = " • ${xpState.totalXp} XP",
+                            style = TextStyle(
+                                color = ColorProvider(footerMuted),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center
                             ),
                             maxLines = 1
@@ -285,8 +300,10 @@ class NothingFocusWidget : GlanceAppWidget() {
     companion object {
         private val RESPONSIVE_SIZES = setOf(
             DpSize(120.dp, 120.dp),
+            DpSize(160.dp, 160.dp),
             DpSize(180.dp, 180.dp),
-            DpSize(240.dp, 240.dp)
+            DpSize(220.dp, 220.dp),
+            DpSize(260.dp, 260.dp)
         )
 
         fun formatWidgetHours(todayFocusMs: Long, isLocked: Boolean): String {
@@ -308,96 +325,152 @@ class NothingFocusWidget : GlanceAppWidget() {
             }.getOrDefault(Typeface.MONOSPACE)
         }
 
-        private fun renderDotMatrixHeaderBitmap(
+        internal fun renderDotMatrixHeaderBitmap(
             context: Context,
             label: String,
-            isLocked: Boolean
+            isLocked: Boolean,
+            density: Float = 3f
         ): Bitmap {
-            val widthPx = 220
-            val heightPx = 32
+            val scale = density.coerceAtLeast(3f)
+            val widthPx = (140f * scale).roundToInt().coerceAtLeast(420)
+            val heightPx = (22f * scale).roundToInt().coerceAtLeast(66)
             val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
-            val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                 color = android.graphics.Color.parseColor(if (isLocked) "#10B981" else "#D71921")
                 style = Paint.Style.FILL
             }
-            canvas.drawCircle(10f, heightPx / 2f, 5.5f, dotPaint)
+            val dotRadius = 3.2f * scale
+            canvas.drawCircle(dotRadius + 1f * scale, heightPx / 2f, dotRadius, dotPaint)
 
-            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                 color = android.graphics.Color.WHITE
-                textSize = 20f
+                textSize = 11.5f * scale
                 typeface = loadDotTypeface(context)
+                isFakeBoldText = true
                 letterSpacing = 0.08f
             }
             val textY = heightPx / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(label, 24f, textY, textPaint)
+            canvas.drawText(label, dotRadius * 2f + 7f * scale, textY, textPaint)
 
             return bitmap
         }
 
-        private fun renderDottedRingBitmap(
+        internal fun renderDottedRingBitmap(
             context: Context,
             progressFraction: Float,
             studyHoursText: String,
             percentText: String?,
             showStudyHours: Boolean,
-            isLocked: Boolean
+            canvasSizePx: Int = 720
         ): Bitmap {
-            val sizePx = 196
+            val sizePx = canvasSizePx.coerceAtLeast(640)
+            val scale = sizePx / 720f
             val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
             val cx = sizePx / 2f
             val cy = sizePx / 2f
-            val radius = sizePx * 0.42f
-            val totalDots = 32
-            val activeDots = (totalDots * progressFraction.coerceIn(0f, 1f)).toInt()
-                .let { count -> if (progressFraction > 0f && count == 0) 1 else count }
+            val radius = sizePx * 0.44f
+            val totalDots = 40
+            val clamped = progressFraction.coerceIn(0f, 1f)
+            val activeDots = if (clamped > 0f) {
+                (totalDots * clamped).roundToInt().coerceIn(1, totalDots)
+            } else {
+                0
+            }
+            val headIndex = (activeDots - 1).coerceAtLeast(0)
 
-            val activePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val inactivePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                color = android.graphics.Color.parseColor("#3A3A40")
+                style = Paint.Style.FILL
+            }
+            val completedPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                style = Paint.Style.FILL
+            }
+            val headPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                 color = android.graphics.Color.parseColor("#D71921")
                 style = Paint.Style.FILL
             }
-            val inactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.parseColor("#38383E")
-                style = Paint.Style.FILL
-            }
+
+            // ~3.5dp visual diameter at 116dp ring -> 11px radius on 720px canvas
+            val inactiveDotRadius = 10.8f * scale
+            val completedDotRadius = 11.4f * scale
+            val headDotRadius = 15.2f * scale
 
             for (i in 0 until totalDots) {
-                val angleRad = Math.toRadians((-90.0 + (360.0 / totalDots) * i))
+                val angleRad = Math.toRadians(-90.0 + (360.0 / totalDots) * i)
                 val dx = cx + (radius * cos(angleRad)).toFloat()
                 val dy = cy + (radius * sin(angleRad)).toFloat()
-                val isActive = i < activeDots
-                canvas.drawCircle(
-                    dx,
-                    dy,
-                    if (isActive) 4.3f else 3.4f,
-                    if (isActive) activePaint else inactivePaint
+                when {
+                    i == headIndex -> canvas.drawCircle(dx, dy, headDotRadius, headPaint)
+                    i < activeDots -> canvas.drawCircle(dx, dy, completedDotRadius, completedPaint)
+                    else -> canvas.drawCircle(dx, dy, inactiveDotRadius, inactivePaint)
+                }
+            }
+
+            // 4 subtle cardinal accent ticks (12, 3, 6, 9 o'clock) just inside the dotted ring
+            val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                color = android.graphics.Color.parseColor("#5A5A64")
+                style = Paint.Style.STROKE
+                strokeWidth = 5.5f * scale
+                strokeCap = Paint.Cap.ROUND
+            }
+            val tickOuter = radius - 26f * scale
+            val tickInner = radius - 48f * scale
+            for (deg in listOf(-90.0, 0.0, 90.0, 180.0)) {
+                val rad = Math.toRadians(deg)
+                val cosA = cos(rad).toFloat()
+                val sinA = sin(rad).toFloat()
+                canvas.drawLine(
+                    cx + tickInner * cosA,
+                    cy + tickInner * sinA,
+                    cx + tickOuter * cosA,
+                    cy + tickOuter * sinA,
+                    tickPaint
                 )
             }
 
             val dotFace = loadDotTypeface(context)
 
             if (showStudyHours) {
-                val mainPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                val mainPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                     color = android.graphics.Color.WHITE
-                    textSize = 23f
+                    textSize = 122f * scale // ~20sp crisp dot-matrix numerals
                     typeface = dotFace
+                    isFakeBoldText = true
                     textAlign = Paint.Align.CENTER
                 }
-                val mainY = if (percentText != null) cy + 2f else cy + 8f
+                val maxInnerWidth = sizePx * 0.64f
+                val measured = mainPaint.measureText(studyHoursText)
+                if (measured > maxInnerWidth && measured > 0f) {
+                    mainPaint.textSize = mainPaint.textSize * (maxInnerWidth / measured)
+                }
+                val mainCenterOffset = -(mainPaint.descent() + mainPaint.ascent()) / 2f
+                val mainY = if (percentText != null) {
+                    cy - 22f * scale + mainCenterOffset
+                } else {
+                    cy + mainCenterOffset
+                }
                 canvas.drawText(studyHoursText, cx, mainY, mainPaint)
             }
 
             if (percentText != null) {
-                val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = android.graphics.Color.parseColor(if (isLocked) "#10B981" else "#D71921")
-                    textSize = 15f
+                val subPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    color = android.graphics.Color.parseColor("#D71921")
+                    textSize = 76f * scale // ~12sp bold crimson percentage
                     typeface = dotFace
+                    isFakeBoldText = true
                     textAlign = Paint.Align.CENTER
                 }
-                val subY = if (showStudyHours) cy + 24f else cy + 6f
+                val subCenterOffset = -(subPaint.descent() + subPaint.ascent()) / 2f
+                val subY = if (showStudyHours) {
+                    cy + 78f * scale + subCenterOffset
+                } else {
+                    cy + subCenterOffset
+                }
                 canvas.drawText(percentText, cx, subY, subPaint)
             }
 

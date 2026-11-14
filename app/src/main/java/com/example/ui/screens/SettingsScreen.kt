@@ -165,8 +165,8 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(settingsState.allowedApps) {
-        FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
+    LaunchedEffect(settingsState.allowedApps, settingsState.appTheme) {
+        FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps, settingsState.appTheme)
     }
 
     val onSelectTheme = remember(context, view) {
@@ -331,10 +331,6 @@ fun SettingsScreen(
                     onToggleRankXpTag = { enabled ->
                         view.performClockTickHaptic()
                         FocusSettingsRepository.setWidgetShowRankXpTag(context, enabled)
-                    },
-                    onToggleQuickLockButton = { enabled ->
-                        view.performClockTickHaptic()
-                        FocusSettingsRepository.setWidgetShowQuickLockButton(context, enabled)
                     }
                 )
 
@@ -556,8 +552,8 @@ private fun AllowedAppsSection(
                                     iconSize = 18.dp,
                                     containerSize = 36.dp,
                                     shape = iconShape,
-                                    preloadedIcon = iconCache[app.packageName],
-                                    loadIfMissing = false
+                                    preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, palette.theme)],
+                                    loadIfMissing = true
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(

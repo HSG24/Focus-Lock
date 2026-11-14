@@ -2,6 +2,11 @@ package com.example
 
 import android.app.Notification
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
 import android.service.notification.StatusBarNotification
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.FocusRank
@@ -12,6 +17,7 @@ import com.example.service.FocusNotificationBlockerService
 import com.example.service.FocusPowerBlockerAccessibilityService
 import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.FocusThemePalette
+import com.example.widget.NothingFocusWidget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,9 +26,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.Calendar
 
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36])
 class FocusUpgradeTest {
 
@@ -237,16 +245,61 @@ class FocusUpgradeTest {
 
     @Test
     fun unifiedThemesAndWidgetDefaults_resolveCleanly() {
-        assertEquals(5, AppVisualTheme.entries.size)
+        assertEquals(4, AppVisualTheme.entries.size)
         AppVisualTheme.entries.forEach { theme ->
             val palette = FocusThemePalette.from(theme)
             assertEquals(theme, palette.theme)
             assertEquals(theme, AppVisualTheme.fromIdOrName(theme.id))
         }
+        // Removed Emerald Terminal must cleanly fall back to Nothing Crimson
+        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("emerald_terminal"))
+        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("EMERALD_TERMINAL"))
+
         val settings = FocusSettingsRepository.getCurrent(context)
         assertEquals(240L, settings.dailyGoalMinutes)
         assertEquals(AppVisualTheme.NOTHING_CRIMSON, settings.appTheme)
         assertTrue(settings.widgetShowDottedRing)
         assertTrue(settings.blockPowerMenuDuringLock)
+    }
+
+    @Test
+    fun widgetDottedRingBitmap_rendersAtHighResolutionArgb8888() {
+        val ring = NothingFocusWidget.renderDottedRingBitmap(
+            context = context,
+            progressFraction = 0.5f,
+            studyHoursText = "02H 00M",
+            percentText = "50%",
+            showStudyHours = true,
+            canvasSizePx = 720
+        )
+        assertEquals(720, ring.width)
+        assertEquals(720, ring.height)
+        assertEquals(Bitmap.Config.ARGB_8888, ring.config)
+    }
+
+    @Test
+    fun monochromeAppIconProcessor_extractsSilhouetteAndAppliesThemeAccent() {
+        // Construct a multicolored 64x64 legacy icon: dark blue square badge with bright white center square
+        val src = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(src)
+        val bgPaint = Paint().apply { color = Color.rgb(18, 45, 110) }
+        val fgPaint = Paint().apply { color = Color.WHITE }
+        canvas.drawRect(4f, 4f, 60f, 60f, bgPaint)
+        canvas.drawRect(22f, 22f, 42f, 42f, fgPaint)
+
+        val accentArgb = Color.rgb(0, 229, 255)
+        val result = FocusSettingsRepository.toMonochromeTintedBitmap(
+            drawable = BitmapDrawable(context.resources, src),
+            targetPx = 64,
+            accentColorArgb = accentArgb
+        )
+
+        val centerPixel = result.getPixel(32, 32)
+        val outerBadgePixel = result.getPixel(10, 10)
+        assertTrue(((centerPixel ushr 24) and 0xFF) > 200)
+        assertEquals(0, (centerPixel ushr 16) and 0xFF)
+        assertEquals(229, (centerPixel ushr 8) and 0xFF)
+        assertEquals(255, centerPixel and 0xFF)
+        assertTrue(((outerBadgePixel ushr 24) and 0xFF) < 30)
     }
 }
