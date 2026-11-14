@@ -15,6 +15,8 @@ import android.provider.Settings
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.example.ui.theme.AppVisualTheme
+import com.example.widget.NothingFocusWidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,19 +55,29 @@ data class InstalledAppInfo(
 
 @Immutable
 data class FocusSettingsState(
+    val appTheme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON,
     val lockAppLayout: LockAppLayout = LockAppLayout.PILL_ROW,
     val allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
-    val dailyGoalMinutes: Long = 60L,
+    val dailyGoalMinutes: Long = 240L,
     val showSessionTimer: Boolean = true,
     val hapticKeypad: Boolean = true,
     val autoClearWrongPin: Boolean = true,
     val appSwitchGraceSeconds: Int = 2,
+    val blockNotificationsDuringLock: Boolean = false,
+    val blockPowerMenuDuringLock: Boolean = true,
+    val widgetShowDottedRing: Boolean = true,
+    val widgetShowStudyHours: Boolean = true,
+    val widgetShowGoalPercent: Boolean = true,
+    val widgetShowStreakBadge: Boolean = true,
+    val widgetShowRankXpTag: Boolean = true,
+    val widgetShowQuickLockButton: Boolean = true,
     val activeLiveShareId: String? = null,
     val activeLiveShareStartDateMs: Long = 0L
 )
 
 object FocusSettingsRepository {
     private const val PREFS_NAME = "focus_settings"
+    private const val KEY_APP_THEME = "app_visual_theme"
     private const val KEY_LOCK_LAYOUT = "lock_app_layout"
     private const val KEY_ALLOWED_APPS = "allowed_apps_json"
     private const val KEY_DAILY_GOAL = "daily_goal_min"
@@ -73,6 +85,14 @@ object FocusSettingsRepository {
     private const val KEY_HAPTIC_KEYPAD = "haptic_keypad"
     private const val KEY_AUTO_CLEAR_PIN = "auto_clear_wrong_pin"
     private const val KEY_GRACE_SECONDS = "app_switch_grace_sec"
+    private const val KEY_BLOCK_NOTIFICATIONS = "block_notifications_during_lock"
+    private const val KEY_BLOCK_POWER_MENU = "block_power_menu_during_lock"
+    private const val KEY_WIDGET_DOTTED_RING = "widget_show_dotted_ring"
+    private const val KEY_WIDGET_STUDY_HOURS = "widget_show_study_hours"
+    private const val KEY_WIDGET_GOAL_PERCENT = "widget_show_goal_percent"
+    private const val KEY_WIDGET_STREAK_BADGE = "widget_show_streak_badge"
+    private const val KEY_WIDGET_RANK_XP = "widget_show_rank_xp"
+    private const val KEY_WIDGET_QUICK_LOCK = "widget_show_quick_lock"
     private const val KEY_ACTIVE_LIVE_SHARE_ID = "active_live_share_id"
     private const val KEY_ACTIVE_LIVE_SHARE_START_MS = "active_live_share_start_ms"
 
@@ -144,6 +164,9 @@ object FocusSettingsRepository {
     }
 
     private fun readState(prefs: SharedPreferences): FocusSettingsState {
+        val themeRaw = prefs.getString(KEY_APP_THEME, AppVisualTheme.NOTHING_CRIMSON.name)
+        val appTheme = AppVisualTheme.fromIdOrName(themeRaw)
+
         val layoutName = prefs.getString(KEY_LOCK_LAYOUT, LockAppLayout.PILL_ROW.name)
         val lockLayout = runCatching { LockAppLayout.valueOf(layoutName ?: LockAppLayout.PILL_ROW.name) }
             .getOrDefault(LockAppLayout.PILL_ROW)
@@ -155,16 +178,30 @@ object FocusSettingsRepository {
         }
 
         return FocusSettingsState(
+            appTheme = appTheme,
             lockAppLayout = lockLayout,
             allowedApps = allowedApps,
-            dailyGoalMinutes = prefs.getLong(KEY_DAILY_GOAL, 60L).coerceIn(5L, 720L),
+            dailyGoalMinutes = prefs.getLong(KEY_DAILY_GOAL, 240L).coerceIn(5L, 720L),
             showSessionTimer = prefs.getBoolean(KEY_SHOW_TIMER, true),
             hapticKeypad = prefs.getBoolean(KEY_HAPTIC_KEYPAD, true),
             autoClearWrongPin = prefs.getBoolean(KEY_AUTO_CLEAR_PIN, true),
             appSwitchGraceSeconds = prefs.getInt(KEY_GRACE_SECONDS, 2).coerceIn(1, 5),
+            blockNotificationsDuringLock = prefs.getBoolean(KEY_BLOCK_NOTIFICATIONS, false),
+            blockPowerMenuDuringLock = prefs.getBoolean(KEY_BLOCK_POWER_MENU, true),
+            widgetShowDottedRing = prefs.getBoolean(KEY_WIDGET_DOTTED_RING, true),
+            widgetShowStudyHours = prefs.getBoolean(KEY_WIDGET_STUDY_HOURS, true),
+            widgetShowGoalPercent = prefs.getBoolean(KEY_WIDGET_GOAL_PERCENT, true),
+            widgetShowStreakBadge = prefs.getBoolean(KEY_WIDGET_STREAK_BADGE, true),
+            widgetShowRankXpTag = prefs.getBoolean(KEY_WIDGET_RANK_XP, true),
+            widgetShowQuickLockButton = prefs.getBoolean(KEY_WIDGET_QUICK_LOCK, true),
             activeLiveShareId = prefs.getString(KEY_ACTIVE_LIVE_SHARE_ID, null)?.takeIf { it.isNotBlank() },
             activeLiveShareStartDateMs = prefs.getLong(KEY_ACTIVE_LIVE_SHARE_START_MS, 0L)
         )
+    }
+
+    fun setAppTheme(context: Context, theme: AppVisualTheme) {
+        update(context) { putString(KEY_APP_THEME, theme.name) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
     }
 
     fun setLockAppLayout(context: Context, layout: LockAppLayout) {
@@ -173,6 +210,7 @@ object FocusSettingsRepository {
 
     fun setDailyGoalMinutes(context: Context, minutes: Long) {
         update(context) { putLong(KEY_DAILY_GOAL, minutes.coerceIn(5L, 720L)) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
     }
 
     fun setShowSessionTimer(context: Context, enabled: Boolean) {
@@ -189,6 +227,44 @@ object FocusSettingsRepository {
 
     fun setAppSwitchGraceSeconds(context: Context, seconds: Int) {
         update(context) { putInt(KEY_GRACE_SECONDS, seconds.coerceIn(1, 5)) }
+    }
+
+    fun setBlockNotificationsDuringLock(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_BLOCK_NOTIFICATIONS, enabled) }
+    }
+
+    fun setBlockPowerMenuDuringLock(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_BLOCK_POWER_MENU, enabled) }
+    }
+
+    fun setWidgetShowDottedRing(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_WIDGET_DOTTED_RING, enabled) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
+    }
+
+    fun setWidgetShowStudyHours(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_WIDGET_STUDY_HOURS, enabled) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
+    }
+
+    fun setWidgetShowGoalPercent(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_WIDGET_GOAL_PERCENT, enabled) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
+    }
+
+    fun setWidgetShowStreakBadge(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_WIDGET_STREAK_BADGE, enabled) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
+    }
+
+    fun setWidgetShowRankXpTag(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_WIDGET_RANK_XP, enabled) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
+    }
+
+    fun setWidgetShowQuickLockButton(context: Context, enabled: Boolean) {
+        update(context) { putBoolean(KEY_WIDGET_QUICK_LOCK, enabled) }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
     }
 
     fun setActiveLiveShare(context: Context, shareId: String?, startDateMs: Long) {

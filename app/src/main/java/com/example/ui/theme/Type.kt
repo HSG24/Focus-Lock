@@ -23,61 +23,90 @@ val JetBrainsMono = FontFamily(
     Font(R.font.jetbrains_mono, FontWeight.Bold)
 )
 
-val Typography = Typography(
+val DotGothic16 = FontFamily(
+    Font(R.font.dotgothic16, FontWeight.Normal),
+    Font(R.font.dotgothic16, FontWeight.Medium),
+    Font(R.font.dotgothic16, FontWeight.SemiBold),
+    Font(R.font.dotgothic16, FontWeight.Bold)
+)
+
+val Orbitron = FontFamily(
+    Font(R.font.orbitron, FontWeight.Normal),
+    Font(R.font.orbitron, FontWeight.Medium),
+    Font(R.font.orbitron, FontWeight.SemiBold),
+    Font(R.font.orbitron, FontWeight.Bold)
+)
+
+val ChakraPetch = FontFamily(
+    Font(R.font.chakra_petch, FontWeight.Normal),
+    Font(R.font.chakra_petch, FontWeight.Medium),
+    Font(R.font.chakra_petch, FontWeight.SemiBold),
+    Font(R.font.chakra_petch, FontWeight.Bold)
+)
+
+fun typographyForTheme(
+    displayFont: FontFamily,
+    bodyFont: FontFamily
+): Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = displayFont,
         fontWeight = FontWeight.Bold,
         fontSize = 44.sp,
         lineHeight = 50.sp,
-        letterSpacing = (-1.2).sp
+        letterSpacing = (-0.6).sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = displayFont,
         fontWeight = FontWeight.Bold,
         fontSize = 26.sp,
         lineHeight = 32.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = (-0.2).sp
     ),
     titleLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = displayFont,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
-        letterSpacing = (-0.3).sp
+        letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = bodyFont,
         fontWeight = FontWeight.SemiBold,
         fontSize = 16.sp,
         lineHeight = 22.sp,
         letterSpacing = (-0.1).sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = bodyFont,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
         lineHeight = 22.sp,
         letterSpacing = 0.sp
     ),
     bodyMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = bodyFont,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = bodyFont,
         fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.4.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = bodyFont,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp,
-        letterSpacing = 0.6.sp
+        letterSpacing = 0.8.sp
     )
+)
+
+val Typography = typographyForTheme(
+    displayFont = DotGothic16,
+    bodyFont = PlusJakartaSans
 )

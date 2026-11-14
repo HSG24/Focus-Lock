@@ -20,6 +20,7 @@ import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -40,7 +40,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -59,11 +58,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -78,23 +77,22 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
+import com.example.data.FocusXpRepository
 import com.example.data.LockAppLayout
+import com.example.data.NotificationBlockerRepository
 import com.example.data.ShareRepository
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
+import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemedDivider
+import com.example.ui.components.ThemedTimerRing
 import com.example.ui.components.rememberSpringPressScale
-import com.example.ui.theme.CrimsonBorderTint
-import com.example.ui.theme.CrimsonContainer
-import com.example.ui.theme.CrimsonGlow
-import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.JetBrainsMono
+import com.example.ui.theme.AppVisualTheme
+import com.example.ui.theme.FocusThemePalette
+import com.example.ui.theme.LocalFocusTheme
 import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.ObsidianElevated
-import com.example.ui.theme.PureWhite
+import com.example.widget.NothingFocusWidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -324,6 +322,8 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (startTime == 0L) {
             startTime = System.currentTimeMillis()
             currentSessionStartTimeMs = startTime
+            NotificationBlockerRepository.startFreshSession(applicationContext)
+            NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
             scope.launch {
                 ShareRepository.syncLiveShareOnSessionStart(applicationContext, startTime)
             }
@@ -482,7 +482,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
             setContent {
                 val settingsState by FocusSettingsRepository.observe(this@LockService).collectAsState()
-                MyApplicationTheme {
+                MyApplicationTheme(appTheme = settingsState.appTheme) {
                     val minimized by isMinimizedState
 
                     if (minimized) {
@@ -568,15 +568,27 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             composeView = null
         }
 
+        val capturedStart = startTime
         val endTime = System.currentTimeMillis()
-        val duration = endTime - startTime
+        val duration = endTime - capturedStart
         currentSessionStartTimeMs = 0L
+        val appCtx = applicationContext
+
+        val hasBlockedNotifications = NotificationBlockerRepository.finalizeSessionOnUnlock(appCtx)
+
         if (duration > 0) {
-            val appCtx = applicationContext
+            val settings = FocusSettingsRepository.getCurrent(appCtx)
+            FocusXpRepository.recordCompletedSession(
+                context = appCtx,
+                sessionStartTimeMs = capturedStart,
+                durationMs = duration,
+                dailyGoalMinutes = settings.dailyGoalMinutes
+            )
+
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/sessions.json"
-                    val bodyStr = """{"startTime": $startTime, "duration": $duration}"""
+                    val bodyStr = """{"startTime": $capturedStart, "duration": $duration}"""
                     val body = bodyStr.toRequestBody("application/json; charset=utf-8".toMediaType())
                     val request = okhttp3.Request.Builder()
                         .url(url)
@@ -587,6 +599,19 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     e.printStackTrace()
                 }
                 ShareRepository.syncLiveShareOnSessionEnd(appCtx)
+                NothingFocusWidgetUpdater.updateAllWidgets(appCtx)
+            }
+        } else {
+            NothingFocusWidgetUpdater.scheduleUpdateAll(appCtx)
+        }
+
+        if (hasBlockedNotifications) {
+            runCatching {
+                val launchIntent = Intent(appCtx, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(MainActivity.EXTRA_SHOW_UNLOCK_SUMMARY, true)
+                }
+                startActivity(launchIntent)
             }
         }
 
@@ -596,6 +621,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override fun onDestroy() {
         super.onDestroy()
         currentSessionStartTimeMs = 0L
+        NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
         stopMonitoringForegroundApp()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         if (composeView != null) {
@@ -632,7 +658,8 @@ fun LockScreen(
     sessionStartTimeMs: Long = 0L,
     onLaunchApp: ((AllowedApp) -> Unit)? = null
 ) {
-    val palette = LockPalette.StealthDark
+    val themePalette = LocalFocusTheme.current
+    val palette = remember(themePalette) { LockPalette.fromFocusTheme(themePalette) }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val iconCache by FocusSettingsRepository.appIconsState.collectAsState()
@@ -641,15 +668,6 @@ fun LockScreen(
 
     LaunchedEffect(allowedApps) {
         FocusSettingsRepository.preloadAppIcons(context, allowedApps)
-    }
-
-    val backdropGlowBrush = remember {
-        Brush.radialGradient(
-            colors = listOf(
-                CrimsonGlow.copy(alpha = 0.28f),
-                Color.Transparent
-            )
-        )
     }
 
     LaunchedEffect(wrongPinError, autoClearWrongPin) {
@@ -678,50 +696,68 @@ fun LockScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.background)
-            .background(backdropGlowBrush)
             .padding(horizontal = 24.dp, vertical = 28.dp),
         contentAlignment = Alignment.Center
     ) {
+        ThemeBackdropLayer(palette = themePalette)
+
         Column(
             modifier = Modifier
                 .widthIn(max = 420.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // Minimal Lock Header + Isolated Live Timer Child
+            // Themed Lock Header + Ring + Live Session Clock
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(palette.surface)
-                        .border(1.dp, CrimsonBorderTint, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    FocusLockEmblem(
-                        size = 48.dp,
-                        showAmbientGlow = true
+                if (showSessionTimer) {
+                    ThemedSessionClockHero(
+                        sessionStartTimeMs = sessionStartTimeMs,
+                        themePalette = themePalette,
+                        palette = palette
                     )
+                } else {
+                    ThemedTimerRing(
+                        progress = 1f,
+                        size = 112.dp,
+                        palette = themePalette
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(CircleShape)
+                                .background(palette.surface)
+                                .border(1.dp, themePalette.primaryBorderTint, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            FocusLockEmblem(
+                                size = 48.dp,
+                                showAmbientGlow = true
+                            )
+                        }
+                    }
+                }
+
+                val lockHeaderLabel = when (themePalette.theme) {
+                    AppVisualTheme.NOTHING_CRIMSON -> "FOCUS MODE ACTIVE"
+                    AppVisualTheme.CYBER_ICE -> "HUD LOCK // ENGAGED"
+                    AppVisualTheme.EMERALD_TERMINAL -> "[SYS_LOCK_ACTIVE]"
+                    AppVisualTheme.SOLAR_AMBER -> "CHRONO LOCK ACTIVE"
+                    AppVisualTheme.ULTRAVIOLET_PULSE -> "Focus Mode Active"
                 }
 
                 Text(
-                    text = "Focus Mode Active",
+                    text = lockHeaderLabel,
+                    fontFamily = themePalette.displayFont,
                     color = palette.primaryText,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = if (themePalette.theme == AppVisualTheme.NOTHING_CRIMSON) 1.2.sp else 0.sp
                 )
-
-                if (showSessionTimer) {
-                    SessionTimerBadge(
-                        sessionStartTimeMs = sessionStartTimeMs,
-                        palette = palette
-                    )
-                }
 
                 Text(
                     text = if (wrongPinError) "Incorrect PIN" else "Enter 6-digit PIN to unlock",
@@ -759,6 +795,13 @@ fun LockScreen(
                             )
                     )
                 }
+            }
+
+            if (themePalette.useDottedDividers) {
+                ThemedDivider(
+                    palette = themePalette,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
             }
 
             // Dynamic Allowed Apps in Chosen Sleek Layout
@@ -825,11 +868,72 @@ fun LockScreen(
 }
 
 @Composable
+private fun ThemedSessionClockHero(
+    sessionStartTimeMs: Long,
+    themePalette: FocusThemePalette,
+    palette: LockPalette
+) {
+    var elapsedSeconds by remember(sessionStartTimeMs) {
+        mutableLongStateOf(
+            if (sessionStartTimeMs > 0L) {
+                ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
+            } else {
+                0L
+            }
+        )
+    }
+
+    LaunchedEffect(sessionStartTimeMs) {
+        while (isActive) {
+            if (sessionStartTimeMs > 0L) {
+                elapsedSeconds = ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
+            }
+            delay(1000L)
+        }
+    }
+
+    val mins = elapsedSeconds / 60L
+    val secs = elapsedSeconds % 60L
+    val minuteProgress = ((elapsedSeconds % 60L) / 60f).let { if (it <= 0f) 1f else it }
+
+    ThemedTimerRing(
+        progress = minuteProgress,
+        size = 148.dp,
+        palette = themePalette
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            FocusLockEmblem(
+                size = 30.dp,
+                showAmbientGlow = false
+            )
+            Text(
+                text = String.format(Locale.US, "%02d:%02d", mins, secs),
+                fontFamily = themePalette.numeralFont,
+                color = palette.primaryText,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "FOCUS",
+                fontFamily = themePalette.displayFont,
+                color = palette.accent,
+                fontSize = 10.sp,
+                letterSpacing = 1.4.sp
+            )
+        }
+    }
+}
+
+@Composable
 fun KeypadButton(
     text: String,
     palette: LockPalette = LockPalette.StealthDark,
     onClick: () -> Unit
 ) {
+    val themePalette = LocalFocusTheme.current
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.90f)
 
@@ -861,7 +965,7 @@ fun KeypadButton(
         } else {
             Text(
                 text = text,
-                fontFamily = JetBrainsMono,
+                fontFamily = themePalette.numeralFont,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
@@ -872,12 +976,13 @@ fun KeypadButton(
 
 @Composable
 fun FloatingBubble(onResumeLock: () -> Unit) {
+    val palette = LocalFocusTheme.current
     Surface(
         onClick = onResumeLock,
-        color = ObsidianElevated,
-        contentColor = PureWhite,
+        color = palette.surfaceElevated,
+        contentColor = palette.textPrimary,
         shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, CrimsonBorderTint),
+        border = BorderStroke(1.dp, palette.primaryBorderTint),
         shadowElevation = 0.dp,
         modifier = Modifier
             .padding(8.dp)
@@ -891,59 +996,15 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
             Icon(
                 imageVector = Icons.Filled.Lock,
                 contentDescription = "Lock icon",
-                tint = CrimsonPrimary,
+                tint = palette.primary,
                 modifier = Modifier.size(16.dp)
             )
             Text(
                 text = "Back to Lock",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = PureWhite
+                color = palette.textPrimary
             )
         }
     }
 }
-
-@Composable
-private fun SessionTimerBadge(
-    sessionStartTimeMs: Long,
-    palette: LockPalette
-) {
-    var elapsedSeconds by remember(sessionStartTimeMs) {
-        mutableLongStateOf(
-            if (sessionStartTimeMs > 0L) {
-                ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
-            } else {
-                0L
-            }
-        )
-    }
-
-    LaunchedEffect(sessionStartTimeMs) {
-        while (isActive) {
-            if (sessionStartTimeMs > 0L) {
-                elapsedSeconds = ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
-            }
-            delay(1000L)
-        }
-    }
-
-    val mins = elapsedSeconds / 60L
-    val secs = elapsedSeconds % 60L
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = CrimsonContainer,
-        border = BorderStroke(1.dp, CrimsonBorderTint)
-    ) {
-        Text(
-            text = String.format(Locale.US, "FOCUS  %02d:%02d", mins, secs),
-            fontFamily = JetBrainsMono,
-            color = palette.primaryText,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.8.sp,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-        )
-    }
-}
-

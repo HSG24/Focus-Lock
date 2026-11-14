@@ -51,13 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.CrimsonDeep
-import com.example.ui.theme.CrimsonGlow
-import com.example.ui.theme.CrimsonPillBorder
-import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.ObsidianSurface
+import com.example.ui.theme.LocalFocusTheme
 import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SlateGray
 
 fun View.performClockTickHaptic() {
     performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -67,7 +62,6 @@ fun View.performKeyTapHaptic() {
     performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
 }
 
-private val PillSimulatedGlassFill = Color(0xE6121216)
 private val PillTopHighlightColor = Color(0x33FFFFFF)
 
 /**
@@ -91,9 +85,8 @@ fun rememberSpringPressScale(
 }
 
 /**
- * Custom geometric Focus Lock emblem matching the adaptive launcher icon.
- * Uses drawWithCache so all radial gradient brushes, strokes, and geometry are
- * allocated once and cached on GPU without per-frame allocations.
+ * Custom geometric Focus Lock emblem matching the adaptive launcher icon and
+ * dynamically colored by the active theme in LocalFocusTheme.
  */
 @Composable
 fun FocusLockEmblem(
@@ -101,6 +94,13 @@ fun FocusLockEmblem(
     size: Dp = 128.dp,
     showAmbientGlow: Boolean = true
 ) {
+    val palette = LocalFocusTheme.current
+    val primaryColor = palette.primary
+    val deepColor = palette.primaryDeep
+    val glowColor = palette.primaryGlow
+    val surfaceColor = palette.surface
+    val strokePrimary = palette.textPrimary
+
     Box(
         modifier = modifier
             .size(size)
@@ -114,9 +114,9 @@ fun FocusLockEmblem(
                 val glowBrush = if (showAmbientGlow) {
                     Brush.radialGradient(
                         colors = listOf(
-                            CrimsonPrimary.copy(alpha = 0.24f),
-                            CrimsonDeep.copy(alpha = 0.14f),
-                            CrimsonGlow.copy(alpha = 0.08f),
+                            primaryColor.copy(alpha = 0.24f),
+                            deepColor.copy(alpha = 0.14f),
+                            glowColor.copy(alpha = 0.08f),
                             Color.Transparent
                         ),
                         center = center,
@@ -154,7 +154,7 @@ fun FocusLockEmblem(
                 val coreCenter = Offset(center.x, center.y + 4.8f * unit)
                 val coreOuterRadius = 6.8f * unit
                 val coreInnerRadius = 4.2f * unit
-                val coreHaloColor = CrimsonPrimary.copy(alpha = 0.30f)
+                val coreHaloColor = primaryColor.copy(alpha = 0.30f)
                 val coreKeyholeStart = Offset(center.x, coreCenter.y + 2f * unit)
                 val coreKeyholeEnd = Offset(center.x, coreCenter.y + 8.6f * unit)
                 val coreKeyholeWidth = 2.8f * unit
@@ -170,7 +170,7 @@ fun FocusLockEmblem(
 
                     for (start in arcAngles) {
                         drawArc(
-                            color = PureWhite,
+                            color = strokePrimary,
                             startAngle = start,
                             sweepAngle = 66f,
                             useCenter = false,
@@ -181,28 +181,28 @@ fun FocusLockEmblem(
                     }
 
                     drawLine(
-                        color = CrimsonPrimary,
+                        color = primaryColor,
                         start = Offset(center.x, center.y - outerTick),
                         end = Offset(center.x, center.y - innerTick),
                         strokeWidth = tickStroke,
                         cap = StrokeCap.Round
                     )
                     drawLine(
-                        color = CrimsonPrimary,
+                        color = primaryColor,
                         start = Offset(center.x, center.y + innerTick),
                         end = Offset(center.x, center.y + outerTick),
                         strokeWidth = tickStroke,
                         cap = StrokeCap.Round
                     )
                     drawLine(
-                        color = CrimsonPrimary,
+                        color = primaryColor,
                         start = Offset(center.x - outerTick, center.y),
                         end = Offset(center.x - innerTick, center.y),
                         strokeWidth = tickStroke,
                         cap = StrokeCap.Round
                     )
                     drawLine(
-                        color = CrimsonPrimary,
+                        color = primaryColor,
                         start = Offset(center.x + innerTick, center.y),
                         end = Offset(center.x + outerTick, center.y),
                         strokeWidth = tickStroke,
@@ -210,7 +210,7 @@ fun FocusLockEmblem(
                     )
 
                     drawArc(
-                        color = PureWhite,
+                        color = strokePrimary,
                         startAngle = 180f,
                         sweepAngle = 180f,
                         useCenter = false,
@@ -219,14 +219,14 @@ fun FocusLockEmblem(
                         style = shackleStroke
                     )
                     drawLine(
-                        color = PureWhite,
+                        color = strokePrimary,
                         start = Offset(center.x - shackleRadius, shackleCenterY),
                         end = Offset(center.x - shackleRadius, shackleBottomY),
                         strokeWidth = shackleStrokeWidth,
                         cap = StrokeCap.Round
                     )
                     drawLine(
-                        color = PureWhite,
+                        color = strokePrimary,
                         start = Offset(center.x + shackleRadius, shackleCenterY),
                         end = Offset(center.x + shackleRadius, shackleBottomY),
                         strokeWidth = shackleStrokeWidth,
@@ -234,13 +234,13 @@ fun FocusLockEmblem(
                     )
 
                     drawRoundRect(
-                        color = ObsidianSurface,
+                        color = surfaceColor,
                         topLeft = bodyTopLeft,
                         size = bodySize,
                         cornerRadius = bodyCorner
                     )
                     drawRoundRect(
-                        color = PureWhite,
+                        color = strokePrimary,
                         topLeft = bodyTopLeft,
                         size = bodySize,
                         cornerRadius = bodyCorner,
@@ -253,12 +253,12 @@ fun FocusLockEmblem(
                         center = coreCenter
                     )
                     drawCircle(
-                        color = CrimsonPrimary,
+                        color = primaryColor,
                         radius = coreInnerRadius,
                         center = coreCenter
                     )
                     drawLine(
-                        color = CrimsonPrimary,
+                        color = primaryColor,
                         start = coreKeyholeStart,
                         end = coreKeyholeEnd,
                         strokeWidth = coreKeyholeWidth,
@@ -278,9 +278,7 @@ data class PillNavTab(
 )
 
 /**
- * Floating simulated-glass pill bottom bar with zero real-time blur or shadow overdraw.
- * Uses solid translucent #E6121216 fill, crisp 1dp #33FFFFFF top highlight, #4DFF1E27
- * crimson border, and GPU-only graphicsLayer translationX for locked 120Hz swiping.
+ * Floating simulated-glass pill bottom bar styled dynamically by the active theme.
  */
 @Composable
 fun FloatingPillBottomBar(
@@ -290,13 +288,14 @@ fun FloatingPillBottomBar(
     onSelectTab: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalFocusTheme.current
     val pillShape = remember { RoundedCornerShape(32.dp) }
     val indicatorShape = remember { RoundedCornerShape(26.dp) }
-    val indicatorBrush = remember {
+    val indicatorBrush = remember(palette.primary, palette.primaryDeep) {
         Brush.linearGradient(
             colors = listOf(
-                CrimsonPrimary.copy(alpha = 0.94f),
-                CrimsonDeep.copy(alpha = 0.94f)
+                palette.primary.copy(alpha = 0.94f),
+                palette.primaryDeep.copy(alpha = 0.94f)
             )
         )
     }
@@ -316,13 +315,12 @@ fun FloatingPillBottomBar(
                 .fillMaxWidth()
                 .height(64.dp)
                 .clip(pillShape)
-                .background(PillSimulatedGlassFill)
+                .background(palette.pillGlassFill)
                 .drawWithCache {
                     val strokePx = 1.dp.toPx()
                     val cornerPx = (size.height / 2f)
                     onDrawWithContent {
                         drawContent()
-                        // Crisp 1dp inner top highlight border (#33FFFFFF) without overdraw blur
                         drawRoundRect(
                             brush = Brush.verticalGradient(
                                 0f to PillTopHighlightColor,
@@ -339,13 +337,12 @@ fun FloatingPillBottomBar(
                 }
                 .border(
                     width = 1.dp,
-                    color = CrimsonPillBorder,
+                    color = palette.primaryBorderTint,
                     shape = pillShape
                 )
                 .padding(5.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Sliding crimson pill indicator animated strictly on GPU via graphicsLayer translationX
                 Box(
                     modifier = Modifier
                         .graphicsLayer {
@@ -373,6 +370,8 @@ fun FloatingPillBottomBar(
                             tab = tab,
                             isSelected = selectedIndex == index,
                             indicatorShape = indicatorShape,
+                            selectedColor = palette.onPrimary,
+                            unselectedColor = palette.textSecondary,
                             onClick = { onSelectTab(index) },
                             modifier = Modifier
                                 .weight(1f)
@@ -390,13 +389,15 @@ private fun PillTabItem(
     tab: PillNavTab,
     isSelected: Boolean,
     indicatorShape: RoundedCornerShape,
+    selectedColor: Color,
+    unselectedColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.94f)
     val contentColor by animateColorAsState(
-        targetValue = if (isSelected) PureWhite else SlateGray,
+        targetValue = if (isSelected) selectedColor else unselectedColor,
         animationSpec = spring(
             dampingRatio = 0.85f,
             stiffness = Spring.StiffnessMediumLow

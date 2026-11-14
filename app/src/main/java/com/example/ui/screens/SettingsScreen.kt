@@ -43,7 +43,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,8 +51,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -88,27 +85,31 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusSettingsState
+import com.example.data.FocusXpRepository
 import com.example.data.InstalledAppInfo
 import com.example.data.LockAppLayout
+import com.example.data.NotificationBlockerRepository
 import com.example.data.UpdateUiState
+import com.example.service.FocusNotificationBlockerService
+import com.example.service.FocusPowerBlockerAccessibilityService
 import com.example.ui.components.AllowedAppIconBadge
+import com.example.ui.components.AppearanceAndThemesSection
+import com.example.ui.components.DailyStudyGoalSection
 import com.example.ui.components.FocusLockEmblem
+import com.example.ui.components.HomeScreenWidgetSection
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
+import com.example.ui.components.ProtectionAndBlockersSection
+import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemedDivider
+import com.example.ui.components.ThemedSettingsSectionCard
+import com.example.ui.components.ThemedSettingsSwitchRow
 import com.example.ui.components.performClockTickHaptic
 import com.example.ui.components.performKeyTapHaptic
 import com.example.ui.components.rememberSpringPressScale
-import com.example.ui.theme.CrimsonBorderTint
-import com.example.ui.theme.CrimsonContainer
-import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.FocusEmerald
+import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.JetBrainsMono
-import com.example.ui.theme.ObsidianBorder
-import com.example.ui.theme.ObsidianElevated
-import com.example.ui.theme.ObsidianSurface
-import com.example.ui.theme.OledBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SlateGray
+import com.example.ui.theme.LocalFocusTheme
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -123,10 +124,13 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val palette = LocalFocusTheme.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
 
     val iconCache by FocusSettingsRepository.appIconsState.collectAsStateWithLifecycle()
+    val xpState by FocusXpRepository.observe(context).collectAsStateWithLifecycle()
+    val blockerState by NotificationBlockerRepository.observe(context).collectAsStateWithLifecycle()
 
     var showAddAppDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
@@ -136,10 +140,14 @@ fun SettingsScreen(
 
     var hasOverlayPermission by remember { mutableStateOf(true) }
     var hasUsagePermission by remember { mutableStateOf(true) }
+    var hasNotificationAccess by remember { mutableStateOf(false) }
+    var hasAccessibilityGuard by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         hasOverlayPermission = FocusSettingsRepository.canDrawOverlaysAsync(context)
         hasUsagePermission = FocusSettingsRepository.hasUsageStatsPermissionAsync(context)
+        hasNotificationAccess = FocusNotificationBlockerService.isNotificationListenerEnabled(context)
+        hasAccessibilityGuard = FocusPowerBlockerAccessibilityService.isPowerBlockerAccessibilityEnabled(context)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -148,6 +156,8 @@ fun SettingsScreen(
                 coroutineScope.launch {
                     hasOverlayPermission = FocusSettingsRepository.canDrawOverlaysAsync(context)
                     hasUsagePermission = FocusSettingsRepository.hasUsageStatsPermissionAsync(context)
+                    hasNotificationAccess = FocusNotificationBlockerService.isNotificationListenerEnabled(context)
+                    hasAccessibilityGuard = FocusPowerBlockerAccessibilityService.isPowerBlockerAccessibilityEnabled(context)
                 }
             }
         }
@@ -159,6 +169,12 @@ fun SettingsScreen(
         FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
     }
 
+    val onSelectTheme = remember(context, view) {
+        { theme: AppVisualTheme ->
+            view.performClockTickHaptic()
+            FocusSettingsRepository.setAppTheme(context, theme)
+        }
+    }
     val onResetDefaults = remember(context, view) {
         {
             view.performKeyTapHaptic()
@@ -230,83 +246,173 @@ fun SettingsScreen(
             context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         }
     }
+    val onOpenNotificationListenerSettings = remember(context, view) {
+        {
+            view.performKeyTapHaptic()
+            runCatching {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+            Unit
+        }
+    }
+    val onOpenAccessibilitySettings = remember(context, view) {
+        {
+            view.performKeyTapHaptic()
+            runCatching {
+                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+            Unit
+        }
+    }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(OledBlack)
+            .background(palette.background)
             .navigationBarsPadding()
     ) {
-        TopAppBar(
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    FocusLockEmblem(
-                        size = 26.dp,
-                        showAmbientGlow = false
-                    )
-                    Text(
-                        text = "Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = PureWhite
-                    )
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = OledBlack
-            )
-        )
+        ThemeBackdropLayer(palette = palette)
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            AllowedAppsSection(
-                allowedApps = settingsState.allowedApps,
-                iconCache = iconCache,
-                onResetDefaults = onResetDefaults,
-                onRemoveApp = onRemoveApp,
-                onOpenAddApp = onOpenAddApp
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FocusLockEmblem(
+                            size = 26.dp,
+                            showAmbientGlow = false
+                        )
+                        Text(
+                            text = "Settings",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontFamily = palette.displayFont,
+                            color = palette.textPrimary
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                )
             )
 
-            LockScreenLayoutSection(
-                allowedApps = settingsState.allowedApps,
-                selectedLayout = settingsState.lockAppLayout,
-                iconCache = iconCache,
-                onSelectLayout = onSelectLayout
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                AppearanceAndThemesSection(
+                    selectedTheme = settingsState.appTheme,
+                    onSelectTheme = onSelectTheme
+                )
 
-            FocusBehaviorSection(
-                dailyGoalMinutes = settingsState.dailyGoalMinutes,
-                showSessionTimer = settingsState.showSessionTimer,
-                hapticKeypad = settingsState.hapticKeypad,
-                autoClearWrongPin = settingsState.autoClearWrongPin,
-                appSwitchGraceSeconds = settingsState.appSwitchGraceSeconds,
-                onOpenGoalDialog = onOpenGoalDialog,
-                onToggleSessionTimer = onToggleSessionTimer,
-                onToggleHapticKeypad = onToggleHapticKeypad,
-                onToggleAutoClearWrongPin = onToggleAutoClearWrongPin,
-                onSelectGraceSeconds = onSelectGraceSeconds
-            )
+                HomeScreenWidgetSection(
+                    settingsState = settingsState,
+                    xpState = xpState,
+                    onToggleDottedRing = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setWidgetShowDottedRing(context, enabled)
+                    },
+                    onToggleStudyHours = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setWidgetShowStudyHours(context, enabled)
+                    },
+                    onToggleGoalPercent = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setWidgetShowGoalPercent(context, enabled)
+                    },
+                    onToggleStreakBadge = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setWidgetShowStreakBadge(context, enabled)
+                    },
+                    onToggleRankXpTag = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setWidgetShowRankXpTag(context, enabled)
+                    },
+                    onToggleQuickLockButton = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setWidgetShowQuickLockButton(context, enabled)
+                    }
+                )
 
-            AppUpdatesSection(
-                installedVersion = installedVersion,
-                updateUiState = updateUiState,
-                onCheckForUpdates = onCheckForUpdates,
-                onOpenUpdateSheet = onOpenUpdateSheet
-            )
+                DailyStudyGoalSection(
+                    dailyGoalMinutes = settingsState.dailyGoalMinutes,
+                    onSelectGoalMinutes = { mins ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setDailyGoalMinutes(context, mins)
+                    },
+                    onOpenCustomGoalDialog = onOpenGoalDialog
+                )
 
-            PermissionsSection(
-                hasOverlayPermission = hasOverlayPermission,
-                hasUsagePermission = hasUsagePermission,
-                onOpenOverlaySettings = onOpenOverlaySettings,
-                onOpenUsageSettings = onOpenUsageSettings
-            )
+                ProtectionAndBlockersSection(
+                    blockNotifications = settingsState.blockNotificationsDuringLock,
+                    notificationAccessGranted = hasNotificationAccess,
+                    hasBlockedLog = blockerState.lastSessionSummary.isNotEmpty(),
+                    blockPowerMenu = settingsState.blockPowerMenuDuringLock,
+                    accessibilityGranted = hasAccessibilityGuard,
+                    onToggleBlockNotifications = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setBlockNotificationsDuringLock(context, enabled)
+                    },
+                    onOpenNotificationAccessSettings = onOpenNotificationListenerSettings,
+                    onOpenLastUnlockSummary = {
+                        view.performKeyTapHaptic()
+                        NotificationBlockerRepository.openLastSummarySheet(context)
+                    },
+                    onToggleBlockPowerMenu = { enabled ->
+                        view.performClockTickHaptic()
+                        FocusSettingsRepository.setBlockPowerMenuDuringLock(context, enabled)
+                    },
+                    onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                )
+
+                AllowedAppsSection(
+                    allowedApps = settingsState.allowedApps,
+                    iconCache = iconCache,
+                    onResetDefaults = onResetDefaults,
+                    onRemoveApp = onRemoveApp,
+                    onOpenAddApp = onOpenAddApp
+                )
+
+                LockScreenLayoutSection(
+                    allowedApps = settingsState.allowedApps,
+                    selectedLayout = settingsState.lockAppLayout,
+                    iconCache = iconCache,
+                    onSelectLayout = onSelectLayout
+                )
+
+                FocusBehaviorSection(
+                    showSessionTimer = settingsState.showSessionTimer,
+                    hapticKeypad = settingsState.hapticKeypad,
+                    autoClearWrongPin = settingsState.autoClearWrongPin,
+                    appSwitchGraceSeconds = settingsState.appSwitchGraceSeconds,
+                    onToggleSessionTimer = onToggleSessionTimer,
+                    onToggleHapticKeypad = onToggleHapticKeypad,
+                    onToggleAutoClearWrongPin = onToggleAutoClearWrongPin,
+                    onSelectGraceSeconds = onSelectGraceSeconds
+                )
+
+                AppUpdatesSection(
+                    installedVersion = installedVersion,
+                    updateUiState = updateUiState,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onOpenUpdateSheet = onOpenUpdateSheet
+                )
+
+                PermissionsSection(
+                    hasOverlayPermission = hasOverlayPermission,
+                    hasUsagePermission = hasUsagePermission,
+                    hasNotificationAccess = hasNotificationAccess,
+                    hasAccessibilityGuard = hasAccessibilityGuard,
+                    onOpenOverlaySettings = onOpenOverlaySettings,
+                    onOpenUsageSettings = onOpenUsageSettings,
+                    onOpenNotificationSettings = onOpenNotificationListenerSettings,
+                    onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                )
+            }
         }
     }
 
@@ -328,7 +434,7 @@ fun SettingsScreen(
             onGoalInputChange = { goalInputText = it },
             onSave = {
                 view.performKeyTapHaptic()
-                val parsed = goalInputText.toLongOrNull() ?: 60L
+                val parsed = goalInputText.toLongOrNull() ?: 240L
                 if (parsed > 0) {
                     FocusSettingsRepository.setDailyGoalMinutes(context, parsed)
                 }
@@ -347,9 +453,10 @@ private fun AllowedAppsSection(
     onRemoveApp: (String) -> Unit,
     onOpenAddApp: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val iconShape = remember { RoundedCornerShape(10.dp) }
 
-    SettingsSection(
+    ThemedSettingsSectionCard(
         title = "ALLOWED APPS IN LOCK MODE",
         trailingAction = {
             TextButton(
@@ -360,11 +467,11 @@ private fun AllowedAppsSection(
                 Icon(
                     imageVector = Icons.Outlined.RestartAlt,
                     contentDescription = null,
-                    tint = CrimsonPrimary,
+                    tint = palette.primary,
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Defaults", fontSize = 12.sp, color = CrimsonPrimary)
+                Text("Defaults", fontSize = 12.sp, color = palette.primary)
             }
         }
     ) {
@@ -381,12 +488,12 @@ private fun AllowedAppsSection(
                         text = "Strict Lock Mode",
                         style = MaterialTheme.typography.titleMedium,
                         fontSize = 14.sp,
-                        color = PureWhite
+                        color = palette.textPrimary
                     )
                     Text(
                         text = "No apps allowed during focus sessions. Add essential apps below.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SlateGray
+                        color = palette.textSecondary
                     )
                 }
             } else {
@@ -411,7 +518,7 @@ private fun AllowedAppsSection(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(CrimsonContainer)
+                                        .background(palette.primaryContainer)
                                         .padding(horizontal = 20.dp),
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
@@ -422,12 +529,12 @@ private fun AllowedAppsSection(
                                         Text(
                                             text = "Remove",
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = CrimsonPrimary
+                                            color = palette.primary
                                         )
                                         Icon(
                                             imageVector = Icons.Outlined.DeleteOutline,
                                             contentDescription = "Remove ${app.label}",
-                                            tint = CrimsonPrimary,
+                                            tint = palette.primary,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -437,15 +544,15 @@ private fun AllowedAppsSection(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(ObsidianSurface)
+                                    .background(palette.surface)
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 AllowedAppIconBadge(
                                     app = app,
-                                    tint = CrimsonPrimary,
-                                    badgeBackground = ObsidianElevated,
+                                    tint = palette.primary,
+                                    badgeBackground = palette.surfaceElevated,
                                     iconSize = 18.dp,
                                     containerSize = 36.dp,
                                     shape = iconShape,
@@ -457,7 +564,7 @@ private fun AllowedAppsSection(
                                         text = app.label,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontSize = 14.sp,
-                                        color = PureWhite,
+                                        color = palette.textPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -469,7 +576,7 @@ private fun AllowedAppsSection(
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontSize = 11.sp,
-                                        color = SlateGray,
+                                        color = palette.textSecondary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -481,7 +588,7 @@ private fun AllowedAppsSection(
                                     Icon(
                                         imageVector = Icons.Outlined.Close,
                                         contentDescription = "Remove ${app.label}",
-                                        tint = SlateGray,
+                                        tint = palette.textSecondary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -489,9 +596,8 @@ private fun AllowedAppsSection(
                         }
 
                         if (index < allowedApps.lastIndex) {
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = ObsidianBorder,
+                            ThemedDivider(
+                                palette = palette,
                                 modifier = Modifier.padding(horizontal = 14.dp)
                             )
                         }
@@ -499,7 +605,7 @@ private fun AllowedAppsSection(
                 }
             }
 
-            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+            ThemedDivider(palette = palette)
 
             Row(
                 modifier = Modifier
@@ -514,7 +620,7 @@ private fun AllowedAppsSection(
                 Icon(
                     imageVector = Icons.Outlined.Add,
                     contentDescription = null,
-                    tint = CrimsonPrimary,
+                    tint = palette.primary,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
@@ -522,7 +628,7 @@ private fun AllowedAppsSection(
                     text = "Add Allowed App",
                     style = MaterialTheme.typography.labelMedium,
                     fontSize = 13.sp,
-                    color = CrimsonPrimary
+                    color = palette.primary
                 )
             }
         }
@@ -536,15 +642,16 @@ private fun LockScreenLayoutSection(
     iconCache: Map<String, ImageBitmap>,
     onSelectLayout: (LockAppLayout) -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val previewShape = remember { RoundedCornerShape(16.dp) }
     val optionShape = remember { RoundedCornerShape(12.dp) }
     val noopPreviewClick = remember<((AllowedApp) -> Unit)> { {} }
-    val previewPalette = LockPalette.StealthDark
+    val previewPalette = remember(palette) { LockPalette.fromFocusTheme(palette) }
     val previewApps = remember(allowedApps) {
         allowedApps.ifEmpty { FocusSettingsRepository.DEFAULT_ALLOWED_APPS }
     }
 
-    SettingsSection(title = "LOCK SCREEN APPS LAYOUT") {
+    ThemedSettingsSectionCard(title = "LOCK SCREEN APPS LAYOUT") {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -554,7 +661,7 @@ private fun LockScreenLayoutSection(
                     .fillMaxWidth()
                     .clip(previewShape)
                     .background(previewPalette.background, previewShape)
-                    .border(1.dp, ObsidianBorder, previewShape)
+                    .border(1.dp, palette.border, previewShape)
                     .padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -569,13 +676,13 @@ private fun LockScreenLayoutSection(
                         fontFamily = JetBrainsMono,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = SlateGray
+                        color = palette.textSecondary
                     )
                     Text(
                         text = selectedLayout.title,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = CrimsonPrimary
+                        color = palette.primary
                     )
                 }
 
@@ -598,12 +705,12 @@ private fun LockScreenLayoutSection(
                             .fillMaxWidth()
                             .clip(optionShape)
                             .background(
-                                color = if (selected) CrimsonContainer else ObsidianElevated.copy(alpha = 0.55f),
+                                color = if (selected) palette.primaryContainer else palette.surfaceElevated.copy(alpha = 0.55f),
                                 shape = optionShape
                             )
                             .then(
                                 if (selected) {
-                                    Modifier.border(1.dp, CrimsonBorderTint, optionShape)
+                                    Modifier.border(1.dp, palette.primaryBorderTint, optionShape)
                                 } else {
                                     Modifier
                                 }
@@ -618,21 +725,21 @@ private fun LockScreenLayoutSection(
                                 text = layout.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontSize = 14.sp,
-                                color = PureWhite
+                                color = palette.textPrimary
                             )
                             Text(
                                 text = layout.subtitle,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontSize = 12.sp,
-                                color = SlateGray
+                                color = palette.textSecondary
                             )
                         }
                         RadioButton(
                             selected = selected,
                             onClick = { onSelectLayout(layout) },
                             colors = RadioButtonDefaults.colors(
-                                selectedColor = CrimsonPrimary,
-                                unselectedColor = SlateGray
+                                selectedColor = palette.primary,
+                                unselectedColor = palette.textSecondary
                             )
                         )
                     }
@@ -644,66 +751,24 @@ private fun LockScreenLayoutSection(
 
 @Composable
 private fun FocusBehaviorSection(
-    dailyGoalMinutes: Long,
     showSessionTimer: Boolean,
     hapticKeypad: Boolean,
     autoClearWrongPin: Boolean,
     appSwitchGraceSeconds: Int,
-    onOpenGoalDialog: () -> Unit,
     onToggleSessionTimer: (Boolean) -> Unit,
     onToggleHapticKeypad: (Boolean) -> Unit,
     onToggleAutoClearWrongPin: (Boolean) -> Unit,
     onSelectGraceSeconds: (Int) -> Unit
 ) {
-    val pillShape = remember { RoundedCornerShape(50) }
+    val palette = LocalFocusTheme.current
     val chipShape = remember { RoundedCornerShape(10.dp) }
 
-    SettingsSection(title = "FOCUS & LOCK BEHAVIOR") {
+    ThemedSettingsSectionCard(title = "FOCUS & LOCK BEHAVIOR") {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(chipShape)
-                    .clickable(onClick = onOpenGoalDialog)
-                    .padding(vertical = 4.dp)
-                    .testTag("settings_daily_goal_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Daily Focus Goal",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontSize = 15.sp,
-                        color = PureWhite
-                    )
-                    Text(
-                        text = "Target study duration per day",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 12.sp,
-                        color = SlateGray
-                    )
-                }
-                Text(
-                    text = "${dailyGoalMinutes} min",
-                    fontFamily = JetBrainsMono,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PureWhite,
-                    modifier = Modifier
-                        .clip(pillShape)
-                        .background(CrimsonContainer, pillShape)
-                        .border(1.dp, CrimsonBorderTint, pillShape)
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-
-            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
-
-            SettingsSwitchRow(
+            ThemedSettingsSwitchRow(
                 title = "Live Session Timer",
                 subtitle = "Display elapsed focus time on the lock screen",
                 checked = showSessionTimer,
@@ -711,9 +776,9 @@ private fun FocusBehaviorSection(
                 testTag = "switch_session_timer"
             )
 
-            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+            ThemedDivider(palette = palette)
 
-            SettingsSwitchRow(
+            ThemedSettingsSwitchRow(
                 title = "Keypad Haptic Feedback",
                 subtitle = "Subtle tactile pulse when entering unlock PIN",
                 checked = hapticKeypad,
@@ -721,9 +786,9 @@ private fun FocusBehaviorSection(
                 testTag = "switch_haptic_keypad"
             )
 
-            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+            ThemedDivider(palette = palette)
 
-            SettingsSwitchRow(
+            ThemedSettingsSwitchRow(
                 title = "Auto-Clear Wrong PIN",
                 subtitle = "Reset digits automatically after an incorrect attempt",
                 checked = autoClearWrongPin,
@@ -731,7 +796,7 @@ private fun FocusBehaviorSection(
                 testTag = "switch_auto_clear_pin"
             )
 
-            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+            ThemedDivider(palette = palette)
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column {
@@ -739,13 +804,13 @@ private fun FocusBehaviorSection(
                         text = "App Launch Grace Period",
                         style = MaterialTheme.typography.titleMedium,
                         fontSize = 15.sp,
-                        color = PureWhite
+                        color = palette.textPrimary
                     )
                     Text(
                         text = "Delay before re-locking if you leave an allowed app",
                         style = MaterialTheme.typography.bodyMedium,
                         fontSize = 12.sp,
-                        color = SlateGray
+                        color = palette.textSecondary
                     )
                 }
                 Row(
@@ -760,12 +825,12 @@ private fun FocusBehaviorSection(
                                 .height(48.dp)
                                 .clip(chipShape)
                                 .background(
-                                    color = if (selected) CrimsonContainer else ObsidianElevated,
+                                    color = if (selected) palette.primaryContainer else palette.surfaceElevated,
                                     shape = chipShape
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = if (selected) CrimsonBorderTint else ObsidianBorder,
+                                    color = if (selected) palette.primaryBorderTint else palette.border,
                                     shape = chipShape
                                 )
                                 .clickable { onSelectGraceSeconds(sec) },
@@ -776,7 +841,7 @@ private fun FocusBehaviorSection(
                                 fontFamily = JetBrainsMono,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (selected) CrimsonPrimary else SlateGray
+                                color = if (selected) palette.primary else palette.textSecondary
                             )
                         }
                     }
@@ -793,12 +858,13 @@ private fun AppUpdatesSection(
     onCheckForUpdates: () -> Unit,
     onOpenUpdateSheet: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val view = LocalView.current
     val pillShape = remember { RoundedCornerShape(50) }
     val bannerShape = remember { RoundedCornerShape(12.dp) }
     val iconShape = remember { RoundedCornerShape(10.dp) }
 
-    SettingsSection(title = "APP UPDATES") {
+    ThemedSettingsSectionCard(title = "APP UPDATES") {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -817,14 +883,14 @@ private fun AppUpdatesSection(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(iconShape)
-                            .background(CrimsonContainer, iconShape)
-                            .border(1.dp, CrimsonBorderTint, iconShape),
+                            .background(palette.primaryContainer, iconShape)
+                            .border(1.dp, palette.primaryBorderTint, iconShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.SystemUpdate,
                             contentDescription = "Updates",
-                            tint = CrimsonPrimary,
+                            tint = palette.primary,
                             modifier = Modifier.size(19.dp)
                         )
                     }
@@ -833,13 +899,13 @@ private fun AppUpdatesSection(
                             text = "Focus Lock Releases",
                             style = MaterialTheme.typography.titleMedium,
                             fontSize = 15.sp,
-                            color = PureWhite
+                            color = palette.textPrimary
                         )
                         Text(
                             text = "Installed: v$installedVersion",
                             fontFamily = JetBrainsMono,
                             fontSize = 12.sp,
-                            color = SlateGray
+                            color = palette.textSecondary
                         )
                     }
                 }
@@ -849,10 +915,10 @@ private fun AppUpdatesSection(
                         Text(
                             text = "Latest",
                             style = MaterialTheme.typography.labelSmall,
-                            color = FocusEmerald,
+                            color = palette.success,
                             modifier = Modifier
                                 .clip(pillShape)
-                                .background(FocusEmerald.copy(alpha = 0.14f), pillShape)
+                                .background(palette.success.copy(alpha = 0.14f), pillShape)
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
@@ -862,11 +928,11 @@ private fun AppUpdatesSection(
                             fontFamily = JetBrainsMono,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = CrimsonPrimary,
+                            color = palette.primary,
                             modifier = Modifier
                                 .clip(pillShape)
-                                .background(CrimsonContainer, pillShape)
-                                .border(1.dp, CrimsonBorderTint, pillShape)
+                                .background(palette.primaryContainer, pillShape)
+                                .border(1.dp, palette.primaryBorderTint, pillShape)
                                 .clickable { onOpenUpdateSheet() }
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         )
@@ -881,8 +947,8 @@ private fun AppUpdatesSection(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(bannerShape)
-                            .background(FocusEmerald.copy(alpha = 0.10f), bannerShape)
-                            .border(1.dp, FocusEmerald.copy(alpha = 0.28f), bannerShape)
+                            .background(palette.success.copy(alpha = 0.10f), bannerShape)
+                            .border(1.dp, palette.success.copy(alpha = 0.28f), bannerShape)
                             .padding(horizontal = 12.dp, vertical = 10.dp)
                             .testTag("latest_version_banner"),
                         verticalAlignment = Alignment.CenterVertically,
@@ -891,7 +957,7 @@ private fun AppUpdatesSection(
                         Icon(
                             imageVector = Icons.Outlined.CheckCircle,
                             contentDescription = null,
-                            tint = FocusEmerald,
+                            tint = palette.success,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
@@ -899,7 +965,7 @@ private fun AppUpdatesSection(
                             style = MaterialTheme.typography.bodyMedium,
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = PureWhite
+                            color = palette.textPrimary
                         )
                     }
                 }
@@ -908,7 +974,7 @@ private fun AppUpdatesSection(
                         text = updateUiState.message,
                         style = MaterialTheme.typography.bodyMedium,
                         fontSize = 12.sp,
-                        color = CrimsonPrimary
+                        color = palette.primary
                     )
                 }
                 else -> Unit
@@ -931,10 +997,10 @@ private fun AppUpdatesSection(
                 interactionSource = btnInteraction,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ObsidianElevated,
-                    contentColor = PureWhite
+                    containerColor = palette.surfaceElevated,
+                    contentColor = palette.textPrimary
                 ),
-                border = BorderStroke(1.dp, CrimsonBorderTint),
+                border = BorderStroke(1.dp, palette.primaryBorderTint),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
@@ -948,7 +1014,7 @@ private fun AppUpdatesSection(
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = CrimsonPrimary
+                        color = palette.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Checking GitHub...", fontSize = 13.5.sp)
@@ -956,7 +1022,7 @@ private fun AppUpdatesSection(
                     Icon(
                         imageVector = Icons.Outlined.Refresh,
                         contentDescription = null,
-                        tint = CrimsonPrimary,
+                        tint = palette.primary,
                         modifier = Modifier.size(17.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -979,10 +1045,15 @@ private fun AppUpdatesSection(
 private fun PermissionsSection(
     hasOverlayPermission: Boolean,
     hasUsagePermission: Boolean,
+    hasNotificationAccess: Boolean,
+    hasAccessibilityGuard: Boolean,
     onOpenOverlaySettings: () -> Unit,
-    onOpenUsageSettings: () -> Unit
+    onOpenUsageSettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit
 ) {
-    SettingsSection(title = "PERMISSIONS") {
+    val palette = LocalFocusTheme.current
+    ThemedSettingsSectionCard(title = "PERMISSIONS") {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -992,11 +1063,23 @@ private fun PermissionsSection(
                 granted = hasOverlayPermission,
                 onClick = onOpenOverlaySettings
             )
-            HorizontalDivider(thickness = 0.5.dp, color = ObsidianBorder)
+            ThemedDivider(palette = palette)
             PermissionStatusRow(
                 title = "Usage Access Monitoring",
                 granted = hasUsagePermission,
                 onClick = onOpenUsageSettings
+            )
+            ThemedDivider(palette = palette)
+            PermissionStatusRow(
+                title = "Notification Listener Access",
+                granted = hasNotificationAccess,
+                onClick = onOpenNotificationSettings
+            )
+            ThemedDivider(palette = palette)
+            PermissionStatusRow(
+                title = "Accessibility Power Guard",
+                granted = hasAccessibilityGuard,
+                onClick = onOpenAccessibilitySettings
             )
         }
     }
@@ -1009,39 +1092,40 @@ private fun DailyGoalDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val view = LocalView.current
     val chipShape = remember { RoundedCornerShape(8.dp) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = ObsidianSurface,
-        titleContentColor = PureWhite,
-        textContentColor = SlateGray,
+        containerColor = palette.surface,
+        titleContentColor = palette.textPrimary,
+        textContentColor = palette.textSecondary,
         title = { Text("Daily Focus Goal", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = "Choose a preset or enter custom minutes:",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SlateGray
+                    color = palette.textSecondary
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf(30L, 60L, 90L, 120L).forEach { preset ->
+                    listOf(60L, 120L, 240L, 360L).forEach { preset ->
                         val isChosen = goalInputText == preset.toString()
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(chipShape)
                                 .background(
-                                    color = if (isChosen) CrimsonContainer else ObsidianElevated,
+                                    color = if (isChosen) palette.primaryContainer else palette.surfaceElevated,
                                     shape = chipShape
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = if (isChosen) CrimsonBorderTint else ObsidianBorder,
+                                    color = if (isChosen) palette.primaryBorderTint else palette.border,
                                     shape = chipShape
                                 )
                                 .clickable {
@@ -1052,11 +1136,11 @@ private fun DailyGoalDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "${preset}m",
+                                text = "${preset / 60}h",
                                 fontFamily = JetBrainsMono,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = PureWhite
+                                color = palette.textPrimary
                             )
                         }
                     }
@@ -1078,8 +1162,8 @@ private fun DailyGoalDialog(
             Button(
                 onClick = onSave,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = CrimsonPrimary,
-                    contentColor = PureWhite
+                    containerColor = palette.primary,
+                    contentColor = palette.onPrimary
                 )
             ) {
                 Text("Save")
@@ -1087,95 +1171,10 @@ private fun DailyGoalDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = SlateGray)
+                Text("Cancel", color = palette.textSecondary)
             }
         }
     )
-}
-
-@Composable
-private fun SettingsSection(
-    title: String,
-    modifier: Modifier = Modifier,
-    trailingAction: @Composable (() -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    val cardShape = remember { RoundedCornerShape(18.dp) }
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 1.2.sp,
-                color = SlateGray
-            )
-            trailingAction?.invoke()
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(cardShape)
-                .background(ObsidianSurface, cardShape)
-                .border(1.dp, ObsidianBorder, cardShape)
-        ) {
-            content()
-        }
-    }
-}
-
-@Composable
-private fun SettingsSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    testTag: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 12.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontSize = 15.sp,
-                color = PureWhite
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 12.sp,
-                color = SlateGray
-            )
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = PureWhite,
-                checkedTrackColor = CrimsonPrimary,
-                uncheckedThumbColor = SlateGray,
-                uncheckedTrackColor = ObsidianElevated,
-                uncheckedBorderColor = ObsidianBorder
-            ),
-            modifier = Modifier.testTag(testTag)
-        )
-    }
 }
 
 @Composable
@@ -1184,6 +1183,7 @@ private fun PermissionStatusRow(
     granted: Boolean,
     onClick: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val pillShape = remember { RoundedCornerShape(50) }
     Row(
         modifier = Modifier
@@ -1203,28 +1203,28 @@ private fun PermissionStatusRow(
                 imageVector = Icons.Outlined.VerifiedUser,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = if (granted) FocusEmerald else CrimsonPrimary
+                tint = if (granted) palette.success else palette.primary
             )
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontSize = 14.sp,
-                color = PureWhite
+                color = palette.textPrimary
             )
         }
         Text(
             text = if (granted) "Granted" else "Configure",
             style = MaterialTheme.typography.labelMedium,
             fontSize = 11.sp,
-            color = if (granted) FocusEmerald else CrimsonPrimary,
+            color = if (granted) palette.success else palette.primary,
             modifier = Modifier
                 .clip(pillShape)
                 .background(
-                    color = if (granted) FocusEmerald.copy(alpha = 0.14f) else CrimsonContainer,
+                    color = if (granted) palette.success.copy(alpha = 0.14f) else palette.primaryContainer,
                     shape = pillShape
                 )
                 .then(
-                    if (granted) Modifier else Modifier.border(1.dp, CrimsonBorderTint, pillShape)
+                    if (granted) Modifier else Modifier.border(1.dp, palette.primaryBorderTint, pillShape)
                 )
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         )
@@ -1237,6 +1237,7 @@ private fun AddAllowedAppDialog(
     onAddApp: (AllowedApp) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var installedApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
@@ -1267,9 +1268,9 @@ private fun AddAllowedAppDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = ObsidianSurface,
-        titleContentColor = PureWhite,
-        textContentColor = SlateGray,
+        containerColor = palette.surface,
+        titleContentColor = palette.textPrimary,
+        textContentColor = palette.textSecondary,
         title = {
             Text("Add Allowed App", fontWeight = FontWeight.Bold)
         },
@@ -1306,7 +1307,7 @@ private fun AddAllowedAppDialog(
                         CircularProgressIndicator(
                             modifier = Modifier.size(28.dp),
                             strokeWidth = 2.5.dp,
-                            color = CrimsonPrimary
+                            color = palette.primary
                         )
                     }
                 } else {
@@ -1319,7 +1320,7 @@ private fun AddAllowedAppDialog(
                                 Text(
                                     text = "BUILT-IN ESSENTIALS",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SlateGray,
+                                    color = palette.textSecondary,
                                     modifier = Modifier.padding(vertical = 4.dp)
                                 )
                             }
@@ -1339,8 +1340,8 @@ private fun AddAllowedAppDialog(
                                 ) {
                                     AllowedAppIconBadge(
                                         app = preset,
-                                        tint = CrimsonPrimary,
-                                        badgeBackground = CrimsonContainer,
+                                        tint = palette.primary,
+                                        badgeBackground = palette.primaryContainer,
                                         iconSize = 18.dp,
                                         containerSize = 34.dp,
                                         shape = CircleShape,
@@ -1351,19 +1352,19 @@ private fun AddAllowedAppDialog(
                                             text = preset.label,
                                             style = MaterialTheme.typography.titleMedium,
                                             fontSize = 14.sp,
-                                            color = PureWhite
+                                            color = palette.textPrimary
                                         )
                                         Text(
                                             text = "Quick essential preset",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontSize = 11.sp,
-                                            color = SlateGray
+                                            color = palette.textSecondary
                                         )
                                     }
                                     Icon(
                                         imageVector = Icons.Outlined.Add,
                                         contentDescription = "Add ${preset.label}",
-                                        tint = CrimsonPrimary,
+                                        tint = palette.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -1375,7 +1376,7 @@ private fun AddAllowedAppDialog(
                                 Text(
                                     text = "INSTALLED APPS",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SlateGray,
+                                    color = palette.textSecondary,
                                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                                 )
                             }
@@ -1403,8 +1404,8 @@ private fun AddAllowedAppDialog(
                                 ) {
                                     AllowedAppIconBadge(
                                         app = previewAllowedApp,
-                                        tint = CrimsonPrimary,
-                                        badgeBackground = ObsidianElevated,
+                                        tint = palette.primary,
+                                        badgeBackground = palette.surfaceElevated,
                                         iconSize = 18.dp,
                                         containerSize = 34.dp,
                                         shape = RoundedCornerShape(10.dp),
@@ -1415,7 +1416,7 @@ private fun AddAllowedAppDialog(
                                             text = info.label,
                                             style = MaterialTheme.typography.titleMedium,
                                             fontSize = 14.sp,
-                                            color = PureWhite,
+                                            color = palette.textPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1423,7 +1424,7 @@ private fun AddAllowedAppDialog(
                                             text = info.packageName,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontSize = 11.sp,
-                                            color = SlateGray,
+                                            color = palette.textSecondary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1431,7 +1432,7 @@ private fun AddAllowedAppDialog(
                                     Icon(
                                         imageVector = Icons.Outlined.Add,
                                         contentDescription = "Add ${info.label}",
-                                        tint = CrimsonPrimary,
+                                        tint = palette.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -1441,7 +1442,7 @@ private fun AddAllowedAppDialog(
                                 Text(
                                     text = "No matching apps available to add.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = SlateGray,
+                                    color = palette.textSecondary,
                                     modifier = Modifier.padding(vertical = 20.dp)
                                 )
                             }
@@ -1452,7 +1453,7 @@ private fun AddAllowedAppDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Done", color = CrimsonPrimary)
+                Text("Done", color = palette.primary)
             }
         }
     )

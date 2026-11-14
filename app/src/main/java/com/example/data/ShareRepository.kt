@@ -268,7 +268,8 @@ object ShareRepository {
     suspend fun createRangeShare(
         sessions: List<Session>,
         startDateMs: Long,
-        endDateMs: Long
+        endDateMs: Long,
+        xpState: FocusXpState? = null
     ): Result<ShareLinkResult> = withContext(Dispatchers.IO) {
         runCatching {
             val normalizedStart = startOfDayMs(startDateMs)
@@ -289,8 +290,11 @@ object ShareRepository {
                 put("dateLabel", formatDateRangeLabel(normalizedStart, normalizedEnd))
                 put("createdAt", now)
                 put("updatedAt", now)
-                put("stats", statsToJson(summary))
+                put("stats", statsToJson(summary, xpState))
                 put("dailyStats", dailyStatsToJson(dailyStats))
+                if (xpState != null) {
+                    put("rankProfile", rankProfileToJson(xpState))
+                }
                 put(
                     "activeSession",
                     JSONObject().apply {
@@ -349,6 +353,7 @@ object ShareRepository {
             val shareId = generateShareId()
             val now = System.currentTimeMillis()
             val activeStart = LockService.currentSessionStartTimeMs
+            val xpState = FocusXpRepository.getCurrent(context)
 
             val payload = JSONObject().apply {
                 put("id", shareId)
@@ -361,8 +366,9 @@ object ShareRepository {
                 put("dateLabel", formatDateRangeLabel(normalizedStart, null))
                 put("createdAt", now)
                 put("updatedAt", now)
-                put("stats", statsToJson(summary))
+                put("stats", statsToJson(summary, xpState))
                 put("dailyStats", dailyStatsToJson(dailyStats))
+                put("rankProfile", rankProfileToJson(xpState))
                 put(
                     "activeSession",
                     JSONObject().apply {
@@ -417,14 +423,16 @@ object ShareRepository {
                 "Stopped"
             }
 
+            val xpState = FocusXpRepository.getCurrent(context)
             val payload = JSONObject().apply {
                 put("status", "stopped")
                 put("endDateMs", now)
                 put("endDateKey", dateKeyForMs(now))
                 put("dateLabel", newDateLabel)
                 put("updatedAt", now)
+                put("rankProfile", rankProfileToJson(xpState))
                 if (startDateMs > 0L) {
-                    put("stats", statsToJson(finalStats))
+                    put("stats", statsToJson(finalStats, xpState))
                     put("dailyStats", dailyStatsToJson(finalDailyStats))
                 }
                 put(
@@ -566,11 +574,13 @@ object ShareRepository {
             val sessions = fetchAllSessions()
             val summary = computeStatsForRange(sessions, startMs, null)
             val dailyStats = computeDailyStatsForRange(sessions, startMs, null)
+            val xpState = FocusXpRepository.getCurrent(context)
 
             val payload = JSONObject().apply {
                 put("updatedAt", System.currentTimeMillis())
-                put("stats", statsToJson(summary))
+                put("stats", statsToJson(summary, xpState))
                 put("dailyStats", dailyStatsToJson(dailyStats))
+                put("rankProfile", rankProfileToJson(xpState))
                 put(
                     "activeSession",
                     JSONObject().apply {
@@ -586,11 +596,27 @@ object ShareRepository {
         }
     }
 
-    private fun statsToJson(stats: SharedStatsSummary): JSONObject = JSONObject().apply {
+    private fun statsToJson(
+        stats: SharedStatsSummary,
+        xpState: FocusXpState? = null
+    ): JSONObject = JSONObject().apply {
         put("totalFocusMs", stats.totalFocusMs)
         put("sessionCount", stats.sessionCount)
         put("averageMs", stats.averageMs)
         put("longestMs", stats.longestMs)
+        if (xpState != null) {
+            put("totalXp", xpState.totalXp)
+            put("rank", xpState.rank.title)
+            put("rankTier", xpState.rank.badgeCode)
+            put("currentStreak", xpState.currentStreak)
+        }
+    }
+
+    private fun rankProfileToJson(xpState: FocusXpState): JSONObject = JSONObject().apply {
+        put("totalXp", xpState.totalXp)
+        put("rank", xpState.rank.title)
+        put("rankBadge", xpState.rank.badgeCode)
+        put("currentStreak", xpState.currentStreak)
     }
 
     private fun dailyStatsToJson(daily: Map<String, SharedStatsSummary>): JSONObject = JSONObject().apply {

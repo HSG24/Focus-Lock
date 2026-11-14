@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -52,7 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -65,24 +65,22 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.LockService
 import com.example.MainActivity
 import com.example.data.FocusSettingsRepository
+import com.example.data.FocusXpRepository
 import com.example.ui.components.FocusLockEmblem
+import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemedTimerRing
 import com.example.ui.components.performKeyTapHaptic
 import com.example.ui.components.rememberSpringPressScale
-import com.example.ui.theme.CrimsonBorderTint
-import com.example.ui.theme.CrimsonDeep
-import com.example.ui.theme.CrimsonGlow
-import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.FocusEmerald
-import com.example.ui.theme.ObsidianBorder
-import com.example.ui.theme.ObsidianSurface
-import com.example.ui.theme.OledBlack
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SlateGray
+import com.example.ui.theme.JetBrainsMono
+import com.example.ui.theme.LocalFocusTheme
 import com.example.uploadPinToFirebase
+import com.example.widget.NothingFocusWidgetUpdater
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,8 +91,12 @@ fun FocusHomeScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val palette = LocalFocusTheme.current
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val settingsState by FocusSettingsRepository.observe(context).collectAsStateWithLifecycle()
+    val xpState by FocusXpRepository.observe(context).collectAsStateWithLifecycle()
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -121,42 +123,16 @@ fun FocusHomeScreen(
     }
 
     val permissionsReady = hasOverlayPermission && hasUsagePermission
-
-    val screenBackdropBrush = remember {
-        Brush.radialGradient(
-            colors = listOf(
-                CrimsonGlow.copy(alpha = 0.28f),
-                CrimsonDeep.copy(alpha = 0.06f),
-                OledBlack
-            )
-        )
-    }
-    val emblemAuraBrush = remember {
-        Brush.radialGradient(
-            colors = listOf(
-                CrimsonPrimary.copy(alpha = 0.20f),
-                CrimsonGlow.copy(alpha = 0.14f),
-                Color.Transparent
-            )
-        )
-    }
-    val ringBorderBrush = remember {
-        Brush.linearGradient(
-            colors = listOf(CrimsonBorderTint, ObsidianBorder)
-        )
-    }
+    val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
+    val goalProgress = (xpState.todayFocusMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
+    val goalMet = xpState.todayFocusMs >= goalMs
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(OledBlack)
+            .background(palette.background)
     ) {
-        // Subtle ambient crimson radial backdrop behind the hero centerpiece
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(screenBackdropBrush)
-        )
+        ThemeBackdropLayer(palette = palette)
 
         Box(
             modifier = Modifier
@@ -173,67 +149,92 @@ fun FocusHomeScreen(
                     .widthIn(max = 440.dp)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(22.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Hero Custom Geometric Focus Lock Emblem with Obsidian Ring
-                Box(
-                    modifier = Modifier.size(164.dp),
-                    contentAlignment = Alignment.Center
+                // Hero Emblem framed by the active Theme's Timer / Goal Progress Ring
+                ThemedTimerRing(
+                    progress = if (goalProgress > 0f) goalProgress else 0.12f,
+                    size = 180.dp,
+                    palette = palette
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(156.dp)
-                            .clip(CircleShape)
-                            .background(emblemAuraBrush)
-                    )
                     Box(
                         modifier = Modifier
                             .size(124.dp)
                             .clip(CircleShape)
-                            .background(ObsidianSurface)
-                            .border(
-                                width = 1.dp,
-                                brush = ringBorderBrush,
-                                shape = CircleShape
-                            ),
+                            .background(palette.surface)
+                            .border(1.dp, palette.primaryBorderTint, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         FocusLockEmblem(
-                            size = 92.dp,
+                            size = 86.dp,
                             showAmbientGlow = true
                         )
                     }
                 }
 
-                // Editorial Headline & Subtitle
+                // Editorial Headline & Subtitle styled with Theme Typography
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Deep Focus",
+                        text = if (palette.useTerminalBrackets) "[DEEP FOCUS]" else "Deep Focus",
                         style = MaterialTheme.typography.headlineMedium,
+                        fontFamily = palette.displayFont,
                         fontSize = 32.sp,
-                        color = PureWhite,
+                        color = palette.textPrimary,
                         textAlign = TextAlign.Center
                     )
                     Text(
                         text = "Silence distractions and keep only essential tools within reach.",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = SlateGray,
+                        color = palette.textSecondary,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                // Compact Rank, Focus XP & Daily Goal Status Pill
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = palette.surface,
+                    border = BorderStroke(1.dp, palette.border),
+                    modifier = Modifier.testTag("home_rank_xp_pill")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bolt,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = palette.primary
+                        )
+                        Text(
+                            text = "${xpState.rank.title.uppercase(Locale.US)} · ${xpState.totalXp} XP",
+                            fontFamily = palette.numeralFont,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = palette.textPrimary
+                        )
+                        Text(
+                            text = if (goalMet) "· SAFE" else "· ${(goalProgress * 100).toInt()}% GOAL",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (goalMet) palette.success else palette.primary
+                        )
+                    }
+                }
 
-                // Primary Spring-Animated Crimson CTA
+                // Primary Spring-Animated Theme CTA
                 if (isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(38.dp),
                         strokeWidth = 3.dp,
-                        color = CrimsonPrimary
+                        color = palette.primary
                     )
                 } else {
                     val ctaInteraction = remember { MutableInteractionSource() }
@@ -253,7 +254,7 @@ fun FocusHomeScreen(
                                 val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                                 context.startActivity(intent)
                             } else {
-                                val pin = String.format("%06d", Random.nextInt(1000000))
+                                val pin = String.format(Locale.US, "%06d", Random.nextInt(1000000))
                                 isLoading = true
                                 errorMessage = null
 
@@ -265,6 +266,7 @@ fun FocusHomeScreen(
                                             putExtra("PIN", pin)
                                         }
                                         context.startService(serviceIntent)
+                                        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
                                         (context as? ComponentActivity)?.moveTaskToBack(true)
                                     } else {
                                         errorMessage = "Could not sync unlock PIN. Check your internet connection."
@@ -283,28 +285,29 @@ fun FocusHomeScreen(
                             .testTag("start_focus_button"),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CrimsonPrimary,
-                            contentColor = PureWhite
+                            containerColor = palette.primary,
+                            contentColor = palette.onPrimary
                         ),
                         border = BorderStroke(
                             width = 1.dp,
-                            color = PureWhite.copy(alpha = 0.14f)
+                            color = palette.textPrimary.copy(alpha = 0.14f)
                         ),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                     ) {
                         Text(
                             text = if (permissionsReady) "Start Focus Mode" else "Grant Permission & Start",
+                            fontFamily = palette.displayFont,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                // Obsidian Permission Readiness Pill
+                // Permission Readiness Pill
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = ObsidianSurface,
-                    border = BorderStroke(1.dp, ObsidianBorder)
+                    color = palette.surface,
+                    border = BorderStroke(1.dp, palette.border)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -315,7 +318,7 @@ fun FocusHomeScreen(
                             imageVector = if (permissionsReady) Icons.Outlined.VerifiedUser else Icons.Outlined.WarningAmber,
                             contentDescription = null,
                             modifier = Modifier.size(15.dp),
-                            tint = if (permissionsReady) FocusEmerald else CrimsonPrimary
+                            tint = if (permissionsReady) palette.success else palette.primary
                         )
                         Text(
                             text = if (permissionsReady) {
@@ -325,7 +328,7 @@ fun FocusHomeScreen(
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             fontSize = 12.sp,
-                            color = SlateGray
+                            color = palette.textSecondary
                         )
                     }
                 }
@@ -333,7 +336,7 @@ fun FocusHomeScreen(
                 if (errorMessage != null) {
                     Text(
                         text = errorMessage!!,
-                        color = CrimsonPrimary,
+                        color = palette.primary,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -356,7 +359,8 @@ fun FocusHomeScreen(
                     Text(
                         text = "Focus Lock",
                         style = MaterialTheme.typography.titleLarge,
-                        color = PureWhite
+                        fontFamily = palette.displayFont,
+                        color = palette.textPrimary
                     )
                 }
             },
@@ -371,7 +375,7 @@ fun FocusHomeScreen(
                     Icon(
                         imageVector = Icons.Outlined.Share,
                         contentDescription = "Share Stats",
-                        tint = PureWhite
+                        tint = palette.textPrimary
                     )
                 }
                 Spacer(modifier = Modifier.width(4.dp))

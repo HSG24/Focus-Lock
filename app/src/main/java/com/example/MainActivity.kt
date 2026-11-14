@@ -2,6 +2,7 @@ package com.example
 
 import android.app.AppOpsManager
 import android.content.Context
+import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
@@ -49,10 +50,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.FocusSettingsRepository
+import com.example.data.FocusXpRepository
 import com.example.data.GitHubReleaseInfo
 import com.example.data.GitHubUpdater
+import com.example.data.NotificationBlockerRepository
 import com.example.data.UpdateCheckResult
 import com.example.data.UpdateUiState
+import com.example.ui.components.BlockedSummaryBottomSheet
 import com.example.ui.components.FloatingPillBottomBar
 import com.example.ui.components.PillNavTab
 import com.example.ui.components.UpdateBottomSheet
@@ -61,8 +65,10 @@ import com.example.ui.screens.FocusHomeScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.ShareScreen
 import com.example.ui.screens.StatsScreen
+import com.example.ui.theme.LocalFocusTheme
 import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.OledBlack
+import com.example.widget.NothingFocusWidgetUpdater
+import com.example.worker.DailyXpPenaltyWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -86,6 +92,10 @@ internal val sharedHttpClient: OkHttpClient by lazy {
 }
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_SHOW_UNLOCK_SUMMARY = "extra_show_unlock_summary"
+    }
+
     fun hasUsageStatsPermission(context: Context): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -147,6 +157,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_UNLOCK_SUMMARY, false)) {
+            intent.removeExtra(EXTRA_SHOW_UNLOCK_SUMMARY)
+            NotificationBlockerRepository.openLastSummarySheet(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -155,6 +174,12 @@ class MainActivity : ComponentActivity() {
         )
         configureHighRefreshRate()
 
+        DailyXpPenaltyWorker.scheduleMidnightCheck(this)
+        if (intent?.getBooleanExtra(EXTRA_SHOW_UNLOCK_SUMMARY, false) == true) {
+            intent?.removeExtra(EXTRA_SHOW_UNLOCK_SUMMARY)
+            NotificationBlockerRepository.openLastSummarySheet(this)
+        }
+
         setContent {
             val context = LocalContext.current
             val view = LocalView.current
@@ -162,6 +187,7 @@ class MainActivity : ComponentActivity() {
             val coroutineScope = rememberCoroutineScope()
 
             val settingsState by FocusSettingsRepository.observe(this).collectAsStateWithLifecycle()
+            val blockerState by NotificationBlockerRepository.observe(this).collectAsStateWithLifecycle()
             var showShare by remember { mutableStateOf(false) }
             var shareInitialDateMs by remember { mutableStateOf<Long?>(null) }
 
@@ -237,9 +263,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Silent background update check on launch
+            // Background startup: update check + XP/penalty audit for missed previous days
             LaunchedEffect(Unit) {
                 triggerUpdateCheck(silent = true)
+                coroutineScope.launch(Dispatchers.IO) {
+                    val remoteSessions = runCatching { fetchAllSessions() }.getOrDefault(emptyList())
+                    if (remoteSessions.isNotEmpty()) {
+                        FocusXpRepository.syncWithRemoteSessions(
+                            context = context,
+                            sessions = remoteSessions,
+                            dailyGoalMinutes = settingsState.dailyGoalMinutes
+                        )
+                    } else {
+                        FocusXpRepository.evaluateMissedDailyGoals(
+                            context = context,
+                            dailyGoalMinutes = settingsState.dailyGoalMinutes
+                        )
+                    }
+                    NothingFocusWidgetUpdater.updateAllWidgets(context)
+                }
             }
 
             // Pre-decode allowed app icons on Dispatchers.IO so Settings renders zero PackageManager calls
@@ -346,11 +388,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            MyApplicationTheme {
+            MyApplicationTheme(appTheme = settingsState.appTheme) {
+                val palette = LocalFocusTheme.current
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(OledBlack)
+                        .background(palette.background)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         HorizontalPager(
@@ -461,6 +504,18 @@ class MainActivity : ComponentActivity() {
                             },
                             onDismiss = {
                                 showUpdateSheet = false
+                            }
+                        )
+                    }
+
+                    if (blockerState.showSummarySheet) {
+                        BlockedSummaryBottomSheet(
+                            blockerState = blockerState,
+                            onClearLog = {
+                                NotificationBlockerRepository.clearSummaryLog(context)
+                            },
+                            onDismiss = {
+                                NotificationBlockerRepository.dismissSummarySheet(context)
                             }
                         )
                     }

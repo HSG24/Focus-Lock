@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Focus Lock</string>
+    <string name="widget_description">Nothing-inspired 2x2 Focus Lock widget with dotted progress ring, study hours, XP rank, and one-tap lock.</string>
+    <string name="accessibility_power_blocker_desc">Blocks the system power and restart menu while a Focus Lock session is active so timers cannot be bypassed.</string>
+    <string name="accessibility_power_blocker_label">Focus Lock Power Guard</string>
+    <string name="notification_blocker_label">Focus Lock Notification Shield</string>
 </resources>

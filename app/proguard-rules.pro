@@ -15,6 +15,12 @@
 -keep class com.example.LockService { *; }
 -keep class com.example.data.** { *; }
 -keepclassmembers class com.example.data.** { *; }
+-keep class com.example.widget.** { *; }
+-keep class com.example.service.** { *; }
+-keep class com.example.worker.** { *; }
+-keep class * implements androidx.glance.appwidget.action.ActionCallback {
+    public <init>();
+}
 
 # Preserve Kotlin reflection/metadata if used by serialization/Moshi
 -keep class kotlin.Metadata { *; }

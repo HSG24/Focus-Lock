@@ -60,16 +60,8 @@ import com.example.BuildConfig
 import com.example.data.GitHubReleaseInfo
 import com.example.data.GitHubUpdater
 import com.example.data.UpdateUiState
-import com.example.ui.theme.CrimsonBorderTint
-import com.example.ui.theme.CrimsonContainer
-import com.example.ui.theme.CrimsonDeep
-import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.JetBrainsMono
-import com.example.ui.theme.ObsidianBorder
-import com.example.ui.theme.ObsidianElevated
-import com.example.ui.theme.ObsidianSurface
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SlateGray
+import com.example.ui.theme.LocalFocusTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +74,7 @@ fun UpdateBottomSheet(
     onInstallDownloaded: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val view = LocalView.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isDownloading = updateState is UpdateUiState.Downloading
@@ -91,8 +84,8 @@ fun UpdateBottomSheet(
             if (!isDownloading) onDismiss()
         },
         sheetState = sheetState,
-        containerColor = ObsidianSurface,
-        contentColor = PureWhite,
+        containerColor = palette.surface,
+        contentColor = palette.textPrimary,
         scrimColor = Color.Black.copy(alpha = 0.78f),
         dragHandle = {
             Box(
@@ -101,7 +94,7 @@ fun UpdateBottomSheet(
                     .width(42.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(ObsidianBorder)
+                    .background(palette.borderHighlight)
             )
         },
         shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
@@ -114,7 +107,7 @@ fun UpdateBottomSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header with Crimson Badge
+            // Header with themed Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -126,16 +119,16 @@ fun UpdateBottomSheet(
                         .clip(RoundedCornerShape(14.dp))
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(CrimsonPrimary.copy(alpha = 0.24f), CrimsonContainer)
+                                colors = listOf(palette.primary.copy(alpha = 0.24f), palette.primaryContainer)
                             )
                         )
-                        .border(1.dp, CrimsonBorderTint, RoundedCornerShape(14.dp)),
+                        .border(1.dp, palette.primaryBorderTint, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.NewReleases,
                         contentDescription = "Update Available",
-                        tint = CrimsonPrimary,
+                        tint = palette.primary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -147,7 +140,7 @@ fun UpdateBottomSheet(
                     Text(
                         text = "Update Available",
                         style = MaterialTheme.typography.titleLarge,
-                        color = PureWhite
+                        color = palette.textPrimary
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -157,25 +150,25 @@ fun UpdateBottomSheet(
                             text = "v$installedVersion",
                             fontFamily = JetBrainsMono,
                             fontSize = 12.sp,
-                            color = SlateGray
+                            color = palette.textSecondary
                         )
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
-                            tint = CrimsonPrimary,
+                            tint = palette.primary,
                             modifier = Modifier.size(12.dp)
                         )
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color = CrimsonContainer,
-                            border = BorderStroke(1.dp, CrimsonBorderTint)
+                            color = palette.primaryContainer,
+                            border = BorderStroke(1.dp, palette.primaryBorderTint)
                         ) {
                             Text(
                                 text = release.tagName,
                                 fontFamily = JetBrainsMono,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = CrimsonPrimary,
+                                color = palette.primary,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
@@ -184,7 +177,7 @@ fun UpdateBottomSheet(
                                 text = "· ${GitHubUpdater.formatBytesReadable(release.apkSizeBytes)}",
                                 fontFamily = JetBrainsMono,
                                 fontSize = 11.5.sp,
-                                color = SlateGray
+                                color = palette.textSecondary
                             )
                         }
                     }
@@ -194,8 +187,8 @@ fun UpdateBottomSheet(
             // Release Notes Card
             Surface(
                 shape = RoundedCornerShape(18.dp),
-                color = ObsidianElevated,
-                border = BorderStroke(1.dp, ObsidianBorder),
+                color = palette.surfaceElevated,
+                border = BorderStroke(1.dp, palette.border),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -208,7 +201,7 @@ fun UpdateBottomSheet(
                         text = "RELEASE NOTES",
                         style = MaterialTheme.typography.labelSmall,
                         letterSpacing = 1.2.sp,
-                        color = SlateGray
+                        color = palette.textSecondary
                     )
                     Box(
                         modifier = Modifier
@@ -219,7 +212,7 @@ fun UpdateBottomSheet(
                         Text(
                             text = release.releaseNotes,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = PureWhite.copy(alpha = 0.9f),
+                            color = palette.textPrimary.copy(alpha = 0.9f),
                             lineHeight = 20.sp
                         )
                     }
@@ -231,8 +224,8 @@ fun UpdateBottomSheet(
                 is UpdateUiState.NeedsInstallPermission -> {
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = CrimsonContainer.copy(alpha = 0.7f),
-                        border = BorderStroke(1.dp, CrimsonBorderTint),
+                        color = palette.primaryContainer.copy(alpha = 0.7f),
+                        border = BorderStroke(1.dp, palette.primaryBorderTint),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -243,13 +236,13 @@ fun UpdateBottomSheet(
                             Icon(
                                 imageVector = Icons.Outlined.Security,
                                 contentDescription = null,
-                                tint = CrimsonPrimary,
+                                tint = palette.primary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Text(
                                 text = "Allow Focus Lock to install app updates in Android Settings to continue.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = PureWhite
+                                color = palette.textPrimary
                             )
                         }
                     }
@@ -265,9 +258,9 @@ fun UpdateBottomSheet(
                         label = "apk_download_progress"
                     )
                     val pct = (animatedProgress * 100).toInt()
-                    val barBrush = remember {
+                    val barBrush = remember(palette) {
                         Brush.horizontalGradient(
-                            colors = listOf(CrimsonDeep, CrimsonPrimary)
+                            colors = listOf(palette.primaryDeep, palette.primary)
                         )
                     }
                     Column(
@@ -282,7 +275,7 @@ fun UpdateBottomSheet(
                             Text(
                                 text = "Downloading ${release.apkFileName}...",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = PureWhite
+                                color = palette.textPrimary
                             )
                             Text(
                                 text = if (updateState.totalBytes > 0L) {
@@ -293,7 +286,7 @@ fun UpdateBottomSheet(
                                 fontFamily = JetBrainsMono,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = CrimsonPrimary
+                                color = palette.primary
                             )
                         }
                         Box(
@@ -301,8 +294,8 @@ fun UpdateBottomSheet(
                                 .fillMaxWidth()
                                 .height(8.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(ObsidianElevated)
-                                .border(0.5.dp, ObsidianBorder, RoundedCornerShape(4.dp))
+                                .background(palette.surfaceElevated)
+                                .border(0.5.dp, palette.border, RoundedCornerShape(4.dp))
                         ) {
                             Box(
                                 modifier = Modifier
@@ -322,14 +315,14 @@ fun UpdateBottomSheet(
                 is UpdateUiState.Error -> {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = CrimsonContainer,
-                        border = BorderStroke(1.dp, CrimsonBorderTint),
+                        color = palette.primaryContainer,
+                        border = BorderStroke(1.dp, palette.primaryBorderTint),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = updateState.message,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = CrimsonPrimary,
+                            color = palette.primary,
                             modifier = Modifier.padding(12.dp)
                         )
                     }
@@ -352,8 +345,8 @@ fun UpdateBottomSheet(
                         interactionSource = ctaInteraction,
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CrimsonPrimary,
-                            contentColor = PureWhite
+                            containerColor = palette.primary,
+                            contentColor = palette.onPrimary
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -387,8 +380,8 @@ fun UpdateBottomSheet(
                         interactionSource = ctaInteraction,
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CrimsonPrimary,
-                            contentColor = PureWhite
+                            containerColor = palette.primary,
+                            contentColor = palette.onPrimary
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -418,14 +411,14 @@ fun UpdateBottomSheet(
                         onClick = {},
                         enabled = false,
                         shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, ObsidianBorder),
+                        border = BorderStroke(1.dp, palette.border),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
                     ) {
                         Text(
                             text = "Downloading Release...",
-                            color = SlateGray,
+                            color = palette.textSecondary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -440,8 +433,8 @@ fun UpdateBottomSheet(
                         interactionSource = ctaInteraction,
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CrimsonPrimary,
-                            contentColor = PureWhite
+                            containerColor = palette.primary,
+                            contentColor = palette.onPrimary
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -482,7 +475,7 @@ fun UpdateBottomSheet(
                         text = "Later",
                         style = MaterialTheme.typography.labelMedium,
                         fontSize = 14.sp,
-                        color = SlateGray
+                        color = palette.textSecondary
                     )
                 }
             }

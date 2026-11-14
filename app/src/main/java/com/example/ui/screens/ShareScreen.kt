@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.Session
 import com.example.data.FocusSettingsState
+import com.example.data.FocusXpRepository
 import com.example.data.RangePreset
 import com.example.data.ShareLinkResult
 import com.example.data.ShareMode
@@ -102,13 +103,8 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.ui.platform.LocalView
 import com.example.ui.components.performKeyTapHaptic
-import com.example.ui.theme.CrimsonContainer
-import com.example.ui.theme.CrimsonPrimary
-import com.example.ui.theme.FocusEmerald
 import com.example.ui.theme.JetBrainsMono
-import com.example.ui.theme.ObsidianSurface
-import com.example.ui.theme.PureWhite
-import com.example.ui.theme.SlateGray
+import com.example.ui.theme.LocalFocusTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -129,6 +125,7 @@ fun ShareScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val palette = LocalFocusTheme.current
     val coroutineScope = rememberCoroutineScope()
 
     var currentStep by remember { mutableStateOf(ShareStep.CHOOSE_MODE) }
@@ -378,10 +375,10 @@ fun ShareScreen(
                             title = "Live Share",
                             subtitle = "Updates automatically every time a new session starts and ends until you stop sharing.",
                             badgeText = "REAL-TIME",
-                            badgeColor = FocusEmerald,
+                            badgeColor = palette.success,
                             icon = Icons.Outlined.Sensors,
-                            iconTint = FocusEmerald,
-                            iconBg = FocusEmerald.copy(alpha = 0.12f),
+                            iconTint = palette.success,
+                            iconBg = palette.success.copy(alpha = 0.12f),
                             testTag = "share_mode_live_card",
                             onClick = {
                                 selectedMode = ShareMode.LIVE
@@ -553,7 +550,8 @@ fun ShareScreen(
                                         ShareRepository.createRangeShare(
                                             sessions = latestSessions,
                                             startDateMs = rangeStartDateMs,
-                                            endDateMs = rangeEndDateMs
+                                            endDateMs = rangeEndDateMs,
+                                            xpState = FocusXpRepository.getCurrent(context)
                                         )
                                     }
                                     isCreatingLink = false
@@ -683,15 +681,15 @@ fun ShareScreen(
     if (pendingDelete != null) {
         AlertDialog(
             onDismissRequest = { linkPendingDelete = null },
-            containerColor = ObsidianSurface,
-            titleContentColor = PureWhite,
-            textContentColor = SlateGray,
+            containerColor = palette.surface,
+            titleContentColor = palette.textPrimary,
+            textContentColor = palette.textSecondary,
             title = { Text("Delete Share Link?", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     text = "This permanently removes the link so anyone opening it will no longer be able to view these stats.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = SlateGray
+                    color = palette.textSecondary
                 )
             },
             confirmButton = {
@@ -713,8 +711,8 @@ fun ShareScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = CrimsonPrimary,
-                        contentColor = PureWhite
+                        containerColor = palette.primary,
+                        contentColor = palette.onPrimary
                     )
                 ) {
                     Text("Delete")
@@ -722,7 +720,7 @@ fun ShareScreen(
             },
             dismissButton = {
                 TextButton(onClick = { linkPendingDelete = null }) {
-                    Text("Cancel", color = SlateGray)
+                    Text("Cancel", color = palette.textSecondary)
                 }
             }
         )
@@ -748,7 +746,7 @@ fun ShareScreen(
         )
         DatePickerDialog(
             onDismissRequest = { showLiveStartPicker = false },
-            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
+            colors = DatePickerDefaults.colors(containerColor = palette.surface),
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -760,18 +758,18 @@ fun ShareScreen(
                         showLiveStartPicker = false
                     }
                 ) {
-                    Text("Select", color = CrimsonPrimary)
+                    Text("Select", color = palette.primary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLiveStartPicker = false }) {
-                    Text("Cancel", color = SlateGray)
+                    Text("Cancel", color = palette.textSecondary)
                 }
             }
         ) {
             DatePicker(
                 state = datePickerState,
-                colors = DatePickerDefaults.colors(containerColor = ObsidianSurface)
+                colors = DatePickerDefaults.colors(containerColor = palette.surface)
             )
         }
     }
@@ -793,7 +791,7 @@ fun ShareScreen(
             onDismissRequest = {
                 showRangeStartPicker = false
             },
-            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
+            colors = DatePickerDefaults.colors(containerColor = palette.surface),
             confirmButton = {
                 TextButton(
                     enabled = startPickerState.selectedDateMillis != null,
@@ -809,7 +807,7 @@ fun ShareScreen(
                         showRangeStartPicker = false
                     }
                 ) {
-                    Text("Select", color = CrimsonPrimary)
+                    Text("Select", color = palette.primary)
                 }
             },
             dismissButton = {
@@ -818,13 +816,13 @@ fun ShareScreen(
                         showRangeStartPicker = false
                     }
                 ) {
-                    Text("Cancel", color = SlateGray)
+                    Text("Cancel", color = palette.textSecondary)
                 }
             }
         ) {
             DatePicker(
                 state = startPickerState,
-                colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
+                colors = DatePickerDefaults.colors(containerColor = palette.surface),
                 title = {
                     Text(
                         text = "Select Start Date",
@@ -853,7 +851,7 @@ fun ShareScreen(
         )
         DatePickerDialog(
             onDismissRequest = { showRangeEndPicker = false },
-            colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
+            colors = DatePickerDefaults.colors(containerColor = palette.surface),
             confirmButton = {
                 TextButton(
                     enabled = endPickerState.selectedDateMillis != null,
@@ -866,18 +864,18 @@ fun ShareScreen(
                         showRangeEndPicker = false
                     }
                 ) {
-                    Text("Select", color = CrimsonPrimary)
+                    Text("Select", color = palette.primary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRangeEndPicker = false }) {
-                    Text("Cancel", color = SlateGray)
+                    Text("Cancel", color = palette.textSecondary)
                 }
             }
         ) {
             DatePicker(
                 state = endPickerState,
-                colors = DatePickerDefaults.colors(containerColor = ObsidianSurface),
+                colors = DatePickerDefaults.colors(containerColor = palette.surface),
                 title = {
                     Text(
                         text = "Select End Date",
@@ -900,10 +898,11 @@ private fun ActiveLiveShareCard(
     onOpen: () -> Unit,
     onStop: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, FocusEmerald.copy(alpha = 0.45f)),
+        border = BorderStroke(1.dp, palette.success.copy(alpha = 0.45f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -923,14 +922,14 @@ private fun ActiveLiveShareCard(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(FocusEmerald)
+                            .background(palette.success)
                     )
                     Text(
                         text = "LIVE SHARE ACTIVE",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.1.sp,
-                        color = FocusEmerald
+                        color = palette.success
                     )
                 }
                 if (startDateMs > 0L) {
@@ -968,8 +967,8 @@ private fun ActiveLiveShareCard(
                     onClick = onCopy,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isCopied) FocusEmerald else MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White
+                        containerColor = if (isCopied) palette.success else MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
@@ -1370,7 +1369,7 @@ private fun StatsPreviewCard(
                     text = if (isLive) "PREVIEW · LIVE" else "PREVIEW · SNAPSHOT",
                     style = MaterialTheme.typography.labelSmall,
                     letterSpacing = 1.1.sp,
-                    color = if (isLive) FocusEmerald else MaterialTheme.colorScheme.primary
+                    color = if (isLive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = subtitle,
@@ -1479,6 +1478,7 @@ private fun LinkReadySection(
     onStopLiveSharing: () -> Unit,
     onDone: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val isLiveActive = result.mode == ShareMode.LIVE && !isStopped
 
     Column(
@@ -1506,7 +1506,7 @@ private fun LinkReadySection(
                     Surface(
                         shape = RoundedCornerShape(50),
                         color = when {
-                            isLiveActive -> FocusEmerald.copy(alpha = 0.14f)
+                            isLiveActive -> palette.success.copy(alpha = 0.14f)
                             result.mode == ShareMode.LIVE -> MaterialTheme.colorScheme.surfaceVariant
                             else -> MaterialTheme.colorScheme.primaryContainer
                         }
@@ -1521,7 +1521,7 @@ private fun LinkReadySection(
                                     modifier = Modifier
                                         .size(7.dp)
                                         .clip(CircleShape)
-                                        .background(FocusEmerald)
+                                        .background(palette.success)
                                 )
                             }
                             Text(
@@ -1533,7 +1533,7 @@ private fun LinkReadySection(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = when {
-                                    isLiveActive -> FocusEmerald
+                                    isLiveActive -> palette.success
                                     result.mode == ShareMode.LIVE -> MaterialTheme.colorScheme.onSurfaceVariant
                                     else -> MaterialTheme.colorScheme.onPrimaryContainer
                                 }
@@ -1623,8 +1623,8 @@ private fun LinkReadySection(
                     onClick = onCopyLink,
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isCopied) FocusEmerald else MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White
+                        containerColor = if (isCopied) palette.success else MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                     modifier = Modifier
@@ -1773,6 +1773,7 @@ private fun YourLinksSection(
         }
     }
 
+    val palette = LocalFocusTheme.current
     val view = LocalView.current
 
     LazyColumn(
@@ -1932,8 +1933,8 @@ private fun YourLinksSection(
                                     .clip(RoundedCornerShape(20.dp))
                                     .background(
                                         when {
-                                            isCopy -> FocusEmerald.copy(alpha = 0.18f)
-                                            isDelete -> CrimsonContainer
+                                            isCopy -> palette.success.copy(alpha = 0.18f)
+                                            isDelete -> palette.primaryContainer
                                             else -> Color.Transparent
                                         }
                                     )
@@ -1948,12 +1949,12 @@ private fun YourLinksSection(
                                         Icon(
                                             imageVector = Icons.Outlined.ContentCopy,
                                             contentDescription = "Copy Link",
-                                            tint = FocusEmerald
+                                            tint = palette.success
                                         )
                                         Text(
                                             text = "Copy Link",
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = FocusEmerald
+                                            color = palette.success
                                         )
                                     }
                                 } else if (isDelete) {
@@ -1964,12 +1965,12 @@ private fun YourLinksSection(
                                         Text(
                                             text = "Delete",
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = CrimsonPrimary
+                                            color = palette.primary
                                         )
                                         Icon(
                                             imageVector = Icons.Outlined.DeleteOutline,
                                             contentDescription = "Delete Link",
-                                            tint = CrimsonPrimary
+                                            tint = palette.primary
                                         )
                                     }
                                 }
@@ -2006,6 +2007,7 @@ private fun SharedLinkItemCard(
     onDisableLive: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val palette = LocalFocusTheme.current
     val isLiveActive = item.mode == ShareMode.LIVE && item.status == "active"
     val isLiveStopped = item.mode == ShareMode.LIVE && item.status == "stopped"
 
@@ -2014,7 +2016,7 @@ private fun SharedLinkItemCard(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(
             width = 1.dp,
-            color = if (isLiveActive) FocusEmerald.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
+            color = if (isLiveActive) palette.success.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -2032,7 +2034,7 @@ private fun SharedLinkItemCard(
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = when {
-                        isLiveActive -> FocusEmerald.copy(alpha = 0.14f)
+                        isLiveActive -> palette.success.copy(alpha = 0.14f)
                         isLiveStopped -> MaterialTheme.colorScheme.surfaceVariant
                         else -> MaterialTheme.colorScheme.primaryContainer
                     }
@@ -2047,7 +2049,7 @@ private fun SharedLinkItemCard(
                                 modifier = Modifier
                                     .size(7.dp)
                                     .clip(CircleShape)
-                                    .background(FocusEmerald)
+                                    .background(palette.success)
                             )
                         }
                         Text(
@@ -2060,7 +2062,7 @@ private fun SharedLinkItemCard(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = when {
-                                isLiveActive -> FocusEmerald
+                                isLiveActive -> palette.success
                                 isLiveStopped -> MaterialTheme.colorScheme.onSurfaceVariant
                                 else -> MaterialTheme.colorScheme.onPrimaryContainer
                             }
@@ -2169,8 +2171,8 @@ private fun SharedLinkItemCard(
                     enabled = !isBusy,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isCopied) FocusEmerald else MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White
+                        containerColor = if (isCopied) palette.success else MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),

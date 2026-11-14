@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
 import com.example.data.LockAppLayout
+import com.example.ui.theme.FocusThemePalette
+import com.example.ui.theme.LocalFocusTheme
 
 @Immutable
 data class LockPalette(
@@ -67,17 +69,28 @@ data class LockPalette(
     companion object {
         val StealthDark = LockPalette(
             background = Color(0xFF000000),
-            surface = Color(0xFF0D0D0F),
-            surfaceElevated = Color(0xFF141418),
-            border = Color(0xFF222228),
+            surface = Color(0xFF141416),
+            surfaceElevated = Color(0xFF1B1B1D),
+            border = Color(0xFF28282C),
             primaryText = Color(0xFFFFFFFF),
-            secondaryText = Color(0xFF8E8E98),
+            secondaryText = Color(0xFF9A9AA3),
             accent = Color(0xFFFF1E27),
             accentContent = Color(0xFFFFFFFF)
         )
 
+        fun fromFocusTheme(theme: FocusThemePalette): LockPalette = LockPalette(
+            background = theme.background,
+            surface = theme.surface,
+            surfaceElevated = theme.surfaceElevated,
+            border = theme.border,
+            primaryText = theme.textPrimary,
+            secondaryText = theme.textSecondary,
+            accent = theme.primary,
+            accentContent = theme.onPrimary
+        )
+
         @Composable
-        fun fromMaterialTheme(): LockPalette = StealthDark
+        fun fromMaterialTheme(): LockPalette = fromFocusTheme(LocalFocusTheme.current)
     }
 }
 
