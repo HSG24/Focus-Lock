@@ -30,12 +30,32 @@ data class WhatsNewRelease(
  * written in simple, everyday language.
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 2
+    const val CURRENT_RELEASE_ID = 3
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 2,
+            releaseId = 3,
             versionLabel = "Latest Update",
+            headline = "Movable Lock Button & Smarter Notifications",
+            summary = "Move your Back to Lock button wherever you want and enjoy a cleaner, expandable notification summary.",
+            items = listOf(
+                WhatsNewItem(
+                    title = "Movable Back to Lock Button",
+                    description = "When you open an allowed app while locked, you can now drag the Back to Lock button anywhere on the screen so it never blocks what you're doing."
+                ),
+                WhatsNewItem(
+                    title = "No More Repeated Notifications",
+                    description = "Fixed an issue where the same notification could appear 20+ times in your post-focus summary. Duplicate alerts from the same app are now combined cleanly."
+                ),
+                WhatsNewItem(
+                    title = "Expand & Collapse More Notifications",
+                    description = "Tap '+N more notifications' on any app in your summary to view every missed alert, then tap 'Show less' to collapse it back down."
+                )
+            )
+        ),
+        WhatsNewRelease(
+            releaseId = 2,
+            versionLabel = "Previous Update",
             headline = "Cleaner Charts, Custom Pills & What's New",
             summary = "Easier-to-read focus graphs, smarter chart scaling, and adjustable lock screen buttons.",
             items = listOf(

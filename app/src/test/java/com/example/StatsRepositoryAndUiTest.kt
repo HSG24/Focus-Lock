@@ -403,6 +403,16 @@ class StatsRepositoryAndUiTest {
                 currentReleaseId = 2
             )
         )
+
+        // Bumping releaseId from 2 to 3 on same version also triggers What's New
+        assertTrue(
+            FocusWhatsNewRepository.shouldShowAutoWhatsNew(
+                context = context,
+                installedVersionName = "1.0.5",
+                installedVersionCode = 5L,
+                currentReleaseId = 3
+            )
+        )
     }
 
     @Test
@@ -426,14 +436,60 @@ class StatsRepositoryAndUiTest {
 
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertIsDisplayed()
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
-        composeRule.onNodeWithText("Only Real Progress Up to Today").assertIsDisplayed()
+        composeRule.onNodeWithText("Movable Back to Lock Button").assertIsDisplayed()
 
         composeRule.onNodeWithTag("whats_new_previous_toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("4 Visual Themes").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Only Real Progress Up to Today").performScrollTo().assertIsDisplayed()
 
         composeRule.onNodeWithTag("whats_new_got_it_button").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertDoesNotExist()
+    }
+
+    @Test
+    fun blockedSummaryBottomSheet_expandsAndCollapsesExtraNotifications() {
+        val baseTime = 1_700_000_000_000L
+        com.example.data.NotificationBlockerRepository.startFreshSession(context)
+        // Log 6 distinct notifications for WhatsApp (newest 4 shown by default, 2 hidden)
+        for (i in 1..6) {
+            com.example.data.NotificationBlockerRepository.recordBlockedNotification(
+                context = context,
+                packageName = "com.whatsapp",
+                appLabel = "WhatsApp",
+                title = "Sender $i",
+                snippet = "Unique message #$i",
+                timestampMs = baseTime + i * 1000L
+            )
+        }
+        assertTrue(com.example.data.NotificationBlockerRepository.finalizeSessionOnUnlock(context))
+        val blockerState = com.example.data.NotificationBlockerRepository.getCurrent(context)
+
+        composeRule.setContent {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+                com.example.ui.components.BlockedSummaryBottomSheet(
+                    blockerState = blockerState,
+                    onDoneClearLog = {},
+                    onDismiss = {}
+                )
+            }
+        }
+
+        // Top 4 (Sender 6..3) are visible; Sender 1 & 2 are collapsed under "+2 more notifications"
+        composeRule.onNodeWithText("Sender 6").assertIsDisplayed()
+        composeRule.onNodeWithText("Sender 1").assertDoesNotExist()
+        composeRule.onNodeWithText("+2 more notifications").assertIsDisplayed()
+
+        // Expand
+        composeRule.onNodeWithTag("expand_notifications_toggle_com.whatsapp").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Sender 1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Show less").assertIsDisplayed()
+
+        // Collapse (reduce back down)
+        composeRule.onNodeWithTag("expand_notifications_toggle_com.whatsapp").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Sender 1").assertDoesNotExist()
+        composeRule.onNodeWithText("+2 more notifications").assertIsDisplayed()
     }
 }

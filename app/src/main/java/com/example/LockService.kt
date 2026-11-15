@@ -13,10 +13,14 @@ import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.IBinder
+import android.util.DisplayMetrics
 import android.view.Display
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.widget.FrameLayout
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,12 +37,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,10 +69,13 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.hypot
+import kotlin.math.roundToInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -107,8 +116,28 @@ import java.util.Locale
 class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     companion object {
+        private const val OVERLAY_PREFS = "focus_lock_overlay_prefs"
+        private const val KEY_BUBBLE_X = "floating_bubble_x"
+        private const val KEY_BUBBLE_Y = "floating_bubble_y"
+
         @Volatile
         var currentSessionStartTimeMs: Long = 0L
+
+        fun clampBubblePosition(
+            x: Int,
+            y: Int,
+            viewWidth: Int,
+            viewHeight: Int,
+            screenWidth: Int,
+            screenHeight: Int,
+            marginPx: Int
+        ): Pair<Int, Int> {
+            val safeW = viewWidth.coerceAtLeast(1)
+            val safeH = viewHeight.coerceAtLeast(1)
+            val maxX = (screenWidth - safeW - marginPx).coerceAtLeast(marginPx)
+            val maxY = (screenHeight - safeH - marginPx).coerceAtLeast(marginPx)
+            return x.coerceIn(marginPx, maxX) to y.coerceIn(marginPx, maxY)
+        }
     }
 
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -121,7 +150,11 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         get() = lifecycleRegistry
 
     private var windowManager: WindowManager? = null
+    private var overlayContainer: DraggableOverlayContainer? = null
     private var composeView: ComposeView? = null
+    private var currentMinimizedParams: WindowManager.LayoutParams? = null
+    private var bubbleX: Int = -1
+    private var bubbleY: Int = -1
     private var targetPin: String = ""
     private var startTime: Long = 0
 
@@ -398,11 +431,64 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
+    private fun getScreenBounds(): Pair<Int, Int> {
+        val wm = windowManager ?: return 1080 to 2400
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = wm.currentWindowMetrics.bounds
+            bounds.width().coerceAtLeast(1) to bounds.height().coerceAtLeast(1)
+        } else {
+            val dm = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay?.getRealMetrics(dm)
+            (dm.widthPixels.takeIf { it > 0 } ?: 1080) to (dm.heightPixels.takeIf { it > 0 } ?: 2400)
+        }
+    }
+
+    private fun loadOrInitBubblePosition(): Pair<Int, Int> {
+        val (screenW, screenH) = getScreenBounds()
+        val density = resources.displayMetrics.density
+        val marginPx = (12 * density).roundToInt()
+        val estimatedW = (180 * density).roundToInt()
+        val estimatedH = (56 * density).roundToInt()
+
+        if (bubbleX < 0 || bubbleY < 0) {
+            val prefs = getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
+            bubbleX = prefs.getInt(KEY_BUBBLE_X, -1)
+            bubbleY = prefs.getInt(KEY_BUBBLE_Y, -1)
+        }
+        if (bubbleX < 0 || bubbleY < 0) {
+            bubbleX = (screenW - estimatedW - marginPx).coerceAtLeast(marginPx)
+            bubbleY = (56 * density).roundToInt()
+        }
+        val clamped = clampBubblePosition(
+            x = bubbleX,
+            y = bubbleY,
+            viewWidth = (overlayContainer?.width?.takeIf { it > 0 } ?: estimatedW),
+            viewHeight = (overlayContainer?.height?.takeIf { it > 0 } ?: estimatedH),
+            screenWidth = screenW,
+            screenHeight = screenH,
+            marginPx = marginPx
+        )
+        bubbleX = clamped.first
+        bubbleY = clamped.second
+        return clamped
+    }
+
+    private fun saveBubblePosition(x: Int, y: Int) {
+        getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_BUBBLE_X, x)
+            .putInt(KEY_BUBBLE_Y, y)
+            .apply()
+    }
+
     private fun updateOverlayState(minimized: Boolean) {
-        val view = composeView ?: return
+        val container = overlayContainer ?: return
+        val cView = composeView ?: return
         val wm = windowManager ?: return
 
         val layoutParams = if (minimized) {
+            val (initX, initY) = loadOrInitBubblePosition()
             WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -411,11 +497,12 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
-                gravity = Gravity.TOP or Gravity.END
-                x = 32
-                y = 150
-            }
+                gravity = Gravity.TOP or Gravity.START
+                x = initX
+                y = initY
+            }.also { currentMinimizedParams = it }
         } else {
+            currentMinimizedParams = null
             WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -433,11 +520,16 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
 
+        cView.layoutParams = FrameLayout.LayoutParams(
+            if (minimized) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT,
+            if (minimized) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT
+        )
+
         @Suppress("DEPRECATION")
         if (minimized) {
-            view.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            container.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         } else {
-            view.systemUiVisibility = (
+            container.systemUiVisibility = (
                 android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -447,7 +539,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 )
         }
 
-        wm.updateViewLayout(view, layoutParams)
+        wm.updateViewLayout(container, layoutParams)
     }
 
     private fun launchAllowedApp(app: AllowedApp) {
@@ -474,10 +566,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun showOverlay() {
-        if (composeView != null) return
+        if (overlayContainer != null) return
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        composeView = ComposeView(this).apply {
+        val cView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@LockService)
             setViewTreeSavedStateRegistryOwner(this@LockService)
 
@@ -525,6 +617,24 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
             }
         }
+        composeView = cView
+
+        val container = DraggableOverlayContainer(this).apply {
+            setViewTreeLifecycleOwner(this@LockService)
+            setViewTreeSavedStateRegistryOwner(this@LockService)
+            addView(
+                cView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+            isFocusableInTouchMode = true
+            setOnKeyListener { _, keyCode, _ ->
+                keyCode == KeyEvent.KEYCODE_BACK
+            }
+        }
+        overlayContainer = container
 
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -543,12 +653,15 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            composeView?.requestedFrameRate = 120f
+            cView.requestedFrameRate = 120f
         }
-        composeView?.isFocusableInTouchMode = true
+        cView.isFocusableInTouchMode = true
+        cView.setOnKeyListener { _, keyCode, _ ->
+            keyCode == KeyEvent.KEYCODE_BACK
+        }
 
         @Suppress("DEPRECATION")
-        composeView?.systemUiVisibility = (
+        container.systemUiVisibility = (
             android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -557,16 +670,95 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
             )
 
-        composeView?.setOnKeyListener { _, keyCode, _ ->
-            keyCode == KeyEvent.KEYCODE_BACK
+        windowManager?.addView(container, layoutParams)
+    }
+
+    private inner class DraggableOverlayContainer(context: Context) : FrameLayout(context) {
+        private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        private var downRawX = 0f
+        private var downRawY = 0f
+        private var startWindowX = 0
+        private var startWindowY = 0
+        private var isDragging = false
+
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+            if (!isMinimizedState.value) return false
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = ev.rawX
+                    downRawY = ev.rawY
+                    val lp = currentMinimizedParams
+                    startWindowX = lp?.x ?: bubbleX
+                    startWindowY = lp?.y ?: bubbleY
+                    isDragging = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = ev.rawX - downRawX
+                    val dy = ev.rawY - downRawY
+                    if (hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                        isDragging = true
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isDragging = false
+                }
+            }
+            return false
         }
 
-        windowManager?.addView(composeView, layoutParams)
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (!isMinimizedState.value) return super.onTouchEvent(event)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    if (isDragging) {
+                        val (screenW, screenH) = getScreenBounds()
+                        val marginPx = (8 * resources.displayMetrics.density).roundToInt()
+                        val rawNewX = startWindowX + (event.rawX - downRawX).roundToInt()
+                        val rawNewY = startWindowY + (event.rawY - downRawY).roundToInt()
+                        val (clampedX, clampedY) = clampBubblePosition(
+                            x = rawNewX,
+                            y = rawNewY,
+                            viewWidth = width,
+                            viewHeight = height,
+                            screenWidth = screenW,
+                            screenHeight = screenH,
+                            marginPx = marginPx
+                        )
+                        bubbleX = clampedX
+                        bubbleY = clampedY
+                        currentMinimizedParams?.let { lp ->
+                            if (lp.x != clampedX || lp.y != clampedY) {
+                                lp.x = clampedX
+                                lp.y = clampedY
+                                windowManager?.updateViewLayout(this, lp)
+                            }
+                        }
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (isDragging) {
+                        isDragging = false
+                        saveBubblePosition(bubbleX, bubbleY)
+                        performClick()
+                        return true
+                    }
+                }
+            }
+            return super.onTouchEvent(event)
+        }
+
+        override fun performClick(): Boolean {
+            super.performClick()
+            return true
+        }
     }
 
     private fun stopLock() {
-        if (composeView != null) {
-            windowManager?.removeView(composeView)
+        if (overlayContainer != null) {
+            windowManager?.removeView(overlayContainer)
+            overlayContainer = null
             composeView = null
         }
 
@@ -619,8 +811,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
         stopMonitoringForegroundApp()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
-        if (composeView != null) {
-            windowManager?.removeView(composeView)
+        if (overlayContainer != null) {
+            windowManager?.removeView(overlayContainer)
+            overlayContainer = null
             composeView = null
         }
     }
@@ -979,16 +1172,24 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
         contentColor = palette.textPrimary,
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, palette.primaryBorderTint),
-        shadowElevation = 0.dp,
+        shadowElevation = 4.dp,
         modifier = Modifier
-            .padding(8.dp)
+            .padding(4.dp)
+            .heightIn(min = 48.dp)
             .wrapContentSize()
+            .testTag("floating_back_to_lock_bubble")
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Icon(
+                imageVector = Icons.Filled.DragIndicator,
+                contentDescription = "Drag to move",
+                tint = palette.textSecondary.copy(alpha = 0.72f),
+                modifier = Modifier.size(16.dp)
+            )
             Icon(
                 imageVector = Icons.Filled.Lock,
                 contentDescription = "Lock icon",

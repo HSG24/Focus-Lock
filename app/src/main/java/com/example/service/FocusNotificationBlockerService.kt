@@ -28,6 +28,11 @@ class FocusNotificationBlockerService : NotificationListenerService() {
         }
 
         val notif = notification.notification ?: return
+        if (isGroupSummary(notification)) {
+            runCatching { cancelNotification(notification.key) }
+            return
+        }
+
         val extras = notif.extras
         val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         val bigText = extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
@@ -42,7 +47,9 @@ class FocusNotificationBlockerService : NotificationListenerService() {
             appLabel = appLabel,
             title = title.ifBlank { appLabel },
             snippet = snippet,
-            timestampMs = notification.postTime.takeIf { it > 0L } ?: System.currentTimeMillis()
+            timestampMs = notification.postTime.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            notificationKey = notification.key.orEmpty(),
+            isOngoingOrProgress = isOngoingOrProgressNotification(notif)
         )
 
         runCatching {
@@ -68,6 +75,18 @@ class FocusNotificationBlockerService : NotificationListenerService() {
             "com.android.incallui",
             "com.android.phone"
         )
+
+        fun isGroupSummary(sbn: StatusBarNotification): Boolean {
+            val notif = sbn.notification ?: return false
+            return (notif.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+        }
+
+        fun isOngoingOrProgressNotification(notif: Notification): Boolean {
+            val isOngoing = (notif.flags and Notification.FLAG_ONGOING_EVENT) != 0
+            val progressMax = notif.extras?.getInt(Notification.EXTRA_PROGRESS_MAX, 0) ?: 0
+            val indeterminate = notif.extras?.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false) ?: false
+            return isOngoing || progressMax > 0 || indeterminate
+        }
 
         fun isCallOrExemptPackage(packageName: String): Boolean {
             val lower = packageName.lowercase()

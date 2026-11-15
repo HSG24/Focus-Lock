@@ -234,6 +234,110 @@ class FocusUpgradeTest {
     }
 
     @Test
+    fun notificationBlockerRepository_deduplicatesRepeatedIdenticalAndProgressNotifications() {
+        NotificationBlockerRepository.startFreshSession(context)
+
+        // Simulate an app reposting the exact same notification 25 times
+        for (i in 1..25) {
+            NotificationBlockerRepository.recordBlockedNotification(
+                context = context,
+                packageName = "com.instagram.android",
+                appLabel = "Instagram",
+                title = "alice_dev ",
+                snippet = "Sent a reel  ",
+                timestampMs = 1_700_000_000_000L + i * 1_000L,
+                notificationKey = "0|com.instagram.android|101|null|1001"
+            )
+        }
+        // Plus one genuinely different notification from the same app
+        NotificationBlockerRepository.recordBlockedNotification(
+            context = context,
+            packageName = "com.instagram.android",
+            appLabel = "Instagram",
+            title = "bob_designs",
+            snippet = "Liked your message",
+            timestampMs = 1_700_000_050_000L,
+            notificationKey = "0|com.instagram.android|102|null|1001"
+        )
+        // Plus an ongoing progress notification updated 10 times under the same key
+        for (pct in 10..100 step 10) {
+            NotificationBlockerRepository.recordBlockedNotification(
+                context = context,
+                packageName = "com.spotify.music",
+                appLabel = "Spotify",
+                title = "Downloading playlist",
+                snippet = "$pct% complete",
+                timestampMs = 1_700_000_060_000L + pct,
+                notificationKey = "0|com.spotify.music|99|null|1002",
+                isOngoingOrProgress = true
+            )
+        }
+
+        assertTrue(NotificationBlockerRepository.finalizeSessionOnUnlock(context))
+        val state = NotificationBlockerRepository.getCurrent(context)
+
+        // 25 identical Instagram alerts collapsed into 1 + 1 distinct Instagram alert + 1 Spotify progress = 3 total
+        assertEquals(3, state.totalBlockedCount)
+        val instaGroup = state.groupedLastSummary.first { it.packageName == "com.instagram.android" }
+        assertEquals(2, instaGroup.count)
+        assertEquals(1_700_000_025_000L, instaGroup.items.first { it.title == "alice_dev" }.timestampMs)
+
+        val spotifyGroup = state.groupedLastSummary.first { it.packageName == "com.spotify.music" }
+        assertEquals(1, spotifyGroup.count)
+        assertEquals("100% complete", spotifyGroup.items.first().snippet)
+    }
+
+    @Test
+    fun notificationBlocker_detectsGroupSummaryFlag() {
+        val summaryNotif = Notification.Builder(context, "test")
+            .setContentTitle("WhatsApp")
+            .setContentText("5 new messages")
+            .setGroup("chats")
+            .setGroupSummary(true)
+            .build()
+        val summarySbn = StatusBarNotification(
+            "com.whatsapp",
+            "com.whatsapp",
+            999,
+            null,
+            1000,
+            1000,
+            0,
+            summaryNotif,
+            android.os.Process.myUserHandle(),
+            System.currentTimeMillis()
+        )
+        assertTrue(FocusNotificationBlockerService.isGroupSummary(summarySbn))
+    }
+
+    @Test
+    fun lockService_clampsMovableBubbleWithinScreenBounds() {
+        val (clampedNegX, clampedNegY) = LockService.clampBubblePosition(
+            x = -50,
+            y = -20,
+            viewWidth = 300,
+            viewHeight = 120,
+            screenWidth = 1080,
+            screenHeight = 2400,
+            marginPx = 24
+        )
+        assertEquals(24, clampedNegX)
+        assertEquals(24, clampedNegY)
+
+        val (clampedMaxX, clampedMaxY) = LockService.clampBubblePosition(
+            x = 2000,
+            y = 3000,
+            viewWidth = 300,
+            viewHeight = 120,
+            screenWidth = 1080,
+            screenHeight = 2400,
+            marginPx = 24
+        )
+        assertEquals(1080 - 300 - 24, clampedMaxX)
+        assertEquals(2400 - 120 - 24, clampedMaxY)
+    }
+
+    @Test
     fun powerBlocker_matchesPowerAndRestartLabels() {
         assertTrue(FocusPowerBlockerAccessibilityService.matchesPowerLabel("Power off"))
         assertTrue(FocusPowerBlockerAccessibilityService.matchesPowerLabel("Restart device"))

@@ -17,7 +17,8 @@ data class BlockedNotificationItem(
     val appLabel: String,
     val title: String,
     val snippet: String,
-    val timestampMs: Long
+    val timestampMs: Long,
+    val notificationKey: String = ""
 )
 
 @Immutable
@@ -35,8 +36,11 @@ data class NotificationBlockerState(
     val lastSessionSummary: List<BlockedNotificationItem> = emptyList(),
     val showSummarySheet: Boolean = false
 ) {
+    private val uniqueLastSummary: List<BlockedNotificationItem>
+        get() = NotificationBlockerRepository.deduplicateItems(lastSessionSummary)
+
     val groupedLastSummary: List<BlockedAppGroup>
-        get() = lastSessionSummary
+        get() = uniqueLastSummary
             .groupBy { it.packageName }
             .map { (pkg, list) ->
                 BlockedAppGroup(
@@ -47,7 +51,7 @@ data class NotificationBlockerState(
             }
             .sortedByDescending { it.count }
 
-    val totalBlockedCount: Int get() = lastSessionSummary.size
+    val totalBlockedCount: Int get() = uniqueLastSummary.size
 }
 
 object NotificationBlockerRepository {
@@ -55,6 +59,7 @@ object NotificationBlockerRepository {
     private const val KEY_ACTIVE_ITEMS = "active_blocked_items"
     private const val KEY_SUMMARY_ITEMS = "last_summary_items"
     private const val KEY_SHOW_SHEET = "show_summary_sheet"
+    private val MULTI_SPACE_REGEX = Regex("""\s+""")
 
     @Volatile
     private var _state: MutableStateFlow<NotificationBlockerState>? = null
@@ -85,6 +90,27 @@ object NotificationBlockerRepository {
         _state?.value = readState(prefs)
     }
 
+    internal fun normalizeForDedup(value: String): String {
+        return value.trim().replace(MULTI_SPACE_REGEX, " ").lowercase()
+    }
+
+    internal fun contentSignature(packageName: String, title: String, snippet: String): String {
+        return "${packageName.trim().lowercase()}|${normalizeForDedup(title)}|${normalizeForDedup(snippet)}"
+    }
+
+    fun deduplicateItems(items: List<BlockedNotificationItem>): List<BlockedNotificationItem> {
+        if (items.size <= 1) return items
+        val seenSignatures = HashSet<String>(items.size)
+        val result = ArrayList<BlockedNotificationItem>(items.size)
+        for (item in items.sortedByDescending { it.timestampMs }) {
+            val sig = contentSignature(item.packageName, item.title, item.snippet)
+            if (seenSignatures.add(sig)) {
+                result.add(item)
+            }
+        }
+        return result
+    }
+
     @Synchronized
     fun recordBlockedNotification(
         context: Context,
@@ -92,19 +118,45 @@ object NotificationBlockerRepository {
         appLabel: String,
         title: String,
         snippet: String,
-        timestampMs: Long = System.currentTimeMillis()
+        timestampMs: Long = System.currentTimeMillis(),
+        notificationKey: String = "",
+        isOngoingOrProgress: Boolean = false
     ) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val active = parseItems(prefs.getString(KEY_ACTIVE_ITEMS, "[]")).toMutableList()
-        val item = BlockedNotificationItem(
-            id = UUID.randomUUID().toString(),
-            packageName = packageName,
-            appLabel = appLabel.ifBlank { packageName },
-            title = title.ifBlank { appLabel },
-            snippet = snippet.take(160),
-            timestampMs = timestampMs
-        )
-        active.add(0, item)
+        val resolvedAppLabel = appLabel.ifBlank { packageName }.trim()
+        val resolvedTitle = title.ifBlank { resolvedAppLabel }.trim()
+        val resolvedSnippet = snippet.trim().take(160)
+        val incomingSignature = contentSignature(packageName, resolvedTitle, resolvedSnippet)
+
+        val existingIndex = active.indexOfFirst { existing ->
+            contentSignature(existing.packageName, existing.title, existing.snippet) == incomingSignature ||
+                (isOngoingOrProgress && notificationKey.isNotBlank() && existing.notificationKey == notificationKey)
+        }
+
+        if (existingIndex >= 0) {
+            val existing = active.removeAt(existingIndex)
+            val updated = existing.copy(
+                appLabel = resolvedAppLabel,
+                title = resolvedTitle,
+                snippet = resolvedSnippet,
+                timestampMs = maxOf(existing.timestampMs, timestampMs),
+                notificationKey = notificationKey.ifBlank { existing.notificationKey }
+            )
+            active.add(0, updated)
+        } else {
+            val item = BlockedNotificationItem(
+                id = UUID.randomUUID().toString(),
+                packageName = packageName,
+                appLabel = resolvedAppLabel,
+                title = resolvedTitle,
+                snippet = resolvedSnippet,
+                timestampMs = timestampMs,
+                notificationKey = notificationKey
+            )
+            active.add(0, item)
+        }
+
         prefs.edit()
             .putString(KEY_ACTIVE_ITEMS, serializeItems(active.take(250)))
             .apply()
@@ -118,7 +170,7 @@ object NotificationBlockerRepository {
     @Synchronized
     fun finalizeSessionOnUnlock(context: Context): Boolean {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val active = parseItems(prefs.getString(KEY_ACTIVE_ITEMS, "[]"))
+        val active = deduplicateItems(parseItems(prefs.getString(KEY_ACTIVE_ITEMS, "[]")))
         if (active.isEmpty()) {
             prefs.edit()
                 .putString(KEY_ACTIVE_ITEMS, "[]")
@@ -186,7 +238,8 @@ object NotificationBlockerRepository {
                             appLabel = obj.optString("appLabel"),
                             title = obj.optString("title"),
                             snippet = obj.optString("snippet"),
-                            timestampMs = obj.optLong("timestampMs", 0L)
+                            timestampMs = obj.optLong("timestampMs", 0L),
+                            notificationKey = obj.optString("notificationKey", "")
                         )
                     )
                 }
@@ -205,6 +258,9 @@ object NotificationBlockerRepository {
                     put("title", item.title)
                     put("snippet", item.snippet)
                     put("timestampMs", item.timestampMs)
+                    if (item.notificationKey.isNotBlank()) {
+                        put("notificationKey", item.notificationKey)
+                    }
                 }
             )
         }
