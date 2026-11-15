@@ -50,6 +50,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.FocusSettingsRepository
+import com.example.data.FocusStatsRepository
 import com.example.data.FocusXpRepository
 import com.example.data.GitHubReleaseInfo
 import com.example.data.GitHubUpdater
@@ -263,15 +264,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Background startup: update check + XP/penalty audit for missed previous days
+            // Background startup: update check + local-first stats sync + XP/penalty audit
             LaunchedEffect(Unit) {
+                FocusStatsRepository.initialize(context)
                 triggerUpdateCheck(silent = true)
                 coroutineScope.launch(Dispatchers.IO) {
-                    val remoteSessions = runCatching { fetchAllSessions() }.getOrDefault(emptyList())
-                    if (remoteSessions.isNotEmpty()) {
+                    val sessions = runCatching {
+                        FocusStatsRepository.fetchAuthoritativeSessions(context)
+                    }.getOrDefault(FocusStatsRepository.getCachedSessions(context))
+                    if (sessions.isNotEmpty()) {
                         FocusXpRepository.syncWithRemoteSessions(
                             context = context,
-                            sessions = remoteSessions,
+                            sessions = sessions,
                             dailyGoalMinutes = settingsState.dailyGoalMinutes
                         )
                     } else {
@@ -529,34 +533,7 @@ class MainActivity : ComponentActivity() {
 data class Session(val startTime: Long, val duration: Long)
 
 suspend fun fetchAllSessions(): List<Session> {
-    return withContext(Dispatchers.IO) {
-        val list = mutableListOf<Session>()
-        try {
-            val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/sessions.json"
-            val request = Request.Builder().url(url).get().build()
-            sharedHttpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string() ?: return@withContext list
-                    if (responseBody == "null") return@withContext list
-
-                    val jsonObject = org.json.JSONObject(responseBody)
-                    val keys = jsonObject.keys()
-                    while (keys.hasNext()) {
-                        val key = keys.next()
-                        val sessionObj = jsonObject.getJSONObject(key)
-                        val startTime = sessionObj.optLong("startTime", 0L)
-                        val duration = sessionObj.optLong("duration", 0L)
-                        if (startTime > 0 && duration > 0) {
-                            list.add(Session(startTime, duration))
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        list
-    }
+    return FocusStatsRepository.fetchAuthoritativeSessions()
 }
 
 fun isSameDay(timeMillis: Long, calendar: Calendar): Boolean {

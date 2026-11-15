@@ -15,15 +15,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.outlined.Download
@@ -180,41 +177,6 @@ fun UpdateBottomSheet(
                                 color = palette.textSecondary
                             )
                         }
-                    }
-                }
-            }
-
-            // Release Notes Card
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = palette.surfaceElevated,
-                border = BorderStroke(1.dp, palette.border),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "RELEASE NOTES",
-                        style = MaterialTheme.typography.labelSmall,
-                        letterSpacing = 1.2.sp,
-                        color = palette.textSecondary
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 60.dp, max = 180.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = release.releaseNotes,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = palette.textPrimary.copy(alpha = 0.9f),
-                            lineHeight = 20.sp
-                        )
                     }
                 }
             }

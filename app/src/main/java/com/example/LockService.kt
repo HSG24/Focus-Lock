@@ -77,6 +77,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.data.AllowedApp
 import com.example.data.FocusSettingsRepository
+import com.example.data.FocusStatsRepository
 import com.example.data.FocusXpRepository
 import com.example.data.LockAppLayout
 import com.example.data.NotificationBlockerRepository
@@ -584,20 +585,13 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 durationMs = duration,
                 dailyGoalMinutes = settings.dailyGoalMinutes
             )
+            FocusStatsRepository.recordCompletedSession(
+                context = appCtx,
+                startTimeMs = capturedStart,
+                durationMs = duration
+            )
 
             CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/sessions.json"
-                    val bodyStr = """{"startTime": $capturedStart, "duration": $duration}"""
-                    val body = bodyStr.toRequestBody("application/json; charset=utf-8".toMediaType())
-                    val request = okhttp3.Request.Builder()
-                        .url(url)
-                        .post(body)
-                        .build()
-                    sharedHttpClient.newCall(request).execute().close()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
                 ShareRepository.syncLiveShareOnSessionEnd(appCtx)
                 NothingFocusWidgetUpdater.updateAllWidgets(appCtx)
             }
