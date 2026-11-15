@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
+import com.example.data.FocusWhatsNewRepository
 import com.example.data.FocusXpRepository
 import com.example.data.GitHubReleaseInfo
 import com.example.data.GitHubUpdater
@@ -61,6 +62,7 @@ import com.example.ui.components.BlockedSummaryBottomSheet
 import com.example.ui.components.FloatingPillBottomBar
 import com.example.ui.components.PillNavTab
 import com.example.ui.components.UpdateBottomSheet
+import com.example.ui.components.WhatsNewBottomSheet
 import com.example.ui.components.performClockTickHaptic
 import com.example.ui.screens.FocusHomeScreen
 import com.example.ui.screens.SettingsScreen
@@ -198,6 +200,7 @@ class MainActivity : ComponentActivity() {
             var activeUpdateRelease by remember { mutableStateOf<GitHubReleaseInfo?>(null) }
             var showUpdateSheet by remember { mutableStateOf(false) }
             var awaitingInstallPermission by remember { mutableStateOf(false) }
+            var showWhatsNewSheet by remember { mutableStateOf(false) }
 
             fun startApkDownload(release: GitHubReleaseInfo) {
                 if (!GitHubUpdater.canRequestPackageInstalls(context)) {
@@ -264,9 +267,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Background startup: update check + local-first stats sync + XP/penalty audit
+            // Background startup: update check + What's New check + local-first stats sync + XP/penalty audit
             LaunchedEffect(Unit) {
                 FocusStatsRepository.initialize(context)
+                val initialVersion = GitHubUpdater.getInstalledVersion(context)
+                installedVersion = initialVersion
+                if (FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, initialVersion)) {
+                    showWhatsNewSheet = true
+                }
                 triggerUpdateCheck(silent = true)
                 coroutineScope.launch(Dispatchers.IO) {
                     val sessions = runCatching {
@@ -298,7 +306,11 @@ class MainActivity : ComponentActivity() {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
                         configureHighRefreshRate()
-                        installedVersion = GitHubUpdater.getInstalledVersion(context)
+                        val resumedVersion = GitHubUpdater.getInstalledVersion(context)
+                        installedVersion = resumedVersion
+                        if (FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, resumedVersion)) {
+                            showWhatsNewSheet = true
+                        }
                         if (awaitingInstallPermission) {
                             awaitingInstallPermission = false
                             val release = activeUpdateRelease
@@ -425,7 +437,8 @@ class MainActivity : ComponentActivity() {
                                     installedVersion = installedVersion,
                                     updateUiState = updateState,
                                     onCheckForUpdates = onCheckForUpdates,
-                                    onOpenUpdateSheet = onOpenUpdateSheet
+                                    onOpenUpdateSheet = onOpenUpdateSheet,
+                                    onOpenWhatsNew = { showWhatsNewSheet = true }
                                 )
                             }
                         }
@@ -520,6 +533,19 @@ class MainActivity : ComponentActivity() {
                             },
                             onDismiss = {
                                 NotificationBlockerRepository.dismissSummarySheet(context)
+                            }
+                        )
+                    }
+
+                    if (showWhatsNewSheet && !showUpdateSheet) {
+                        WhatsNewBottomSheet(
+                            installedVersion = installedVersion,
+                            onDismiss = {
+                                showWhatsNewSheet = false
+                                FocusWhatsNewRepository.markWhatsNewSeen(
+                                    context = context,
+                                    installedVersionName = installedVersion
+                                )
                             }
                         )
                     }

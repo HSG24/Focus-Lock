@@ -172,6 +172,7 @@ fun LockAllowedAppsSection(
     onAppClick: (AllowedApp) -> Unit,
     modifier: Modifier = Modifier,
     isPreview: Boolean = false,
+    pillButtonSizeDp: Int = FocusSettingsRepository.DEFAULT_PILL_BUTTON_SIZE_DP,
     iconCache: Map<String, ImageBitmap> = emptyMap(),
     readFromCacheOnly: Boolean = true
 ) {
@@ -181,105 +182,59 @@ fun LockAllowedAppsSection(
     when (layout) {
         LockAppLayout.PILL_ROW -> {
             val pillShape = RoundedCornerShape(50)
+            val clampedSize = pillButtonSizeDp.coerceIn(
+                FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP,
+                FocusSettingsRepository.MAX_PILL_BUTTON_SIZE_DP
+            )
+            val sizeRatio = (clampedSize - FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP).toFloat() /
+                (FocusSettingsRepository.MAX_PILL_BUTTON_SIZE_DP - FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP).toFloat()
+            val previewScale = if (isPreview) 0.85f else 1f
+            val pillHeight = (clampedSize * previewScale).dp
+            val containerDp = ((clampedSize * 0.62f) * previewScale).dp
+            val iconDp = ((clampedSize * 0.38f) * previewScale).dp
+            val gapBetweenPills = ((4f + 5f * sizeRatio) * previewScale).dp
+            val innerGap = ((4f + 4f * sizeRatio) * previewScale).dp
+            val startPad = ((4f + 6f * sizeRatio) * previewScale).dp
+            val endPad = ((7f + 7f * sizeRatio) * previewScale).dp
+            val labelSp = ((9.5f + 4f * sizeRatio) * if (isPreview) 0.9f else 1f).sp
+            val maxLabelW = ((54f + 48f * sizeRatio) * previewScale).dp
+
             FlowRow(
                 modifier = modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(gapBetweenPills, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(gapBetweenPills)
             ) {
                 apps.forEach { app ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(innerGap),
                         modifier = Modifier
-                            .height(if (isPreview) 36.dp else 48.dp)
+                            .height(pillHeight)
                             .clip(pillShape)
                             .background(palette.surface, pillShape)
                             .border(1.dp, palette.border, pillShape)
                             .clickable(enabled = !isPreview) { onAppClick(app) }
-                            .padding(
-                                start = if (isPreview) 8.dp else 10.dp,
-                                end = if (isPreview) 12.dp else 14.dp
-                            )
+                            .padding(start = startPad, end = endPad)
                             .testTag(testTagForApp(app))
                     ) {
                         AllowedAppIconBadge(
                             app = app,
                             tint = palette.accent,
                             badgeBackground = palette.surfaceElevated,
-                            iconSize = if (isPreview) 14.dp else 16.dp,
-                            containerSize = if (isPreview) 22.dp else 28.dp,
+                            iconSize = iconDp,
+                            containerSize = containerDp,
                             preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                             loadIfMissing = !readFromCacheOnly
                         )
                         Text(
                             text = app.label,
-                            fontSize = if (isPreview) 11.sp else 13.sp,
+                            fontSize = labelSp,
                             fontWeight = FontWeight.Medium,
                             color = palette.primaryText,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 100.dp)
+                            modifier = Modifier.widthIn(max = maxLabelW)
                         )
-                    }
-                }
-            }
-        }
-
-        LockAppLayout.GLASS_GRID -> {
-            val columns = if (apps.size <= 2) apps.size else 3
-            val rows = apps.chunked(columns)
-            val tileShape = RoundedCornerShape(if (isPreview) 14.dp else 18.dp)
-            Column(
-                modifier = modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                rows.forEach { rowApps ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowApps.forEach { app ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(if (isPreview) 5.dp else 7.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .then(if (isPreview) Modifier else Modifier.minimumInteractiveComponentSize())
-                                    .clip(tileShape)
-                                    .background(palette.surface, tileShape)
-                                    .border(1.dp, palette.border, tileShape)
-                                    .clickable(enabled = !isPreview) { onAppClick(app) }
-                                    .padding(
-                                        horizontal = 6.dp,
-                                        vertical = if (isPreview) 8.dp else 12.dp
-                                    )
-                                    .testTag(testTagForApp(app))
-                            ) {
-                                AllowedAppIconBadge(
-                                    app = app,
-                                    tint = palette.accent,
-                                    badgeBackground = palette.surfaceElevated,
-                                    iconSize = if (isPreview) 16.dp else 20.dp,
-                                    containerSize = if (isPreview) 28.dp else 36.dp,
-                                    shape = RoundedCornerShape(12.dp),
-                                    preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
-                                    loadIfMissing = !readFromCacheOnly
-                                )
-                                Text(
-                                    text = app.label,
-                                    fontSize = if (isPreview) 10.sp else 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = palette.primaryText,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                        repeat(columns - rowApps.size) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
                     }
                 }
             }

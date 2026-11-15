@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -46,9 +48,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -104,6 +110,7 @@ import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemedDivider
 import com.example.ui.components.ThemedSettingsSectionCard
 import com.example.ui.components.ThemedSettingsSwitchRow
+import com.example.ui.components.WhatsNewBottomSheet
 import com.example.ui.components.performClockTickHaptic
 import com.example.ui.components.performKeyTapHaptic
 import com.example.ui.components.rememberSpringPressScale
@@ -111,6 +118,7 @@ import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,6 +128,7 @@ fun SettingsScreen(
     updateUiState: UpdateUiState,
     onCheckForUpdates: () -> Unit,
     onOpenUpdateSheet: () -> Unit,
+    onOpenWhatsNew: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -134,6 +143,7 @@ fun SettingsScreen(
 
     var showAddAppDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
+    var showLocalWhatsNewSheet by remember { mutableStateOf(false) }
     var goalInputText by remember(settingsState.dailyGoalMinutes) {
         mutableStateOf(settingsState.dailyGoalMinutes.toString())
     }
@@ -197,6 +207,11 @@ fun SettingsScreen(
         { layout: LockAppLayout ->
             view.performClockTickHaptic()
             FocusSettingsRepository.setLockAppLayout(context, layout)
+        }
+    }
+    val onSelectPillSize = remember(context) {
+        { sizeDp: Int ->
+            FocusSettingsRepository.setMinimalPillButtonSizeDp(context, sizeDp)
         }
     }
     val onOpenGoalDialog = remember(view, settingsState.dailyGoalMinutes) {
@@ -376,8 +391,10 @@ fun SettingsScreen(
                 LockScreenLayoutSection(
                     allowedApps = settingsState.allowedApps,
                     selectedLayout = settingsState.lockAppLayout,
+                    pillButtonSizeDp = settingsState.minimalPillButtonSizeDp,
                     iconCache = iconCache,
-                    onSelectLayout = onSelectLayout
+                    onSelectLayout = onSelectLayout,
+                    onSelectPillSize = onSelectPillSize
                 )
 
                 FocusBehaviorSection(
@@ -395,7 +412,15 @@ fun SettingsScreen(
                     installedVersion = installedVersion,
                     updateUiState = updateUiState,
                     onCheckForUpdates = onCheckForUpdates,
-                    onOpenUpdateSheet = onOpenUpdateSheet
+                    onOpenUpdateSheet = onOpenUpdateSheet,
+                    onOpenWhatsNew = {
+                        view.performKeyTapHaptic()
+                        if (onOpenWhatsNew != null) {
+                            onOpenWhatsNew()
+                        } else {
+                            showLocalWhatsNewSheet = true
+                        }
+                    }
                 )
 
                 PermissionsSection(
@@ -437,6 +462,13 @@ fun SettingsScreen(
                 showGoalDialog = false
             },
             onDismiss = { showGoalDialog = false }
+        )
+    }
+
+    if (showLocalWhatsNewSheet) {
+        WhatsNewBottomSheet(
+            installedVersion = installedVersion,
+            onDismiss = { showLocalWhatsNewSheet = false }
         )
     }
 }
@@ -635,8 +667,10 @@ private fun AllowedAppsSection(
 private fun LockScreenLayoutSection(
     allowedApps: List<AllowedApp>,
     selectedLayout: LockAppLayout,
+    pillButtonSizeDp: Int,
     iconCache: Map<String, ImageBitmap>,
-    onSelectLayout: (LockAppLayout) -> Unit
+    onSelectLayout: (LockAppLayout) -> Unit,
+    onSelectPillSize: (Int) -> Unit
 ) {
     val palette = LocalFocusTheme.current
     val previewShape = remember { RoundedCornerShape(16.dp) }
@@ -675,7 +709,11 @@ private fun LockScreenLayoutSection(
                         color = palette.textSecondary
                     )
                     Text(
-                        text = selectedLayout.title,
+                        text = if (selectedLayout == LockAppLayout.PILL_ROW) {
+                            "${selectedLayout.title} • ${pillButtonSizeDp}dp"
+                        } else {
+                            selectedLayout.title
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = palette.primary
@@ -688,9 +726,90 @@ private fun LockScreenLayoutSection(
                     palette = previewPalette,
                     onAppClick = noopPreviewClick,
                     isPreview = true,
+                    pillButtonSizeDp = pillButtonSizeDp,
                     iconCache = iconCache,
                     readFromCacheOnly = true
                 )
+            }
+
+            AnimatedVisibility(visible = selectedLayout == LockAppLayout.PILL_ROW) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(optionShape)
+                        .background(palette.surfaceElevated.copy(alpha = 0.65f), optionShape)
+                        .border(1.dp, palette.border, optionShape)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("pill_size_control_card"),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "PILL BUTTON SIZE",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.5.sp,
+                            letterSpacing = 0.8.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.textSecondary
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = palette.primaryContainer,
+                            border = BorderStroke(1.dp, palette.primaryBorderTint)
+                        ) {
+                            Text(
+                                text = "${pillButtonSizeDp}dp",
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.primary,
+                                modifier = Modifier
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .testTag("pill_size_value_label")
+                            )
+                        }
+                    }
+
+                    Slider(
+                        value = pillButtonSizeDp.toFloat(),
+                        onValueChange = { raw -> onSelectPillSize(raw.roundToInt()) },
+                        valueRange = FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP.toFloat()..
+                            FocusSettingsRepository.MAX_PILL_BUTTON_SIZE_DP.toFloat(),
+                        steps = 11,
+                        colors = SliderDefaults.colors(
+                            thumbColor = palette.primary,
+                            activeTrackColor = palette.primary,
+                            inactiveTrackColor = palette.borderHighlight,
+                            activeTickColor = palette.onPrimary.copy(alpha = 0.55f),
+                            inactiveTickColor = palette.textSecondary.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("pill_size_slider")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP}dp Compact",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 9.5.sp,
+                            color = palette.textSecondary
+                        )
+                        Text(
+                            text = "${FocusSettingsRepository.MAX_PILL_BUTTON_SIZE_DP}dp Large",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 9.5.sp,
+                            color = palette.textSecondary
+                        )
+                    }
+                }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -852,7 +971,8 @@ private fun AppUpdatesSection(
     installedVersion: String,
     updateUiState: UpdateUiState,
     onCheckForUpdates: () -> Unit,
-    onOpenUpdateSheet: () -> Unit
+    onOpenUpdateSheet: () -> Unit,
+    onOpenWhatsNew: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
     val view = LocalView.current
@@ -1032,6 +1152,32 @@ private fun AppUpdatesSection(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+
+            OutlinedButton(
+                onClick = onOpenWhatsNew,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, palette.borderHighlight),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = palette.textPrimary
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("whats_new_settings_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = palette.primary,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "What's New",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

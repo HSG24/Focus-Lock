@@ -258,24 +258,20 @@ fun StatsScreen(
                         report = report,
                         onStepBackward = {
                             selectedBucketIndex = null
-                            selectedDate = (selectedDate.clone() as Calendar).apply {
-                                when (selectedTimeframe) {
-                                    StatsTimeframe.DAY -> add(Calendar.DATE, -1)
-                                    StatsTimeframe.WEEK -> add(Calendar.DATE, -7)
-                                    StatsTimeframe.MONTH -> add(Calendar.MONTH, -1)
-                                }
+                            selectedDate = when (selectedTimeframe) {
+                                StatsTimeframe.DAY -> (selectedDate.clone() as Calendar).apply { add(Calendar.DATE, -1) }
+                                StatsTimeframe.WEEK -> FocusStatsRepository.stepMonthClippedWeekBackward(selectedDate)
+                                StatsTimeframe.MONTH -> (selectedDate.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
                             }
                         },
                         onStepForward = {
                             if (report.canStepForward) {
                                 selectedBucketIndex = null
                                 val now = Calendar.getInstance()
-                                val candidate = (selectedDate.clone() as Calendar).apply {
-                                    when (selectedTimeframe) {
-                                        StatsTimeframe.DAY -> add(Calendar.DATE, 1)
-                                        StatsTimeframe.WEEK -> add(Calendar.DATE, 7)
-                                        StatsTimeframe.MONTH -> add(Calendar.MONTH, 1)
-                                    }
+                                val candidate = when (selectedTimeframe) {
+                                    StatsTimeframe.DAY -> (selectedDate.clone() as Calendar).apply { add(Calendar.DATE, 1) }
+                                    StatsTimeframe.WEEK -> FocusStatsRepository.stepMonthClippedWeekForward(selectedDate, now)
+                                    StatsTimeframe.MONTH -> (selectedDate.clone() as Calendar).apply { add(Calendar.MONTH, 1) }
                                 }
                                 selectedDate = if (candidate.after(now)) now else candidate
                             }

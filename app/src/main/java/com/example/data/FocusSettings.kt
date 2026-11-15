@@ -38,7 +38,6 @@ enum class LockAppLayout(
     val subtitle: String
 ) {
     PILL_ROW("Minimal Pills", "Sleek horizontal capsules"),
-    GLASS_GRID("Bento Grid", "Clean 3-column icon tiles"),
     ICON_DOCK("Floating Dock", "Minimal icon-only bar"),
     COMPACT_LIST("Sleek List", "Grouped rows with arrows"),
     SPLIT_CHIPS("Split Chips", "2-column tonal badges")
@@ -62,6 +61,7 @@ data class InstalledAppInfo(
 data class FocusSettingsState(
     val appTheme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON,
     val lockAppLayout: LockAppLayout = LockAppLayout.PILL_ROW,
+    val minimalPillButtonSizeDp: Int = FocusSettingsRepository.DEFAULT_PILL_BUTTON_SIZE_DP,
     val allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
     val dailyGoalMinutes: Long = 240L,
     val showSessionTimer: Boolean = true,
@@ -83,6 +83,7 @@ object FocusSettingsRepository {
     private const val PREFS_NAME = "focus_settings"
     private const val KEY_APP_THEME = "app_visual_theme"
     private const val KEY_LOCK_LAYOUT = "lock_app_layout"
+    private const val KEY_MINIMAL_PILL_SIZE_DP = "minimal_pill_button_size_dp"
     private const val KEY_ALLOWED_APPS = "allowed_apps_json"
     private const val KEY_DAILY_GOAL = "daily_goal_min"
     private const val KEY_SHOW_TIMER = "show_session_timer"
@@ -98,6 +99,10 @@ object FocusSettingsRepository {
     private const val KEY_WIDGET_RANK_XP = "widget_show_rank_xp"
     private const val KEY_ACTIVE_LIVE_SHARE_ID = "active_live_share_id"
     private const val KEY_ACTIVE_LIVE_SHARE_START_MS = "active_live_share_start_ms"
+
+    const val MIN_PILL_BUTTON_SIZE_DP = 28
+    const val MAX_PILL_BUTTON_SIZE_DP = 52
+    const val DEFAULT_PILL_BUTTON_SIZE_DP = 40
 
     const val PRESET_PHONE_PKG = "__builtin_phone__"
     const val PRESET_GOOGLE_PKG = "__builtin_google__"
@@ -174,6 +179,9 @@ object FocusSettingsRepository {
         val lockLayout = runCatching { LockAppLayout.valueOf(layoutName ?: LockAppLayout.PILL_ROW.name) }
             .getOrDefault(LockAppLayout.PILL_ROW)
 
+        val pillSizeDp = prefs.getInt(KEY_MINIMAL_PILL_SIZE_DP, DEFAULT_PILL_BUTTON_SIZE_DP)
+            .coerceIn(MIN_PILL_BUTTON_SIZE_DP, MAX_PILL_BUTTON_SIZE_DP)
+
         val allowedApps = if (prefs.contains(KEY_ALLOWED_APPS)) {
             parseAllowedApps(prefs.getString(KEY_ALLOWED_APPS, "[]") ?: "[]")
         } else {
@@ -183,6 +191,7 @@ object FocusSettingsRepository {
         return FocusSettingsState(
             appTheme = appTheme,
             lockAppLayout = lockLayout,
+            minimalPillButtonSizeDp = pillSizeDp,
             allowedApps = allowedApps,
             dailyGoalMinutes = prefs.getLong(KEY_DAILY_GOAL, 240L).coerceIn(5L, 720L),
             showSessionTimer = prefs.getBoolean(KEY_SHOW_TIMER, true),
@@ -208,6 +217,11 @@ object FocusSettingsRepository {
 
     fun setLockAppLayout(context: Context, layout: LockAppLayout) {
         update(context) { putString(KEY_LOCK_LAYOUT, layout.name) }
+    }
+
+    fun setMinimalPillButtonSizeDp(context: Context, sizeDp: Int) {
+        val clamped = sizeDp.coerceIn(MIN_PILL_BUTTON_SIZE_DP, MAX_PILL_BUTTON_SIZE_DP)
+        update(context) { putInt(KEY_MINIMAL_PILL_SIZE_DP, clamped) }
     }
 
     fun setDailyGoalMinutes(context: Context, minutes: Long) {

@@ -122,6 +122,16 @@ data class StatsPeriodReport(
     val weekStrip: List<WeekStripDay>
 )
 
+@Immutable
+data class MonthClippedWeek(
+    val startDay: Int,
+    val endDay: Int,
+    val startCal: Calendar,
+    val endCal: Calendar,
+    val endExclusiveCal: Calendar,
+    val dayCount: Int
+)
+
 object FocusStatsRepository {
     const val RTDB_BASE_URL =
         "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app"
@@ -935,12 +945,11 @@ object FocusStatsRepository {
         maxStreak: Int,
         weekStrip: List<WeekStripDay>
     ): StatsPeriodReport {
-        val weekMonday = startOfMondayWeekCalendar(selectedDate)
-        val weekEndExclusive = (weekMonday.clone() as Calendar).apply { add(Calendar.DATE, 7) }
-        val currentMonday = startOfMondayWeekCalendar(todayStart)
+        val slice = findMonthClippedWeek(selectedDate)
+        val currentSlice = findMonthClippedWeek(todayStart)
 
         val weekSessions = sessions.filter {
-            it.startTime >= weekMonday.timeInMillis && it.startTime < weekEndExclusive.timeInMillis
+            it.startTime >= slice.startCal.timeInMillis && it.startTime < slice.endExclusiveCal.timeInMillis
         }
         val totalMs = weekSessions.sumOf { it.duration }
         val count = weekSessions.size
@@ -949,8 +958,8 @@ object FocusStatsRepository {
 
         val dayLabelFmt = SimpleDateFormat("EEE", Locale.US)
         val tooltipDateFmt = SimpleDateFormat("EEE, MMM d", Locale.US)
-        val buckets = (0 until 7).mapNotNull { offset ->
-            val dayCal = (weekMonday.clone() as Calendar).apply { add(Calendar.DATE, offset) }
+        val buckets = (0 until slice.dayCount).mapNotNull { offset ->
+            val dayCal = (slice.startCal.clone() as Calendar).apply { add(Calendar.DATE, offset) }
             if (dayCal.after(todayStart)) {
                 null
             } else {
@@ -967,13 +976,18 @@ object FocusStatsRepository {
             }
         }.mapIndexed { idx, bucket -> bucket.copy(index = idx) }
 
-        val isCurrentWeek = isSameDayCalendar(weekMonday, currentMonday)
-        val weekSunday = (weekMonday.clone() as Calendar).apply { add(Calendar.DATE, 6) }
-        val startStr = SimpleDateFormat("MMM d", Locale.US).format(weekMonday.time).uppercase(Locale.US)
-        val endStr = SimpleDateFormat("MMM d, yyyy", Locale.US).format(weekSunday.time).uppercase(Locale.US)
-        val headerLabel = if (isCurrentWeek) "CURRENT WEEK" else "$startStr – $endStr"
+        val isCurrentWeek = isSameDayCalendar(slice.startCal, currentSlice.startCal)
+        val headerLabel = if (isCurrentWeek) {
+            "CURRENT WEEK"
+        } else if (slice.startDay == slice.endDay) {
+            SimpleDateFormat("MMM d, yyyy", Locale.US).format(slice.startCal.time).uppercase(Locale.US)
+        } else {
+            val startStr = SimpleDateFormat("MMM d", Locale.US).format(slice.startCal.time).uppercase(Locale.US)
+            val endStr = SimpleDateFormat("MMM d, yyyy", Locale.US).format(slice.endCal.time).uppercase(Locale.US)
+            "$startStr – $endStr"
+        }
 
-        val weekTargetMs = dailyTargetMs * 7L
+        val weekTargetMs = dailyTargetMs * slice.dayCount.toLong()
         val progressFraction = (totalMs.toFloat() / weekTargetMs.toFloat()).coerceIn(0f, 1f)
         val progressPercent = ((totalMs.toFloat() / weekTargetMs.toFloat()) * 100f)
             .toInt()
@@ -995,7 +1009,7 @@ object FocusStatsRepository {
             progressPercent = progressPercent,
             remainingToGoalMs = remainingMs,
             isGoalMet = totalMs >= weekTargetMs,
-            canStepForward = weekMonday.before(currentMonday),
+            canStepForward = slice.startCal.before(currentSlice.startCal),
             isCurrentPeriod = isCurrentWeek,
             chartBuckets = buckets,
             weekStrip = weekStrip
@@ -1024,57 +1038,36 @@ object FocusStatsRepository {
         val avgMs = if (count > 0) totalMs / count else 0L
         val longestMs = monthSessions.maxOfOrNull { it.duration } ?: 0L
 
-        val monthShortFmt = SimpleDateFormat("MMM", Locale.US)
-        val monthLabel = monthShortFmt.format(monthStart.time)
         val fullRangeFmt = SimpleDateFormat("MMM d", Locale.US)
+        val slices = getMonthClippedWeeks(selectedDate)
+            .filter { !it.startCal.after(todayStart) }
 
-        // Every month is partitioned cleanly into 4 weeks starting on the 1st:
-        // 1–7, 8–14, 15–21, and 22–endOfMonth (28/29/30/31) so remaining days never spill into next month.
-        val weekRanges = listOf(
-            1 to 7,
-            8 to 14,
-            15 to 21,
-            22 to daysInMonth
-        )
-
-        val buckets = mutableListOf<StatsChartBucket>()
-        var bucketIdx = 0
-        for ((startDay, endDay) in weekRanges) {
-            val weekStartCal = (monthStart.clone() as Calendar).apply {
-                set(Calendar.DAY_OF_MONTH, startDay)
-            }
-            // Only show weeks that have already started on or before today
-            if (weekStartCal.after(todayStart)) {
-                continue
-            }
-
-            val weekEndCal = (monthStart.clone() as Calendar).apply {
-                set(Calendar.DAY_OF_MONTH, endDay)
-            }
-            val weekEndExclusive = (weekEndCal.clone() as Calendar).apply {
-                add(Calendar.DATE, 1)
-            }
-
+        val buckets = slices.mapIndexed { bucketIdx, slice ->
             val weekSessions = monthSessions.filter {
-                it.startTime >= weekStartCal.timeInMillis && it.startTime < weekEndExclusive.timeInMillis
+                it.startTime >= slice.startCal.timeInMillis && it.startTime < slice.endExclusiveCal.timeInMillis
             }
             val weekMs = weekSessions.sumOf { it.duration }
 
-            val axisLabel = "$monthLabel\n$startDay–$endDay"
-            val tooltipTitle = "${fullRangeFmt.format(weekStartCal.time)} – ${fullRangeFmt.format(weekEndCal.time)}"
-            val containsToday = !todayStart.before(weekStartCal) && todayStart.before(weekEndExclusive)
+            val axisLabel = if (slice.startDay == slice.endDay) {
+                "${slice.startDay}"
+            } else {
+                "${slice.startDay}-${slice.endDay}"
+            }
+            val tooltipTitle = if (slice.startDay == slice.endDay) {
+                fullRangeFmt.format(slice.startCal.time)
+            } else {
+                "${fullRangeFmt.format(slice.startCal.time)} – ${fullRangeFmt.format(slice.endCal.time)}"
+            }
+            val containsToday = !todayStart.before(slice.startCal) && todayStart.before(slice.endExclusiveCal)
 
-            buckets.add(
-                StatsChartBucket(
-                    index = bucketIdx,
-                    axisLabel = axisLabel,
-                    tooltipTitle = tooltipTitle,
-                    durationMs = weekMs,
-                    sessionCount = weekSessions.size,
-                    isCurrentPeriod = containsToday
-                )
+            StatsChartBucket(
+                index = bucketIdx,
+                axisLabel = axisLabel,
+                tooltipTitle = tooltipTitle,
+                durationMs = weekMs,
+                sessionCount = weekSessions.size,
+                isCurrentPeriod = containsToday
             )
-            bucketIdx++
         }
 
         val headerLabel = SimpleDateFormat("MMMM yyyy", Locale.US).format(monthStart.time)
@@ -1160,6 +1153,68 @@ object FocusStatsRepository {
         return startOfDayCalendar(source).apply {
             set(Calendar.DAY_OF_MONTH, 1)
         }
+    }
+
+    fun getMonthClippedWeeks(anchor: Calendar): List<MonthClippedWeek> {
+        val monthStart = startOfMonthCalendar(anchor)
+        val daysInMonth = monthStart.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val result = mutableListOf<MonthClippedWeek>()
+        var cursorDay = 1
+        while (cursorDay <= daysInMonth) {
+            val startCal = (monthStart.clone() as Calendar).apply {
+                set(Calendar.DAY_OF_MONTH, cursorDay)
+            }
+            val daysUntilSunday = when (startCal.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 6
+                Calendar.TUESDAY -> 5
+                Calendar.WEDNESDAY -> 4
+                Calendar.THURSDAY -> 3
+                Calendar.FRIDAY -> 2
+                Calendar.SATURDAY -> 1
+                Calendar.SUNDAY -> 0
+                else -> 0
+            }
+            val endDay = minOf(cursorDay + daysUntilSunday, daysInMonth)
+            val endCal = (monthStart.clone() as Calendar).apply {
+                set(Calendar.DAY_OF_MONTH, endDay)
+            }
+            val endExclusiveCal = (endCal.clone() as Calendar).apply {
+                add(Calendar.DATE, 1)
+            }
+            result.add(
+                MonthClippedWeek(
+                    startDay = cursorDay,
+                    endDay = endDay,
+                    startCal = startCal,
+                    endCal = endCal,
+                    endExclusiveCal = endExclusiveCal,
+                    dayCount = (endDay - cursorDay + 1)
+                )
+            )
+            cursorDay = endDay + 1
+        }
+        return result
+    }
+
+    fun findMonthClippedWeek(date: Calendar): MonthClippedWeek {
+        val dayOfMonth = date.get(Calendar.DAY_OF_MONTH)
+        val weeks = getMonthClippedWeeks(date)
+        return weeks.firstOrNull { dayOfMonth in it.startDay..it.endDay } ?: weeks.first()
+    }
+
+    fun stepMonthClippedWeekBackward(selectedDate: Calendar): Calendar {
+        val slice = findMonthClippedWeek(selectedDate)
+        return (slice.startCal.clone() as Calendar).apply { add(Calendar.DATE, -1) }
+    }
+
+    fun stepMonthClippedWeekForward(
+        selectedDate: Calendar,
+        nowCal: Calendar = Calendar.getInstance()
+    ): Calendar {
+        val todayStart = startOfDayCalendar(nowCal)
+        val slice = findMonthClippedWeek(selectedDate)
+        val candidate = (slice.endCal.clone() as Calendar).apply { add(Calendar.DATE, 1) }
+        return if (candidate.after(todayStart)) todayStart else candidate
     }
 
     private fun formatHourCompact(hour24: Int): String {

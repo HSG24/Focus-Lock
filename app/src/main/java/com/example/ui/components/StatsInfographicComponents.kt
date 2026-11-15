@@ -701,8 +701,12 @@ fun StatsDateNavigatorSection(
                                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
+                                    val jumpLabel = when (report.timeframe) {
+                                        StatsTimeframe.DAY -> "TODAY"
+                                        StatsTimeframe.WEEK, StatsTimeframe.MONTH -> "CURRENT"
+                                    }
                                     Text(
-                                        text = "Today",
+                                        text = jumpLabel,
                                         fontFamily = JetBrainsMono,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -1213,7 +1217,7 @@ private fun InteractiveThemeBarChart(
 ) {
     if (buckets.isEmpty()) return
 
-    val showGoalLine = timeframe == StatsTimeframe.WEEK || timeframe == StatsTimeframe.MONTH
+    val isGoalRefChart = timeframe == StatsTimeframe.WEEK || timeframe == StatsTimeframe.MONTH
     val goalReferenceMs = remember(timeframe, dailyTargetMs) {
         when (timeframe) {
             StatsTimeframe.MONTH -> dailyTargetMs * 7L
@@ -1221,14 +1225,31 @@ private fun InteractiveThemeBarChart(
         }
     }
     val maxBucketMs = remember(buckets) { buckets.maxOfOrNull { it.durationMs } ?: 0L }
-    val scaleMaxMs = remember(maxBucketMs, goalReferenceMs, showGoalLine) {
-        val base = if (showGoalLine) maxOf(maxBucketMs, goalReferenceMs) else maxBucketMs
-        base.coerceAtLeast(60_000L)
+    val highestBarMinutes = maxBucketMs / 60_000f
+    val periodGoalMinutes = goalReferenceMs / 60_000f
+    val showGoalLine = isGoalRefChart && (highestBarMinutes >= periodGoalMinutes * 0.5f)
+    val scaleMaxMs = remember(maxBucketMs, goalReferenceMs, isGoalRefChart, showGoalLine) {
+        if (isGoalRefChart) {
+            val highestMins = maxBucketMs / 60_000f
+            val goalMins = goalReferenceMs / 60_000f
+            val yMaxMinutes = if (showGoalLine) {
+                maxOf(highestMins * 1.25f, goalMins, 60f)
+            } else {
+                maxOf(highestMins * 1.25f, 60f)
+            }
+            (yMaxMinutes * 60_000f).toLong().coerceAtLeast(60L * 60_000L)
+        } else {
+            maxBucketMs.coerceAtLeast(60_000L)
+        }
     }
 
     val goalLineLabel = remember(timeframe, goalReferenceMs) {
         val base = FocusStatsRepository.formatDurationShort(goalReferenceMs)
-        if (timeframe == StatsTimeframe.MONTH) "$base/wk goal" else "$base goal"
+        when (timeframe) {
+            StatsTimeframe.WEEK -> "$base/day goal"
+            StatsTimeframe.MONTH -> "$base/wk goal"
+            StatsTimeframe.DAY -> "$base goal"
+        }
     }
 
     val currentBuckets by rememberUpdatedState(buckets)
@@ -1236,8 +1257,23 @@ private fun InteractiveThemeBarChart(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        if (isGoalRefChart && !showGoalLine) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = goalLineLabel,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 9.sp,
+                    color = palette.textSecondary.copy(alpha = 0.85f),
+                    modifier = Modifier.testTag("chart_goal_caption")
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1368,7 +1404,7 @@ private fun InteractiveThemeBarChart(
                     }
                 }
 
-                // Dashed horizontal Goal reference line in Week & Month modes
+                // Dashed horizontal Goal reference line only when highestBarMinutes >= periodGoalMinutes * 0.5f
                 if (showGoalLine) {
                     val goalRatio = (goalReferenceMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.05f, 1f)
                     val goalY = topPad + plotH * (1f - goalRatio)
@@ -1389,6 +1425,7 @@ private fun InteractiveThemeBarChart(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 2.dp, end = 2.dp)
+                        .testTag("chart_goal_line_badge")
                 ) {
                     Text(
                         text = goalLineLabel,

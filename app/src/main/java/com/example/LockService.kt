@@ -514,6 +514,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             onUnlock = { stopLock() },
                             allowedApps = settingsState.allowedApps,
                             layout = settingsState.lockAppLayout,
+                            minimalPillButtonSizeDp = settingsState.minimalPillButtonSizeDp,
                             showSessionTimer = settingsState.showSessionTimer,
                             hapticKeypad = settingsState.hapticKeypad,
                             autoClearWrongPin = settingsState.autoClearWrongPin,
@@ -646,6 +647,7 @@ fun LockScreen(
     onUnlock: () -> Unit,
     allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
     layout: LockAppLayout = LockAppLayout.PILL_ROW,
+    minimalPillButtonSizeDp: Int = FocusSettingsRepository.DEFAULT_PILL_BUTTON_SIZE_DP,
     showSessionTimer: Boolean = true,
     hapticKeypad: Boolean = true,
     autoClearWrongPin: Boolean = true,
@@ -804,6 +806,7 @@ fun LockScreen(
                     layout = layout,
                     palette = palette,
                     onAppClick = resolvedAppClick,
+                    pillButtonSizeDp = minimalPillButtonSizeDp,
                     iconCache = iconCache,
                     readFromCacheOnly = true
                 )
