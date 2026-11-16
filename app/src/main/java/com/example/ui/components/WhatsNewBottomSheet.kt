@@ -1,10 +1,8 @@
 package com.example.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,9 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,10 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,10 +61,6 @@ fun WhatsNewBottomSheet(
     val view = LocalView.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val latestRelease = releases.firstOrNull()
-    val olderReleases = remember(releases) {
-        if (releases.size > 1) releases.drop(1) else emptyList()
-    }
-    var showOlderUpdates by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -170,80 +158,15 @@ fun WhatsNewBottomSheet(
                 }
             }
 
-            // Scrollable release cards
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 390.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (latestRelease != null) {
-                    ReleaseHighlightCard(
-                        release = latestRelease,
-                        isLatest = true
-                    )
-                }
-
-                if (olderReleases.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(palette.surfaceElevated.copy(alpha = 0.65f))
-                            .border(1.dp, palette.border, RoundedCornerShape(12.dp))
-                            .clickable {
-                                view.performClockTickHaptic()
-                                showOlderUpdates = !showOlderUpdates
-                            }
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                            .testTag("whats_new_previous_toggle"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.History,
-                                contentDescription = null,
-                                tint = palette.textSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "Earlier Updates",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontSize = 13.5.sp,
-                                color = palette.textPrimary
-                            )
-                        }
-                        Icon(
-                            imageVector = if (showOlderUpdates) {
-                                Icons.Outlined.KeyboardArrowUp
-                            } else {
-                                Icons.Outlined.KeyboardArrowDown
-                            },
-                            contentDescription = if (showOlderUpdates) {
-                                "Hide earlier updates"
-                            } else {
-                                "Show earlier updates"
-                            },
-                            tint = palette.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    AnimatedVisibility(visible = showOlderUpdates) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            olderReleases.forEach { release ->
-                                ReleaseHighlightCard(
-                                    release = release,
-                                    isLatest = false
-                                )
-                            }
-                        }
-                    }
+            if (latestRelease != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 390.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ReleaseHighlightCard(release = latestRelease)
                 }
             }
 
@@ -282,8 +205,7 @@ fun WhatsNewBottomSheet(
 
 @Composable
 private fun ReleaseHighlightCard(
-    release: WhatsNewRelease,
-    isLatest: Boolean
+    release: WhatsNewRelease
 ) {
     val palette = LocalFocusTheme.current
     val cardShape = remember { RoundedCornerShape(16.dp) }
@@ -293,38 +215,25 @@ private fun ReleaseHighlightCard(
             .fillMaxWidth()
             .clip(cardShape)
             .background(
-                color = if (isLatest) palette.surfaceElevated else palette.surfaceElevated.copy(alpha = 0.55f),
+                color = palette.surfaceElevated,
                 shape = cardShape
             )
             .border(
                 width = 1.dp,
-                color = if (isLatest) palette.primaryBorderTint else palette.border,
+                color = palette.primaryBorderTint,
                 shape = cardShape
             )
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = release.versionLabel.uppercase(),
-                fontFamily = JetBrainsMono,
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                color = if (isLatest) palette.primary else palette.textSecondary
-            )
-            if (!isLatest) {
-                Text(
-                    text = release.headline,
-                    fontSize = 11.5.sp,
-                    color = palette.textSecondary
-                )
-            }
-        }
+        Text(
+            text = release.versionLabel.uppercase(),
+            fontFamily = JetBrainsMono,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            color = palette.primary
+        )
 
         release.items.forEachIndexed { index, item ->
             Row(
@@ -335,7 +244,7 @@ private fun ReleaseHighlightCard(
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = if (isLatest) palette.primary else palette.textSecondary,
+                    tint = palette.primary,
                     modifier = Modifier
                         .padding(top = 2.dp)
                         .size(16.dp)

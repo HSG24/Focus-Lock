@@ -437,10 +437,8 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertIsDisplayed()
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
         composeRule.onNodeWithText("Day-by-Day Monthly Chart").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("whats_new_previous_toggle").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Movable Back to Lock Button").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
+        composeRule.onNodeWithText("Earlier Updates").assertDoesNotExist()
 
         composeRule.onNodeWithTag("whats_new_got_it_button").performClick()
         composeRule.waitForIdle()

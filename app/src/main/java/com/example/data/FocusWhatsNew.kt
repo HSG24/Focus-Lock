@@ -25,9 +25,9 @@ data class WhatsNewRelease(
  * Plain-language release notes shown automatically after an app update and kept
  * permanently accessible in Settings -> App Updates -> What's New.
  *
- * Maintenance rule: Whenever a new app update is prepared, prepend a new
- * [WhatsNewRelease] at the top of [releases] with an incremented [CURRENT_RELEASE_ID]
- * written in simple, everyday language.
+ * Maintenance rule: Whenever a new app update is prepared, replace the active
+ * [WhatsNewRelease] in [releases] with the new update's plain-language highlights
+ * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
     const val CURRENT_RELEASE_ID = 4
@@ -46,74 +46,6 @@ object FocusWhatsNewCatalog {
                 WhatsNewItem(
                     title = "Tap Any Day for Details",
                     description = "Tap any day bar in your monthly chart to see how many sessions and how much focus time you logged on that exact date."
-                )
-            )
-        ),
-        WhatsNewRelease(
-            releaseId = 3,
-            versionLabel = "Previous Update",
-            headline = "Movable Lock Button & Smarter Notifications",
-            summary = "Move your Back to Lock button wherever you want and enjoy a cleaner, expandable notification summary.",
-            items = listOf(
-                WhatsNewItem(
-                    title = "Movable Back to Lock Button",
-                    description = "When you open an allowed app while locked, you can now drag the Back to Lock button anywhere on the screen so it never blocks what you're doing."
-                ),
-                WhatsNewItem(
-                    title = "No More Repeated Notifications",
-                    description = "Fixed an issue where the same notification could appear 20+ times in your post-focus summary. Duplicate alerts from the same app are now combined cleanly."
-                ),
-                WhatsNewItem(
-                    title = "Expand & Collapse More Notifications",
-                    description = "Tap '+N more notifications' on any app in your summary to view every missed alert, then tap 'Show less' to collapse it back down."
-                )
-            )
-        ),
-        WhatsNewRelease(
-            releaseId = 2,
-            versionLabel = "Previous Update",
-            headline = "Cleaner Charts, Custom Pills & What's New",
-            summary = "Easier-to-read focus graphs, smarter chart scaling, and adjustable lock screen buttons.",
-            items = listOf(
-                WhatsNewItem(
-                    title = "Only Real Progress Up to Today",
-                    description = "Weekly and monthly charts hide upcoming future days until they arrive, keeping your view focused on what you've actually done."
-                ),
-                WhatsNewItem(
-                    title = "Clearer Bars & Smart Scaling",
-                    description = "Shorter focus sessions automatically scale taller on your Weekly and Monthly charts so every bit of effort stands out."
-                ),
-                WhatsNewItem(
-                    title = "Tap Any Bar for Details",
-                    description = "Tap a chart bar to check sessions and time for that period below. Tap the same bar again—or anywhere else—to return to your full summary."
-                ),
-                WhatsNewItem(
-                    title = "Adjustable Minimal Pill Size",
-                    description = "Pick your preferred button size from compact to large using the new slider in Settings -> Lock Screen Apps Layout."
-                ),
-                WhatsNewItem(
-                    title = "What's New Guide",
-                    description = "Every update now shares a quick, plain-English overview of what changed, and you can revisit it anytime in Settings."
-                )
-            )
-        ),
-        WhatsNewRelease(
-            releaseId = 1,
-            versionLabel = "Previous Update",
-            headline = "Themes, Ranks & Offline Sync",
-            summary = "Personalize your focus space and keep your stats backed up automatically.",
-            items = listOf(
-                WhatsNewItem(
-                    title = "4 Visual Themes",
-                    description = "Switch between Nothing Crimson, Cyber Ice, Solar Amber, and Ultraviolet Pulse across your lock screen, charts, and home widget."
-                ),
-                WhatsNewItem(
-                    title = "Works Offline & Syncs Back",
-                    description = "Your focus sessions save on your phone right away even without internet and sync automatically once you're back online."
-                ),
-                WhatsNewItem(
-                    title = "Streaks & Rank Ladder",
-                    description = "Track your current streak alongside your all-time best and check your XP rank anytime from the top pill in Stats."
                 )
             )
         )
