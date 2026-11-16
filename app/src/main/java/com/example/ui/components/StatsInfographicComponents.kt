@@ -16,9 +16,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -56,6 +58,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -1218,12 +1221,7 @@ private fun InteractiveThemeBarChart(
     if (buckets.isEmpty()) return
 
     val isGoalRefChart = timeframe == StatsTimeframe.WEEK || timeframe == StatsTimeframe.MONTH
-    val goalReferenceMs = remember(timeframe, dailyTargetMs) {
-        when (timeframe) {
-            StatsTimeframe.MONTH -> dailyTargetMs * 7L
-            else -> dailyTargetMs
-        }
-    }
+    val goalReferenceMs = dailyTargetMs
     val maxBucketMs = remember(buckets) { buckets.maxOfOrNull { it.durationMs } ?: 0L }
     val highestBarMinutes = maxBucketMs / 60_000f
     val periodGoalMinutes = goalReferenceMs / 60_000f
@@ -1246,8 +1244,7 @@ private fun InteractiveThemeBarChart(
     val goalLineLabel = remember(timeframe, goalReferenceMs) {
         val base = FocusStatsRepository.formatDurationShort(goalReferenceMs)
         when (timeframe) {
-            StatsTimeframe.WEEK -> "$base/day goal"
-            StatsTimeframe.MONTH -> "$base/wk goal"
+            StatsTimeframe.WEEK, StatsTimeframe.MONTH -> "$base/day goal"
             StatsTimeframe.DAY -> "$base goal"
         }
     }
@@ -1274,211 +1271,277 @@ private fun InteractiveThemeBarChart(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(106.dp)
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .testTag("stats_bar_chart_canvas")
-                    .pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            if (size.width > 0 && currentBuckets.isNotEmpty()) {
-                                val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
-                                val tapped = (offset.x / slotWidth).toInt()
-                                    .coerceIn(0, currentBuckets.lastIndex)
-                                currentOnSelectBucket(tapped)
+            val minMonthSlotWidth = 20.dp
+            val requiredMonthWidth = minMonthSlotWidth * buckets.size
+            val needsHorizontalScroll = timeframe == StatsTimeframe.MONTH && requiredMonthWidth > maxWidth
+            val contentWidth = if (needsHorizontalScroll) requiredMonthWidth else maxWidth
+            val hScrollState = rememberScrollState()
+
+            LaunchedEffect(timeframe, buckets.size, needsHorizontalScroll) {
+                if (needsHorizontalScroll && buckets.any { it.isCurrentPeriod }) {
+                    hScrollState.scrollTo(hScrollState.maxValue)
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (needsHorizontalScroll) {
+                                Modifier.horizontalScroll(hScrollState)
+                            } else {
+                                Modifier
+                            }
+                        )
+                ) {
+                    Column(
+                        modifier = Modifier.width(contentWidth),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(106.dp)
+                        ) {
+                            Canvas(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .testTag("stats_bar_chart_canvas")
+                                    .pointerInput(Unit) {
+                                        detectTapGestures { offset ->
+                                            if (size.width > 0 && currentBuckets.isNotEmpty()) {
+                                                val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
+                                                val tapped = (offset.x / slotWidth).toInt()
+                                                    .coerceIn(0, currentBuckets.lastIndex)
+                                                currentOnSelectBucket(tapped)
+                                            }
+                                        }
+                                    }
+                            ) {
+                                val count = buckets.size
+                                if (count == 0) return@Canvas
+                                val w = size.width
+                                val h = size.height
+                                val topPad = 8.dp.toPx()
+                                val bottomPad = 4.dp.toPx()
+                                val plotH = (h - topPad - bottomPad).coerceAtLeast(10f)
+                                val slotW = w / count.toFloat()
+
+                                // Optional Cyber Ice subtle horizontal gridlines
+                                if (palette.theme == AppVisualTheme.CYBER_ICE) {
+                                    for (frac in listOf(0.25f, 0.5f, 0.75f)) {
+                                        val gy = topPad + plotH * (1f - frac)
+                                        drawLine(
+                                            color = palette.primary.copy(alpha = 0.08f),
+                                            start = Offset(0f, gy),
+                                            end = Offset(w, gy),
+                                            strokeWidth = 1f
+                                        )
+                                    }
+                                }
+
+                                // Baseline
+                                if (palette.useDottedDividers) {
+                                    val dotR = 1.dp.toPx()
+                                    val step = 6.dp.toPx()
+                                    var dx = dotR
+                                    while (dx < w) {
+                                        drawCircle(
+                                            color = palette.borderHighlight,
+                                            radius = dotR,
+                                            center = Offset(dx, h - 1.dp.toPx())
+                                        )
+                                        dx += step
+                                    }
+                                } else {
+                                    drawLine(
+                                        color = palette.border,
+                                        start = Offset(0f, h - 1.dp.toPx()),
+                                        end = Offset(w, h - 1.dp.toPx()),
+                                        strokeWidth = 1.dp.toPx()
+                                    )
+                                }
+
+                                // Bars
+                                val barGapRatio = when (timeframe) {
+                                    StatsTimeframe.WEEK -> 0.42f
+                                    StatsTimeframe.DAY -> 0.34f
+                                    StatsTimeframe.MONTH -> 0.34f
+                                }
+                                val maxBarW = if (timeframe == StatsTimeframe.MONTH) 18.dp.toPx() else 24.dp.toPx()
+                                val barW = (slotW * (1f - barGapRatio)).coerceIn(3.dp.toPx(), maxBarW)
+                                val cornerPx = when (palette.theme) {
+                                    AppVisualTheme.NOTHING_CRIMSON -> 1.5.dp.toPx()
+                                    AppVisualTheme.CYBER_ICE -> 2.dp.toPx()
+                                    AppVisualTheme.SOLAR_AMBER -> 3.dp.toPx()
+                                    AppVisualTheme.ULTRAVIOLET_PULSE -> 6.dp.toPx()
+                                }
+
+                                buckets.forEachIndexed { idx, bucket ->
+                                    val centerX = slotW * idx + slotW / 2f
+                                    val leftX = centerX - barW / 2f
+                                    val isSelected = selectedIndex == idx
+                                    val hasValue = bucket.durationMs > 0L
+                                    val ratio = if (hasValue) {
+                                        (bucket.durationMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.06f, 1f)
+                                    } else {
+                                        0f
+                                    }
+
+                                    if (hasValue) {
+                                        val barH = plotH * ratio
+                                        val topY = topPad + (plotH - barH)
+                                        val barColor = when {
+                                            isSelected -> palette.primary
+                                            selectedIndex != null -> palette.primary.copy(alpha = 0.35f)
+                                            bucket.isCurrentPeriod -> palette.primary
+                                            else -> palette.primary.copy(alpha = 0.76f)
+                                        }
+
+                                        if (palette.theme == AppVisualTheme.ULTRAVIOLET_PULSE) {
+                                            drawRoundRect(
+                                                brush = Brush.verticalGradient(
+                                                    colors = listOf(barColor, palette.primarySecondary.copy(alpha = if (selectedIndex != null && !isSelected) 0.25f else 0.72f)),
+                                                    startY = topY,
+                                                    endY = topPad + plotH
+                                                ),
+                                                topLeft = Offset(leftX, topY),
+                                                size = Size(barW, barH),
+                                                cornerRadius = CornerRadius(cornerPx, cornerPx)
+                                            )
+                                        } else {
+                                            drawRoundRect(
+                                                color = barColor,
+                                                topLeft = Offset(leftX, topY),
+                                                size = Size(barW, barH),
+                                                cornerRadius = CornerRadius(cornerPx, cornerPx)
+                                            )
+                                        }
+                                    } else {
+                                        val stubH = if (isSelected) 8.dp.toPx() else 3.dp.toPx()
+                                        drawRoundRect(
+                                            color = if (isSelected) palette.primary.copy(alpha = 0.65f) else palette.borderHighlight.copy(alpha = 0.45f),
+                                            topLeft = Offset(leftX, topPad + plotH - stubH),
+                                            size = Size(barW, stubH),
+                                            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                                        )
+                                    }
+                                }
+
+                                // Dashed horizontal Goal reference line only when highestBarMinutes >= periodGoalMinutes * 0.5f
+                                if (showGoalLine) {
+                                    val goalRatio = (goalReferenceMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.05f, 1f)
+                                    val goalY = topPad + plotH * (1f - goalRatio)
+                                    drawLine(
+                                        color = palette.textSecondary.copy(alpha = 0.55f),
+                                        start = Offset(0f, goalY),
+                                        end = Offset(w, goalY),
+                                        strokeWidth = 1.2.dp.toPx(),
+                                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // X-Axis Labels aligned to slots
+                        when (timeframe) {
+                            StatsTimeframe.WEEK -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    buckets.forEachIndexed { idx, bucket ->
+                                        val isSel = selectedIndex == idx
+                                        Text(
+                                            text = bucket.axisLabel,
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 9.5.sp,
+                                            lineHeight = 11.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontWeight = if (isSel || bucket.isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
+                                            color = when {
+                                                isSel -> palette.primary
+                                                bucket.isCurrentPeriod -> palette.textPrimary
+                                                else -> palette.textSecondary
+                                            },
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                            StatsTimeframe.MONTH -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    buckets.forEachIndexed { idx, bucket ->
+                                        val isSel = selectedIndex == idx
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = bucket.axisLabel,
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 8.5.sp,
+                                                lineHeight = 10.sp,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                fontWeight = if (isSel || bucket.isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
+                                                color = when {
+                                                    isSel -> palette.primary
+                                                    bucket.isCurrentPeriod -> palette.textPrimary
+                                                    else -> palette.textSecondary
+                                                },
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.testTag("month_axis_label_${bucket.axisLabel}")
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            StatsTimeframe.DAY -> {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    listOf("12AM", "6AM", "12PM", "6PM", "12AM").forEach { label ->
+                                        Text(
+                                            text = label,
+                                            fontFamily = JetBrainsMono,
+                                            fontSize = 9.sp,
+                                            color = palette.textSecondary,
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-            ) {
-                val count = buckets.size
-                if (count == 0) return@Canvas
-                val w = size.width
-                val h = size.height
-                val topPad = 8.dp.toPx()
-                val bottomPad = 4.dp.toPx()
-                val plotH = (h - topPad - bottomPad).coerceAtLeast(10f)
-                val slotW = w / count.toFloat()
-
-                // Optional Cyber Ice subtle horizontal gridlines
-                if (palette.theme == AppVisualTheme.CYBER_ICE) {
-                    for (frac in listOf(0.25f, 0.5f, 0.75f)) {
-                        val gy = topPad + plotH * (1f - frac)
-                        drawLine(
-                            color = palette.primary.copy(alpha = 0.08f),
-                            start = Offset(0f, gy),
-                            end = Offset(w, gy),
-                            strokeWidth = 1f
-                        )
-                    }
                 }
 
-                // Baseline
-                if (palette.useDottedDividers) {
-                    val dotR = 1.dp.toPx()
-                    val step = 6.dp.toPx()
-                    var dx = dotR
-                    while (dx < w) {
-                        drawCircle(
-                            color = palette.borderHighlight,
-                            radius = dotR,
-                            center = Offset(dx, h - 1.dp.toPx())
-                        )
-                        dx += step
-                    }
-                } else {
-                    drawLine(
-                        color = palette.border,
-                        start = Offset(0f, h - 1.dp.toPx()),
-                        end = Offset(w, h - 1.dp.toPx()),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-
-                // Bars
-                val barGapRatio = when (timeframe) {
-                    StatsTimeframe.WEEK -> 0.42f
-                    StatsTimeframe.DAY -> 0.34f
-                    StatsTimeframe.MONTH -> 0.44f
-                }
-                val maxBarW = if (timeframe == StatsTimeframe.MONTH) 28.dp.toPx() else 24.dp.toPx()
-                val barW = (slotW * (1f - barGapRatio)).coerceIn(3.dp.toPx(), maxBarW)
-                val cornerPx = when (palette.theme) {
-                    AppVisualTheme.NOTHING_CRIMSON -> 1.5.dp.toPx()
-                    AppVisualTheme.CYBER_ICE -> 2.dp.toPx()
-                    AppVisualTheme.SOLAR_AMBER -> 3.dp.toPx()
-                    AppVisualTheme.ULTRAVIOLET_PULSE -> 6.dp.toPx()
-                }
-
-                buckets.forEachIndexed { idx, bucket ->
-                    val centerX = slotW * idx + slotW / 2f
-                    val leftX = centerX - barW / 2f
-                    val isSelected = selectedIndex == idx
-                    val hasValue = bucket.durationMs > 0L
-                    val ratio = if (hasValue) {
-                        (bucket.durationMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.06f, 1f)
-                    } else {
-                        0f
-                    }
-
-                    if (hasValue) {
-                        val barH = plotH * ratio
-                        val topY = topPad + (plotH - barH)
-                        val barColor = when {
-                            isSelected -> palette.primary
-                            selectedIndex != null -> palette.primary.copy(alpha = 0.35f)
-                            bucket.isCurrentPeriod -> palette.primary
-                            else -> palette.primary.copy(alpha = 0.76f)
-                        }
-
-                        if (palette.theme == AppVisualTheme.ULTRAVIOLET_PULSE) {
-                            drawRoundRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(barColor, palette.primarySecondary.copy(alpha = if (selectedIndex != null && !isSelected) 0.25f else 0.72f)),
-                                    startY = topY,
-                                    endY = topPad + plotH
-                                ),
-                                topLeft = Offset(leftX, topY),
-                                size = Size(barW, barH),
-                                cornerRadius = CornerRadius(cornerPx, cornerPx)
-                            )
-                        } else {
-                            drawRoundRect(
-                                color = barColor,
-                                topLeft = Offset(leftX, topY),
-                                size = Size(barW, barH),
-                                cornerRadius = CornerRadius(cornerPx, cornerPx)
-                            )
-                        }
-                    } else {
-                        val stubH = if (isSelected) 8.dp.toPx() else 3.dp.toPx()
-                        drawRoundRect(
-                            color = if (isSelected) palette.primary.copy(alpha = 0.65f) else palette.borderHighlight.copy(alpha = 0.45f),
-                            topLeft = Offset(leftX, topPad + plotH - stubH),
-                            size = Size(barW, stubH),
-                            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
-                        )
-                    }
-                }
-
-                // Dashed horizontal Goal reference line only when highestBarMinutes >= periodGoalMinutes * 0.5f
                 if (showGoalLine) {
-                    val goalRatio = (goalReferenceMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.05f, 1f)
-                    val goalY = topPad + plotH * (1f - goalRatio)
-                    drawLine(
-                        color = palette.textSecondary.copy(alpha = 0.55f),
-                        start = Offset(0f, goalY),
-                        end = Offset(w, goalY),
-                        strokeWidth = 1.2.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
-                    )
-                }
-            }
-
-            if (showGoalLine) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = palette.surface.copy(alpha = 0.88f),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 2.dp, end = 2.dp)
-                        .testTag("chart_goal_line_badge")
-                ) {
-                    Text(
-                        text = goalLineLabel,
-                        fontFamily = JetBrainsMono,
-                        fontSize = 8.5.sp,
-                        color = palette.textSecondary,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                    )
-                }
-            }
-        }
-
-        // X-Axis Labels aligned to slots
-        when (timeframe) {
-            StatsTimeframe.WEEK, StatsTimeframe.MONTH -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    buckets.forEachIndexed { idx, bucket ->
-                        val isSel = selectedIndex == idx
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = palette.surface.copy(alpha = 0.88f),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 2.dp, end = 2.dp)
+                            .testTag("chart_goal_line_badge")
+                    ) {
                         Text(
-                            text = bucket.axisLabel,
+                            text = goalLineLabel,
                             fontFamily = JetBrainsMono,
-                            fontSize = if (timeframe == StatsTimeframe.MONTH) 9.sp else 9.5.sp,
-                            lineHeight = 11.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = if (isSel || bucket.isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
-                            color = when {
-                                isSel -> palette.primary
-                                bucket.isCurrentPeriod -> palette.textPrimary
-                                else -> palette.textSecondary
-                            },
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-            StatsTimeframe.DAY -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    listOf("12AM", "6AM", "12PM", "6PM", "12AM").forEach { label ->
-                        Text(
-                            text = label,
-                            fontFamily = JetBrainsMono,
-                            fontSize = 9.sp,
+                            fontSize = 8.5.sp,
                             color = palette.textSecondary,
-                            maxLines = 1,
-                            softWrap = false
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
                 }

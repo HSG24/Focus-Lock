@@ -101,8 +101,8 @@ class StatsRepositoryAndUiTest {
             Session(startTime = nov11Session, duration = 45 * 60_000L)
         )
 
-        // MONTH report for Nov 2026 anchored on Nov 15 renders ONLY passed & current calendar weeks
-        // ("1", "2-8", "9-15") and hides upcoming weeks ("16-22", "23-29", "30") until they start.
+        // MONTH report for Nov 2026 anchored on Nov 15 renders ONLY passed & current days ("1".."15")
+        // and hides upcoming days ("16".."30") until they start.
         val novMonthReport = FocusStatsRepository.buildPeriodReport(
             sessions = sessions,
             timeframe = StatsTimeframe.MONTH,
@@ -110,13 +110,11 @@ class StatsRepositoryAndUiTest {
             dailyGoalMinutes = 300L,
             nowCal = nov15Anchor
         )
-        assertEquals(3, novMonthReport.chartBuckets.size)
-        assertEquals(
-            listOf("1", "2-8", "9-15"),
-            novMonthReport.chartBuckets.map { it.axisLabel }
-        )
+        assertEquals(15, novMonthReport.chartBuckets.size)
+        assertEquals((1..15).map { "$it" }, novMonthReport.chartBuckets.map { it.axisLabel })
         assertEquals(25 * 60_000L, novMonthReport.chartBuckets[0].durationMs)
-        assertEquals(45 * 60_000L, novMonthReport.chartBuckets[2].durationMs)
+        assertEquals(45 * 60_000L, novMonthReport.chartBuckets[10].durationMs)
+        assertTrue(novMonthReport.chartBuckets[14].isCurrentPeriod)
 
         // Mid-week check (Wed Nov 11): WEEK shows only Mon 9, Tue 10, Wed 11 (hides Thu 12..Sun 15)
         val nov11Anchor = (nov15Anchor.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, 11) }
@@ -130,7 +128,7 @@ class StatsRepositoryAndUiTest {
         assertEquals("CURRENT WEEK", midWeekReport.headerDateLabel)
         assertEquals(3, midWeekReport.chartBuckets.size)
 
-        // WEEK tab steps through the exact same month-clipped weeks:
+        // WEEK tab steps through the exact month-clipped weeks:
         // Nov 9–15 -> Nov 2–8 -> Nov 1 -> Oct 26–31
         val currentWeek = FocusStatsRepository.buildPeriodReport(
             sessions = sessions,
@@ -140,7 +138,7 @@ class StatsRepositoryAndUiTest {
             nowCal = nov15Anchor
         )
         assertEquals("CURRENT WEEK", currentWeek.headerDateLabel)
-        assertEquals(novMonthReport.chartBuckets[2].durationMs, currentWeek.totalFocusMs)
+        assertEquals(novMonthReport.chartBuckets[10].durationMs, currentWeek.totalFocusMs)
 
         val step1Cal = FocusStatsRepository.stepMonthClippedWeekBackward(nov15Anchor)
         val nov2to8 = FocusStatsRepository.buildPeriodReport(
@@ -152,7 +150,7 @@ class StatsRepositoryAndUiTest {
         )
         assertEquals("NOV 2 – NOV 8, 2026", nov2to8.headerDateLabel)
         assertEquals(7, nov2to8.chartBuckets.size)
-        assertEquals(novMonthReport.chartBuckets[1].durationMs, nov2to8.totalFocusMs)
+        assertEquals(0L, nov2to8.totalFocusMs)
 
         val step2Cal = FocusStatsRepository.stepMonthClippedWeekBackward(step1Cal)
         val nov1Week = FocusStatsRepository.buildPeriodReport(
@@ -189,7 +187,7 @@ class StatsRepositoryAndUiTest {
         )
         assertEquals("NOV 1, 2026", nov1Again.headerDateLabel)
 
-        // MONTH report for Oct 2026 (Thu Oct 1 .. Sat Oct 31) has 5 month-clipped calendar weeks
+        // Completed past MONTH report for Oct 2026 renders all 31 days ("1".."31")
         val octReport = FocusStatsRepository.buildPeriodReport(
             sessions = sessions,
             timeframe = StatsTimeframe.MONTH,
@@ -197,11 +195,9 @@ class StatsRepositoryAndUiTest {
             dailyGoalMinutes = 300L,
             nowCal = nov15Anchor
         )
-        assertEquals(
-            listOf("1-4", "5-11", "12-18", "19-25", "26-31"),
-            octReport.chartBuckets.map { it.axisLabel }
-        )
-        assertEquals(octLastWeek.totalFocusMs, octReport.chartBuckets[4].durationMs)
+        assertEquals(31, octReport.chartBuckets.size)
+        assertEquals((1..31).map { "$it" }, octReport.chartBuckets.map { it.axisLabel })
+        assertEquals(40 * 60_000L, octReport.chartBuckets[30].durationMs)
     }
 
     @Test
@@ -262,12 +258,16 @@ class StatsRepositoryAndUiTest {
         assertEquals(0, composeRule.onAllNodesWithText("TODAY").fetchSemanticsNodes().size)
         composeRule.onNodeWithTag("jump_today_button").performClick()
 
-        // MONTH tab: numeric week ranges & 35h/wk goal caption & CURRENT jump pill when stepping back
+        // MONTH tab: daily bars & every single bar has its date underneath + 5h/day goal caption
         composeRule.onNodeWithTag("timeframe_month_tab").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("chart_goal_caption").assertIsDisplayed()
-        composeRule.onNodeWithText("35h/wk goal").assertIsDisplayed()
+        composeRule.onNodeWithText("5h/day goal").assertIsDisplayed()
         composeRule.onNodeWithTag("chart_goal_line_badge").assertDoesNotExist()
+        val todayDom = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+        for (day in 1..todayDom) {
+            composeRule.onNodeWithTag("month_axis_label_$day").assertExists()
+        }
         composeRule.onNodeWithTag("prev_day_button").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("CURRENT").assertIsDisplayed()
@@ -404,13 +404,13 @@ class StatsRepositoryAndUiTest {
             )
         )
 
-        // Bumping releaseId from 2 to 3 on same version also triggers What's New
+        // Bumping releaseId from 3 to 4 on same version also triggers What's New
         assertTrue(
             FocusWhatsNewRepository.shouldShowAutoWhatsNew(
                 context = context,
                 installedVersionName = "1.0.5",
                 installedVersionCode = 5L,
-                currentReleaseId = 3
+                currentReleaseId = 4
             )
         )
     }
@@ -436,11 +436,11 @@ class StatsRepositoryAndUiTest {
 
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertIsDisplayed()
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
-        composeRule.onNodeWithText("Movable Back to Lock Button").assertIsDisplayed()
+        composeRule.onNodeWithText("Day-by-Day Monthly Chart").assertIsDisplayed()
 
         composeRule.onNodeWithTag("whats_new_previous_toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Only Real Progress Up to Today").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Movable Back to Lock Button").performScrollTo().assertIsDisplayed()
 
         composeRule.onNodeWithTag("whats_new_got_it_button").performClick()
         composeRule.waitForIdle()

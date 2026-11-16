@@ -30,12 +30,28 @@ data class WhatsNewRelease(
  * written in simple, everyday language.
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 3
+    const val CURRENT_RELEASE_ID = 4
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 3,
+            releaseId = 4,
             versionLabel = "Latest Update",
+            headline = "Daily Bars in Monthly Stats",
+            summary = "Your Month view now displays focus progress for every individual day of the month.",
+            items = listOf(
+                WhatsNewItem(
+                    title = "Day-by-Day Monthly Chart",
+                    description = "The Month tab in Stats now shows a separate bar for each day of the month (with its date shown right underneath) up to today, making your daily habits easier to follow."
+                ),
+                WhatsNewItem(
+                    title = "Tap Any Day for Details",
+                    description = "Tap any day bar in your monthly chart to see how many sessions and how much focus time you logged on that exact date."
+                )
+            )
+        ),
+        WhatsNewRelease(
+            releaseId = 3,
+            versionLabel = "Previous Update",
             headline = "Movable Lock Button & Smarter Notifications",
             summary = "Move your Back to Lock button wherever you want and enjoy a cleaner, expandable notification summary.",
             items = listOf(
@@ -61,11 +77,11 @@ object FocusWhatsNewCatalog {
             items = listOf(
                 WhatsNewItem(
                     title = "Only Real Progress Up to Today",
-                    description = "Weekly and monthly charts now hide upcoming days and future weeks until they begin, keeping your view focused on what you've actually done."
+                    description = "Weekly and monthly charts hide upcoming future days until they arrive, keeping your view focused on what you've actually done."
                 ),
                 WhatsNewItem(
-                    title = "Calendar-Aligned Weeks & Clearer Bars",
-                    description = "Months are neatly grouped into calendar weeks inside each month, and shorter sessions automatically scale taller so every focus block stands out."
+                    title = "Clearer Bars & Smart Scaling",
+                    description = "Shorter focus sessions automatically scale taller on your Weekly and Monthly charts so every bit of effort stands out."
                 ),
                 WhatsNewItem(
                     title = "Tap Any Bar for Details",

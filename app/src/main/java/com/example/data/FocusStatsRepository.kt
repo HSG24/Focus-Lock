@@ -1038,36 +1038,25 @@ object FocusStatsRepository {
         val avgMs = if (count > 0) totalMs / count else 0L
         val longestMs = monthSessions.maxOfOrNull { it.duration } ?: 0L
 
-        val fullRangeFmt = SimpleDateFormat("MMM d", Locale.US)
-        val slices = getMonthClippedWeeks(selectedDate)
-            .filter { !it.startCal.after(todayStart) }
-
-        val buckets = slices.mapIndexed { bucketIdx, slice ->
-            val weekSessions = monthSessions.filter {
-                it.startTime >= slice.startCal.timeInMillis && it.startTime < slice.endExclusiveCal.timeInMillis
+        val tooltipDateFmt = SimpleDateFormat("EEE, MMM d", Locale.US)
+        val buckets = (1..daysInMonth).mapNotNull { dayOfMonth ->
+            val dayCal = (monthStart.clone() as Calendar).apply {
+                set(Calendar.DAY_OF_MONTH, dayOfMonth)
             }
-            val weekMs = weekSessions.sumOf { it.duration }
-
-            val axisLabel = if (slice.startDay == slice.endDay) {
-                "${slice.startDay}"
+            if (dayCal.after(todayStart)) {
+                null
             } else {
-                "${slice.startDay}-${slice.endDay}"
+                val daySessions = monthSessions.filter { isSameDay(it.startTime, dayCal) }
+                val dayMs = daySessions.sumOf { it.duration }
+                StatsChartBucket(
+                    index = dayOfMonth - 1,
+                    axisLabel = "$dayOfMonth",
+                    tooltipTitle = tooltipDateFmt.format(dayCal.time),
+                    durationMs = dayMs,
+                    sessionCount = daySessions.size,
+                    isCurrentPeriod = isSameDayCalendar(dayCal, todayStart)
+                )
             }
-            val tooltipTitle = if (slice.startDay == slice.endDay) {
-                fullRangeFmt.format(slice.startCal.time)
-            } else {
-                "${fullRangeFmt.format(slice.startCal.time)} – ${fullRangeFmt.format(slice.endCal.time)}"
-            }
-            val containsToday = !todayStart.before(slice.startCal) && todayStart.before(slice.endExclusiveCal)
-
-            StatsChartBucket(
-                index = bucketIdx,
-                axisLabel = axisLabel,
-                tooltipTitle = tooltipTitle,
-                durationMs = weekMs,
-                sessionCount = weekSessions.size,
-                isCurrentPeriod = containsToday
-            )
         }
 
         val headerLabel = SimpleDateFormat("MMMM yyyy", Locale.US).format(monthStart.time)
