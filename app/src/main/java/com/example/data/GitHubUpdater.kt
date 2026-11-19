@@ -380,7 +380,11 @@ object GitHubUpdater {
     }
 
     internal fun parseVersionSegments(raw: String): List<Int> {
-        val token = VERSION_TOKEN_REGEX.find(raw.trim())?.value ?: return listOf(0)
+        val cleaned = raw.trim()
+            .removePrefix("v")
+            .removePrefix("V")
+            .trim()
+        val token = VERSION_TOKEN_REGEX.find(cleaned)?.value ?: return listOf(0)
         return token.split(".").map { segment ->
             segment.toIntOrNull() ?: 0
         }
@@ -393,8 +397,7 @@ object GitHubUpdater {
         for (i in 0 until maxLen) {
             val a = firstParts.getOrElse(i) { 0 }
             val b = secondParts.getOrElse(i) { 0 }
-            if (a > b) return 1
-            if (a < b) return -1
+            if (a != b) return a.compareTo(b)
         }
         return 0
     }

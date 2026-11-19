@@ -17,11 +17,11 @@ enum class AppVisualTheme(
         subtitle = "Dot-matrix pitch black & Nothing red",
         badgeTag = "DOT MATRIX"
     ),
-    CYBER_ICE(
-        id = "cyber_ice",
-        displayName = "Cyber Ice",
-        subtitle = "Abyssal navy, slate glass & glacier cyan HUD",
-        badgeTag = "HUD GRID"
+    LIQUID_GLASS(
+        id = "liquid_glass",
+        displayName = "Liquid Glass",
+        subtitle = "Deep obsidian dark glass with subtle specular depth",
+        badgeTag = "GLASS"
     ),
     SOLAR_AMBER(
         id = "solar_amber",
@@ -29,11 +29,11 @@ enum class AppVisualTheme(
         subtitle = "Warm carbon & tactical amber chronograph",
         badgeTag = "CHRONO"
     ),
-    ULTRAVIOLET_PULSE(
-        id = "ultraviolet_pulse",
-        displayName = "Ultraviolet Pulse",
-        subtitle = "Void obsidian & electric neon violet aura",
-        badgeTag = "NEON AURA"
+    NORDIC_SAGE(
+        id = "nordic_sage",
+        displayName = "Nordic Sage",
+        subtitle = "Basalt stone charcoal & muted botanical sage",
+        badgeTag = "ORGANIC"
     );
 
     companion object {
@@ -70,116 +70,116 @@ data class FocusThemePalette(
     val numeralFont: FontFamily,
     val bodyFont: FontFamily,
     val useDottedDividers: Boolean = false,
-    val useHudGridBackdrop: Boolean = false,
+    val isLiquidGlass: Boolean = false,
     val useChronographTicks: Boolean = false,
-    val useRadialAuraRings: Boolean = false
+    val useOrganicHorizon: Boolean = false
 ) {
     companion object {
         val NothingCrimson = FocusThemePalette(
             theme = AppVisualTheme.NOTHING_CRIMSON,
             background = Color(0xFF040406),
-            surface = Color(0xFF0E0E12),
-            surfaceElevated = Color(0xFF16161C),
-            pillGlassFill = Color(0xE8101014),
-            border = Color(0xFF1F1F27),
-            borderHighlight = Color(0xFF2E2E3A),
-            primary = Color(0xFFFF242E),
-            primarySecondary = Color(0xFFD71921),
+            surface = Color(0xFF111116),
+            surfaceElevated = Color(0xFF1B1B23),
+            pillGlassFill = Color(0xEB121218),
+            border = Color(0xFF23232D),
+            borderHighlight = Color(0xFF333342),
+            primary = Color(0xFFFF2E38),
+            primarySecondary = Color(0xFFFF5A62),
             primaryDeep = Color(0xFF9E1117),
             primaryGlow = Color(0xFF2C0609),
-            primaryContainer = Color(0xFF23080C),
-            primaryBorderTint = Color(0x45FF242E),
+            primaryContainer = Color(0xFF280A0F),
+            primaryBorderTint = Color(0x45FF2E38),
             onPrimary = Color(0xFFFFFFFF),
-            textPrimary = Color(0xFFF7F7FA),
-            textSecondary = Color(0xFF8B8B99),
-            success = Color(0xFF14C88D),
-            warning = Color(0xFFF5A623),
+            textPrimary = Color(0xFFFAFAFD),
+            textSecondary = Color(0xFFA2A2B2),
+            success = Color(0xFF22D399),
+            warning = Color(0xFFF6B13A),
             displayFont = DotGothic16,
             numeralFont = DotGothic16,
             bodyFont = PlusJakartaSans,
             useDottedDividers = true
         )
 
-        val CyberIce = FocusThemePalette(
-            theme = AppVisualTheme.CYBER_ICE,
-            background = Color(0xFF04080E),
-            surface = Color(0xFF0B121D),
-            surfaceElevated = Color(0xFF121D2D),
-            pillGlassFill = Color(0xE80A111B),
-            border = Color(0xFF18273B),
-            borderHighlight = Color(0xFF263E5C),
-            primary = Color(0xFF00E5FF),
-            primarySecondary = Color(0xFF00B8D4),
-            primaryDeep = Color(0xFF00768C),
-            primaryGlow = Color(0xFF042230),
-            primaryContainer = Color(0xFF072232),
-            primaryBorderTint = Color(0x4500E5FF),
-            onPrimary = Color(0xFF021119),
-            textPrimary = Color(0xFFF2F9FF),
-            textSecondary = Color(0xFF7D9BBA),
-            success = Color(0xFF22E5A8),
-            warning = Color(0xFFFFB020),
-            displayFont = Orbitron,
-            numeralFont = Orbitron,
+        val LiquidGlass = FocusThemePalette(
+            theme = AppVisualTheme.LIQUID_GLASS,
+            background = Color(0xFF020305),
+            surface = Color(0xFF0C0F15),
+            surfaceElevated = Color(0xFF161B25),
+            pillGlassFill = Color(0xE80C0F15),
+            border = Color(0x1EFFFFFF),
+            borderHighlight = Color(0x38FFFFFF),
+            primary = Color(0xFFCFD8E6),
+            primarySecondary = Color(0xFF93A0B4),
+            primaryDeep = Color(0xFF475266),
+            primaryGlow = Color(0xFF141924),
+            primaryContainer = Color(0xFF19202D),
+            primaryBorderTint = Color(0x33CFD8E6),
+            onPrimary = Color(0xFF07090D),
+            textPrimary = Color(0xFFF2F5FA),
+            textSecondary = Color(0xFF9EA8BA),
+            success = Color(0xFF4EE0B5),
+            warning = Color(0xFFF0C674),
+            displayFont = PlusJakartaSans,
+            numeralFont = JetBrainsMono,
             bodyFont = PlusJakartaSans,
-            useHudGridBackdrop = true
+            isLiquidGlass = true
         )
 
         val SolarAmber = FocusThemePalette(
             theme = AppVisualTheme.SOLAR_AMBER,
-            background = Color(0xFF080705),
-            surface = Color(0xFF13110D),
-            surfaceElevated = Color(0xFF1D1913),
-            pillGlassFill = Color(0xE813110D),
-            border = Color(0xFF29241B),
-            borderHighlight = Color(0xFF3E3629),
+            background = Color(0xFF070604),
+            surface = Color(0xFF14120D),
+            surfaceElevated = Color(0xFF201C14),
+            pillGlassFill = Color(0xEB15120D),
+            border = Color(0xFF2C261C),
+            borderHighlight = Color(0xFF42392B),
             primary = Color(0xFFFFB71B),
-            primarySecondary = Color(0xFFFF9100),
+            primarySecondary = Color(0xFFFF9E1A),
             primaryDeep = Color(0xFF946100),
             primaryGlow = Color(0xFF291B04),
-            primaryContainer = Color(0xFF291D07),
+            primaryContainer = Color(0xFF2B1F08),
             primaryBorderTint = Color(0x45FFB71B),
-            onPrimary = Color(0xFF181000),
+            onPrimary = Color(0xFF140D00),
             textPrimary = Color(0xFFFFFBF2),
-            textSecondary = Color(0xFF9E927E),
-            success = Color(0xFF22C55E),
-            warning = Color(0xFFFFB71B),
+            textSecondary = Color(0xFFB3A690),
+            success = Color(0xFF2ED47A),
+            warning = Color(0xFFFFC13B),
             displayFont = ChakraPetch,
             numeralFont = ChakraPetch,
             bodyFont = PlusJakartaSans,
             useChronographTicks = true
         )
 
-        val UltravioletPulse = FocusThemePalette(
-            theme = AppVisualTheme.ULTRAVIOLET_PULSE,
-            background = Color(0xFF06050B),
-            surface = Color(0xFF100D18),
-            surfaceElevated = Color(0xFF181425),
-            pillGlassFill = Color(0xE8100D18),
-            border = Color(0xFF241D36),
-            borderHighlight = Color(0xFF372C52),
-            primary = Color(0xFFB78EFF),
-            primarySecondary = Color(0xFF8354FF),
-            primaryDeep = Color(0xFF532EB8),
-            primaryGlow = Color(0xFF1D1138),
-            primaryContainer = Color(0xFF221540),
-            primaryBorderTint = Color(0x45B78EFF),
-            onPrimary = Color(0xFF0E0620),
-            textPrimary = Color(0xFFF6F3FF),
-            textSecondary = Color(0xFF988BB8),
-            success = Color(0xFF34D399),
-            warning = Color(0xFFFBBF24),
+        val NordicSage = FocusThemePalette(
+            theme = AppVisualTheme.NORDIC_SAGE,
+            background = Color(0xFF070908),
+            surface = Color(0xFF121714),
+            surfaceElevated = Color(0xFF1C2420),
+            pillGlassFill = Color(0xEB131815),
+            border = Color(0xFF242E28),
+            borderHighlight = Color(0xFF36463E),
+            primary = Color(0xFF8EC2A1),
+            primarySecondary = Color(0xFF6EA381),
+            primaryDeep = Color(0xFF3E634D),
+            primaryGlow = Color(0xFF1A2D22),
+            primaryContainer = Color(0xFF17271E),
+            primaryBorderTint = Color(0x4A8EC2A1),
+            onPrimary = Color(0xFF07130B),
+            textPrimary = Color(0xFFF4F7F4),
+            textSecondary = Color(0xFF9EADA4),
+            success = Color(0xFF7CD4A2),
+            warning = Color(0xFFE9C380),
             displayFont = PlusJakartaSans,
             numeralFont = JetBrainsMono,
             bodyFont = PlusJakartaSans,
-            useRadialAuraRings = true
+            useOrganicHorizon = true
         )
 
         fun from(theme: AppVisualTheme): FocusThemePalette = when (theme) {
             AppVisualTheme.NOTHING_CRIMSON -> NothingCrimson
-            AppVisualTheme.CYBER_ICE -> CyberIce
+            AppVisualTheme.LIQUID_GLASS -> LiquidGlass
             AppVisualTheme.SOLAR_AMBER -> SolarAmber
-            AppVisualTheme.ULTRAVIOLET_PULSE -> UltravioletPulse
+            AppVisualTheme.NORDIC_SAGE -> NordicSage
         }
     }
 }

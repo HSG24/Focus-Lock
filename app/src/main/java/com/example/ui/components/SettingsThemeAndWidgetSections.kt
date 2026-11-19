@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -8,13 +9,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,10 +38,8 @@ import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Widgets
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -55,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
@@ -81,12 +80,12 @@ fun ThemedSettingsSectionCard(
     content: @Composable () -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val cardShape = remember { RoundedCornerShape(22.dp) }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val cardShape = remember { RoundedCornerShape(28.dp) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp),
+                .padding(horizontal = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -103,9 +102,10 @@ fun ThemedSettingsSectionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(cardShape)
-                .background(palette.surface, cardShape)
-                .border(0.75.dp, palette.border, cardShape)
+                .focusGlassPanel(
+                    shape = cardShape,
+                    palette = palette
+                )
         ) {
             content()
         }
@@ -158,7 +158,7 @@ fun ThemedSettingsSwitchRow(
                 checkedTrackColor = palette.primary,
                 uncheckedThumbColor = palette.textSecondary,
                 uncheckedTrackColor = palette.surfaceElevated,
-                uncheckedBorderColor = palette.border
+                uncheckedBorderColor = Color.Transparent
             ),
             modifier = Modifier.testTag(testTag)
         )
@@ -175,12 +175,12 @@ fun AppearanceAndThemesSection(
 ) {
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
-    val tileShape = remember { RoundedCornerShape(16.dp) }
+    val tileShape = remember { RoundedCornerShape(24.dp) }
 
     ThemedSettingsSectionCard(title = "THEME") {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -190,35 +190,44 @@ fun AppearanceAndThemesSection(
                     val preview = remember(themeOption) { FocusThemePalette.from(themeOption) }
                     val isSelected = selectedTheme == themeOption
                     val interaction = remember { MutableInteractionSource() }
+                    val isTilePressed by interaction.collectIsPressedAsState()
                     val scale = rememberSpringPressScale(interaction, pressedScale = 0.94f)
                     val shortName = remember(themeOption) {
                         when (themeOption) {
                             AppVisualTheme.NOTHING_CRIMSON -> "Crimson"
-                            AppVisualTheme.CYBER_ICE -> "Ice"
+                            AppVisualTheme.LIQUID_GLASS -> "Glass"
                             AppVisualTheme.SOLAR_AMBER -> "Amber"
-                            AppVisualTheme.ULTRAVIOLET_PULSE -> "Violet"
+                            AppVisualTheme.NORDIC_SAGE -> "Sage"
                         }
+                    }
+
+                    val tileModifier = if (palette.isLiquidGlass) {
+                        Modifier.focusGlassPanel(
+                            shape = tileShape,
+                            palette = palette,
+                            elevated = isSelected,
+                            isPressed = isTilePressed,
+                            highlightAccent = if (isSelected) palette.primary else null
+                        )
+                    } else {
+                        Modifier
+                            .clip(tileShape)
+                            .background(
+                                color = if (isSelected) palette.primaryContainer else palette.surfaceElevated.copy(alpha = 0.7f),
+                                shape = tileShape
+                            )
                     }
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
                         modifier = Modifier
                             .weight(1f)
                             .graphicsLayer {
                                 scaleX = scale
                                 scaleY = scale
                             }
-                            .clip(tileShape)
-                            .background(
-                                color = if (isSelected) palette.primaryContainer.copy(alpha = 0.7f) else palette.surfaceElevated.copy(alpha = 0.65f),
-                                shape = tileShape
-                            )
-                            .border(
-                                width = if (isSelected) 1.25.dp else 0.75.dp,
-                                color = if (isSelected) preview.primary else palette.border,
-                                shape = tileShape
-                            )
+                            .then(tileModifier)
                             .clickable(
                                 interactionSource = interaction,
                                 indication = null
@@ -228,15 +237,29 @@ fun AppearanceAndThemesSection(
                                     onSelectTheme(themeOption)
                                 }
                             }
-                            .padding(vertical = 12.dp, horizontal = 4.dp)
+                            .padding(vertical = 10.dp, horizontal = 4.dp)
                             .testTag("theme_option_${themeOption.id}")
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(CircleShape)
-                                .background(preview.background)
-                                .border(2.dp, preview.primary, CircleShape),
+                                .then(
+                                    if (themeOption == AppVisualTheme.LIQUID_GLASS) {
+                                        Modifier.background(
+                                            Brush.linearGradient(
+                                                colors = listOf(
+                                                    Color(0xFF2B3445),
+                                                    Color(0xFF0A0D13),
+                                                    Color(0xFF1C2330)
+                                                )
+                                            ),
+                                            CircleShape
+                                        )
+                                    } else {
+                                        Modifier.background(preview.background, CircleShape)
+                                    }
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             if (isSelected) {
@@ -249,7 +272,7 @@ fun AppearanceAndThemesSection(
                             } else {
                                 Box(
                                     modifier = Modifier
-                                        .size(8.dp)
+                                        .size(10.dp)
                                         .clip(CircleShape)
                                         .background(preview.primary)
                                 )
@@ -327,7 +350,7 @@ fun HomeScreenWidgetSection(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(CircleShape)
                             .background(palette.surfaceElevated),
                         contentAlignment = Alignment.Center
                     ) {
@@ -465,9 +488,8 @@ private fun NothingWidgetLivePreview(
     Box(
         modifier = Modifier
             .size(cardSize)
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(32.dp))
             .background(widgetCardBg)
-            .border(0.75.dp, widgetBorder, RoundedCornerShape(26.dp))
     ) {
         Row(
             modifier = Modifier
@@ -499,10 +521,9 @@ private fun NothingWidgetLivePreview(
             if (settingsState.widgetShowStreakBadge) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(50))
                         .background(widgetChipBg)
-                        .border(0.75.dp, widgetChipBorder, RoundedCornerShape(9.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = "${xpState.currentStreak}D",
@@ -647,7 +668,7 @@ fun DailyStudyGoalSection(
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
     val selectedHours = (dailyGoalMinutes / 60L).toInt()
-    val chipShape = remember { RoundedCornerShape(12.dp) }
+    val chipShape = remember { RoundedCornerShape(50) }
     val goalFormatted = remember(dailyGoalMinutes) {
         val h = dailyGoalMinutes / 60L
         val m = dailyGoalMinutes % 60L
@@ -693,12 +714,13 @@ fun DailyStudyGoalSection(
                     fontSize = 11.5.sp,
                     color = palette.primary,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(50))
+                        .background(palette.primaryContainer)
                         .clickable {
                             haptics.tap()
                             onOpenCustomGoalDialog()
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 11.dp, vertical = 5.dp)
                         .testTag("settings_daily_goal_row")
                 )
             }
@@ -711,15 +733,45 @@ fun DailyStudyGoalSection(
             ) {
                 (1..12).forEach { hours ->
                     val isSelected = selectedHours == hours && dailyGoalMinutes % 60L == 0L
+                    val chipInteraction = remember { MutableInteractionSource() }
+                    val pressScale = rememberSpringPressScale(chipInteraction, pressedScale = 0.92f)
+                    val selectScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.04f else 1f,
+                        animationSpec = spring(dampingRatio = 0.68f, stiffness = Spring.StiffnessMedium),
+                        label = "goal_hour_scale_$hours"
+                    )
+                    val chipBg by animateColorAsState(
+                        targetValue = when {
+                            isSelected && palette.isLiquidGlass -> Color(0xFF262E3E)
+                            isSelected -> palette.primary
+                            else -> palette.surfaceElevated
+                        },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow),
+                        label = "goal_hour_bg_$hours"
+                    )
+                    val chipFg by animateColorAsState(
+                        targetValue = when {
+                            isSelected && palette.isLiquidGlass -> palette.textPrimary
+                            isSelected -> palette.onPrimary
+                            else -> palette.textSecondary
+                        },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow),
+                        label = "goal_hour_fg_$hours"
+                    )
                     Box(
                         modifier = Modifier
-                            .height(40.dp)
+                            .height(36.dp)
+                            .graphicsLayer {
+                                val s = pressScale * selectScale
+                                scaleX = s
+                                scaleY = s
+                            }
                             .clip(chipShape)
-                            .background(
-                                color = if (isSelected) palette.primary else palette.surfaceElevated,
-                                shape = chipShape
-                            )
-                            .clickable {
+                            .background(color = chipBg, shape = chipShape)
+                            .clickable(
+                                interactionSource = chipInteraction,
+                                indication = null
+                            ) {
                                 haptics.tick()
                                 onSelectGoalMinutes(hours * 60L)
                             }
@@ -730,9 +782,9 @@ fun DailyStudyGoalSection(
                         Text(
                             text = "${hours}h",
                             fontFamily = JetBrainsMono,
-                            fontSize = 12.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (isSelected) palette.onPrimary else palette.textSecondary
+                            color = chipFg
                         )
                     }
                 }
@@ -781,7 +833,7 @@ fun ProtectionAndBlockersSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(pillShape)
                     .clickable {
                         haptics.tap()
                         onOpenNotificationAccessSettings()
@@ -823,28 +875,33 @@ fun ProtectionAndBlockersSection(
             }
 
             if (hasBlockedLog) {
-                OutlinedButton(
+                Surface(
                     onClick = {
                         haptics.tap()
                         onOpenLastUnlockSummary()
                     },
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(0.75.dp, palette.borderHighlight),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.textPrimary),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(50),
+                    color = palette.surfaceElevated,
+                    contentColor = palette.textPrimary,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .height(42.dp)
                         .testTag("view_unlock_summary_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Visibility,
-                        contentDescription = null,
-                        tint = palette.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("View Last Unlock Summary", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Visibility,
+                            contentDescription = null,
+                            tint = palette.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("View Last Unlock Summary", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
 
@@ -861,7 +918,7 @@ fun ProtectionAndBlockersSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(pillShape)
                     .clickable {
                         haptics.tap()
                         onOpenAccessibilitySettings()

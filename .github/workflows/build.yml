@@ -2,6 +2,12 @@ name: Build and Publish APK
 on:
   push:
   workflow_dispatch:
+    inputs:
+      custom_version:
+        description: 'Optional exact release version (e.g. 2.0.0). Leave empty for 2.0.<run_number>.'
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: write
 jobs:
@@ -18,16 +24,35 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+      - name: Resolve Release Version
+        id: version
+        env:
+          CUSTOM_VERSION_INPUT: ${{ inputs.custom_version }}
+        run: |
+          CLEAN_VERSION=$(printf '%s' "$CUSTOM_VERSION_INPUT" | tr -d '[:space:]' | sed 's/^[vV]//')
+          if [ -n "$CLEAN_VERSION" ]; then
+            VERSION_NAME="$CLEAN_VERSION"
+          else
+            VERSION_NAME="2.0.${GITHUB_RUN_NUMBER}"
+          fi
+          VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: versionName=${VERSION_NAME}, versionCode=${VERSION_CODE}, tag=v${VERSION_NAME}"
       - name: Ensure Debug Keystore Exists
         run: |
           if [ ! -f debug.keystore ]; then
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
       - name: Build Optimized Release APK
-        run: gradle assembleRelease
+        run: >-
+          gradle assembleRelease
+          -PversionCode=${{ steps.version.outputs.version_code }}
+          -PversionName=${{ steps.version.outputs.version_name }}
       - name: Publish Private Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Focus Lock v1.0.${{ github.run_number }}
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: Focus Lock ${{ steps.version.outputs.tag_name }}
           files: app/build/outputs/apk/release/app-release.apk

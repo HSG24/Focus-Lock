@@ -27,13 +27,70 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Whisper-quiet ambient atmosphere layer cached via drawWithCache for smooth 120Hz scrolling.
+ * Static, GPU-cached ambient backdrop layer tuned per theme (zero live/idle animations):
+ * - Nothing Crimson: subtle dot matrix and crimson radial horizon.
+ * - Liquid Glass: deep obsidian static specular light pools behind dark glass panels.
+ * - Solar Amber: warm subtle chronograph halo.
+ * - Nordic Sage: calm basalt horizon rings with organic sage mist.
  */
 @Composable
 fun ThemeBackdropLayer(
     modifier: Modifier = Modifier,
     palette: FocusThemePalette = LocalFocusTheme.current
 ) {
+    if (palette.isLiquidGlass) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .drawWithCache {
+                    val w = size.width
+                    val h = size.height
+                    val orb1Center = Offset(w * 0.26f, h * 0.15f)
+                    val orb1Radius = (maxOf(w, h) * 0.54f).coerceAtLeast(1f)
+                    val orb1Brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x166C7C96),
+                            Color(0x093D495C),
+                            Color.Transparent
+                        ),
+                        center = orb1Center,
+                        radius = orb1Radius
+                    )
+
+                    val orb2Center = Offset(w * 0.80f, h * 0.58f)
+                    val orb2Radius = (maxOf(w, h) * 0.46f).coerceAtLeast(1f)
+                    val orb2Brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x1253627A),
+                            Color(0x062E3747),
+                            Color.Transparent
+                        ),
+                        center = orb2Center,
+                        radius = orb2Radius
+                    )
+
+                    val orb3Center = Offset(w * 0.20f, h * 0.86f)
+                    val orb3Radius = (maxOf(w, h) * 0.38f).coerceAtLeast(1f)
+                    val orb3Brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x1061718A),
+                            Color.Transparent
+                        ),
+                        center = orb3Center,
+                        radius = orb3Radius
+                    )
+
+                    onDrawBehind {
+                        drawRect(color = palette.background)
+                        drawCircle(brush = orb1Brush, radius = orb1Radius, center = orb1Center)
+                        drawCircle(brush = orb2Brush, radius = orb2Radius, center = orb2Center)
+                        drawCircle(brush = orb3Brush, radius = orb3Radius, center = orb3Center)
+                    }
+                }
+        )
+        return
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -71,11 +128,10 @@ fun ThemeBackdropLayer(
 
                 val dotRadius = 0.9.dp.toPx()
                 val dotColor = palette.textPrimary.copy(alpha = 0.038f)
-                val gridStep = 44.dp.toPx()
-                val gridColor = palette.primary.copy(alpha = 0.035f)
                 val stroke1Dp = Stroke(width = 0.9.dp.toPx())
                 val chronoRadius = minOf(w, h) * 0.38f
-                val auraBaseR = minOf(w, h) * 0.22f
+                val sageOuterRadius = minOf(w, h) * 0.44f
+                val sageInnerRadius = minOf(w, h) * 0.26f
 
                 onDrawBehind {
                     drawRect(color = palette.background)
@@ -91,18 +147,6 @@ fun ThemeBackdropLayer(
                                 drawCircle(color = dotColor, radius = dotRadius, center = pt)
                             }
                         }
-                        AppVisualTheme.CYBER_ICE -> {
-                            var x = 0f
-                            while (x < w) {
-                                drawLine(gridColor, Offset(x, 0f), Offset(x, h * 0.45f), strokeWidth = 0.75f)
-                                x += gridStep
-                            }
-                            var y = 0f
-                            while (y < h * 0.45f) {
-                                drawLine(gridColor, Offset(0f, y), Offset(w, y), strokeWidth = 0.75f)
-                                y += gridStep
-                            }
-                        }
                         AppVisualTheme.SOLAR_AMBER -> {
                             drawCircle(
                                 color = palette.primary.copy(alpha = 0.045f),
@@ -111,16 +155,21 @@ fun ThemeBackdropLayer(
                                 style = stroke1Dp
                             )
                         }
-                        AppVisualTheme.ULTRAVIOLET_PULSE -> {
-                            for (i in 1..2) {
-                                drawCircle(
-                                    color = palette.primary.copy(alpha = 0.055f / i),
-                                    radius = auraBaseR * i,
-                                    center = center,
-                                    style = stroke1Dp
-                                )
-                            }
+                        AppVisualTheme.NORDIC_SAGE -> {
+                            drawCircle(
+                                color = palette.primary.copy(alpha = 0.045f),
+                                radius = sageInnerRadius,
+                                center = center,
+                                style = stroke1Dp
+                            )
+                            drawCircle(
+                                color = palette.primary.copy(alpha = 0.025f),
+                                radius = sageOuterRadius,
+                                center = center,
+                                style = stroke1Dp
+                            )
                         }
+                        AppVisualTheme.LIQUID_GLASS -> Unit
                     }
                 }
             }
@@ -152,6 +201,24 @@ fun ThemedDivider(
                             )
                             x += spacing
                         }
+                    }
+                }
+        )
+    } else if (palette.isLiquidGlass) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(0.75.dp)
+                .drawWithCache {
+                    val brush = Brush.horizontalGradient(
+                        0f to Color.Transparent,
+                        0.2f to Color.White.copy(alpha = 0.16f),
+                        0.5f to Color.White.copy(alpha = 0.24f),
+                        0.8f to Color.White.copy(alpha = 0.16f),
+                        1f to Color.Transparent
+                    )
+                    onDrawBehind {
+                        drawRect(brush = brush)
                     }
                 }
         )
@@ -199,33 +266,54 @@ fun ThemedTimerRing(
                         )
                     }
                 }
-                AppVisualTheme.CYBER_ICE -> {
-                    val strokeW = 2.5.dp.toPx()
+                AppVisualTheme.LIQUID_GLASS -> {
+                    val innerLensRadius = radius - 6.dp.toPx()
+                    // Static deep smoked obsidian glass lens interior (borderless, zero live animation)
                     drawCircle(
-                        color = palette.border.copy(alpha = 0.8f),
+                        brush = Brush.verticalGradient(
+                            0.0f to Color(0xFFD6E2F5).copy(alpha = 0.085f),
+                            0.40f to Color(0xFF0A0D14).copy(alpha = 0.74f),
+                            1.0f to Color(0xFF8C9BB5).copy(alpha = 0.05f)
+                        ),
+                        radius = innerLensRadius,
+                        center = Offset(cx, cy)
+                    )
+                    // Outer dark smoked track
+                    val strokeW = 3.5.dp.toPx()
+                    drawCircle(
+                        color = Color(0xFFC5D2E8).copy(alpha = 0.10f),
                         radius = radius,
                         center = Offset(cx, cy),
                         style = Stroke(width = strokeW)
                     )
-                    drawArc(
-                        color = palette.primary,
-                        startAngle = -90f,
-                        sweepAngle = 360f * clamped,
-                        useCenter = false,
-                        topLeft = Offset(cx - radius, cy - radius),
-                        size = Size(radius * 2f, radius * 2f),
-                        style = Stroke(width = strokeW, cap = StrokeCap.Round)
-                    )
-                    val outer = radius + 5.dp.toPx()
-                    val inner = radius - 3.dp.toPx()
-                    for (deg in listOf(0.0, 90.0, 180.0, 270.0)) {
-                        val rad = Math.toRadians(deg)
-                        drawLine(
-                            color = palette.primary.copy(alpha = 0.5f),
-                            start = Offset(cx + (inner * cos(rad)).toFloat(), cy + (inner * sin(rad)).toFloat()),
-                            end = Offset(cx + (outer * cos(rad)).toFloat(), cy + (outer * sin(rad)).toFloat()),
-                            strokeWidth = 1.2.dp.toPx(),
-                            cap = StrokeCap.Round
+                    // Sleek dark-titanium mercury progress arc
+                    if (clamped > 0f) {
+                        drawArc(
+                            brush = Brush.sweepGradient(
+                                0.0f to Color(0xFF6B7890),
+                                0.5f to Color(0xFFD5DFEE),
+                                1.0f to Color(0xFF6B7890)
+                            ),
+                            startAngle = -90f,
+                            sweepAngle = 360f * clamped,
+                            useCenter = false,
+                            topLeft = Offset(cx - radius, cy - radius),
+                            size = Size(radius * 2f, radius * 2f),
+                            style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                        )
+                        // Subtle static specular droplet at the tip of the arc
+                        val tipRad = Math.toRadians(-90.0 + 360.0 * clamped)
+                        val tipX = cx + (radius * cos(tipRad)).toFloat()
+                        val tipY = cy + (radius * sin(tipRad)).toFloat()
+                        drawCircle(
+                            color = Color(0xFFD5DFEE).copy(alpha = 0.24f),
+                            radius = 5.5.dp.toPx(),
+                            center = Offset(tipX, tipY)
+                        )
+                        drawCircle(
+                            color = Color(0xFFEAF0FA),
+                            radius = 2.4.dp.toPx(),
+                            center = Offset(tipX, tipY)
                         )
                     }
                 }
@@ -246,24 +334,43 @@ fun ThemedTimerRing(
                         )
                     }
                 }
-                AppVisualTheme.ULTRAVIOLET_PULSE -> {
+                AppVisualTheme.NORDIC_SAGE -> {
+                    val strokeW = 3.2.dp.toPx()
                     drawCircle(
                         color = palette.border.copy(alpha = 0.7f),
+                        radius = radius - 6.dp.toPx(),
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 0.75.dp.toPx())
+                    )
+                    drawCircle(
+                        color = palette.borderHighlight.copy(alpha = 0.5f),
                         radius = radius,
                         center = Offset(cx, cy),
-                        style = Stroke(width = 3.5.dp.toPx())
+                        style = Stroke(width = strokeW)
                     )
-                    drawArc(
-                        brush = Brush.sweepGradient(
-                            colors = listOf(palette.primarySecondary, palette.primary, palette.primarySecondary)
-                        ),
-                        startAngle = -90f,
-                        sweepAngle = 360f * clamped,
-                        useCenter = false,
-                        topLeft = Offset(cx - radius, cy - radius),
-                        size = Size(radius * 2f, radius * 2f),
-                        style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
-                    )
+                    for (i in 0 until 12) {
+                        val rad = Math.toRadians(-90.0 + 30.0 * i)
+                        val dotX = cx + ((radius - 6.dp.toPx()) * cos(rad)).toFloat()
+                        val dotY = cy + ((radius - 6.dp.toPx()) * sin(rad)).toFloat()
+                        drawCircle(
+                            color = palette.primary.copy(alpha = if (i % 3 == 0) 0.42f else 0.18f),
+                            radius = if (i % 3 == 0) 1.6.dp.toPx() else 1.dp.toPx(),
+                            center = Offset(dotX, dotY)
+                        )
+                    }
+                    if (clamped > 0f) {
+                        drawArc(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(palette.primarySecondary, palette.primary, palette.primarySecondary)
+                            ),
+                            startAngle = -90f,
+                            sweepAngle = 360f * clamped,
+                            useCenter = false,
+                            topLeft = Offset(cx - radius, cy - radius),
+                            size = Size(radius * 2f, radius * 2f),
+                            style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                        )
+                    }
                 }
             }
         }

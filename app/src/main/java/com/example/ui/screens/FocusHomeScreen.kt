@@ -17,6 +17,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -88,6 +89,7 @@ import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.RankXpBottomSheet
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemedTimerRing
+import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.components.rememberSpringPressScale
 import com.example.ui.theme.JetBrainsMono
@@ -333,20 +335,26 @@ fun FocusHomeScreen(
 
                     // Quiet Tappable Rank & XP Chip (opens RankXpBottomSheet)
                     val rankInteraction = remember { MutableInteractionSource() }
+                    val isRankPressed by rankInteraction.collectIsPressedAsState()
                     val rankScale = rememberSpringPressScale(rankInteraction, pressedScale = 0.96f)
-                    Surface(
-                        onClick = {
-                            haptics.tap()
-                            showRankSheet = true
-                        },
-                        interactionSource = rankInteraction,
-                        shape = RoundedCornerShape(50),
-                        color = palette.surface,
-                        border = BorderStroke(0.75.dp, palette.border),
+                    val rankPillShape = remember { RoundedCornerShape(50) }
+                    Box(
                         modifier = Modifier
                             .graphicsLayer {
                                 scaleX = rankScale
                                 scaleY = rankScale
+                            }
+                            .focusGlassPanel(
+                                shape = rankPillShape,
+                                palette = palette,
+                                isPressed = isRankPressed
+                            )
+                            .clickable(
+                                interactionSource = rankInteraction,
+                                indication = null
+                            ) {
+                                haptics.tap()
+                                showRankSheet = true
                             }
                             .testTag("home_rank_xp_pill")
                     ) {
@@ -472,26 +480,40 @@ private fun SlideOrTapFocusPill(
     val density = LocalDensity.current
     val currentOnTrigger by rememberUpdatedState(onTrigger)
 
-    val thumbSizeDp = 52.dp
-    val trackPaddingDp = 6.dp
-    val pillShape = RoundedCornerShape(32.dp)
+    val thumbSizeDp = 46.dp
+    val trackPaddingDp = 5.dp
+    val pillShape = RoundedCornerShape(50)
     val offsetX = remember { Animatable(0f) }
     var lastDetentBucket by remember { mutableIntStateOf(0) }
 
     val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.97f)
+    var isDraggingThumb by remember { mutableStateOf(false) }
+
+    val sliderTrackModifier = if (palette.isLiquidGlass) {
+        Modifier.focusGlassPanel(
+            shape = pillShape,
+            palette = palette,
+            elevated = true,
+            isPressed = isPressed || isDraggingThumb,
+            shimmer = false
+        )
+    } else {
+        Modifier
+            .clip(pillShape)
+            .background(Color(0xFF0A0A0D), pillShape)
+    }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(56.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(pillShape)
-            .background(palette.surface)
-            .border(0.75.dp, palette.borderHighlight.copy(alpha = 0.7f), pillShape)
+            .then(sliderTrackModifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -510,12 +532,12 @@ private fun SlideOrTapFocusPill(
             Box(
                 modifier = Modifier
                     .fillMaxWidth(fraction.coerceIn(0.18f, 1f))
-                    .height(64.dp)
+                    .height(56.dp)
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                palette.primary.copy(alpha = 0.28f),
-                                palette.primary.copy(alpha = 0.10f)
+                                palette.primary.copy(alpha = 0.22f),
+                                palette.primary.copy(alpha = 0.06f)
                             )
                         )
                     )
@@ -526,7 +548,7 @@ private fun SlideOrTapFocusPill(
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(start = 34.dp, end = 16.dp)
+                .padding(start = 32.dp, end = 16.dp)
                 .graphicsLayer { alpha = (1f - fraction * 1.4f).coerceIn(0f, 1f) },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -534,14 +556,14 @@ private fun SlideOrTapFocusPill(
             Text(
                 text = if (permissionsReady) "Slide or tap to focus" else "Grant permission",
                 style = MaterialTheme.typography.titleMedium,
-                fontSize = 15.sp,
+                fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = palette.textPrimary
             )
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                 contentDescription = null,
-                tint = palette.textSecondary.copy(alpha = 0.75f),
+                tint = palette.textSecondary,
                 modifier = Modifier.size(15.dp)
             )
         }
@@ -554,10 +576,22 @@ private fun SlideOrTapFocusPill(
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .size(thumbSizeDp)
                 .clip(CircleShape)
-                .background(palette.primary)
+                .then(
+                    if (palette.isLiquidGlass) {
+                        Modifier.background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color(0xFF2B3445), Color(0xFF1A202C))
+                            ),
+                            CircleShape
+                        )
+                    } else {
+                        Modifier.background(palette.primary, CircleShape)
+                    }
+                )
                 .pointerInput(maxDragPx) {
                     detectHorizontalDragGestures(
                         onDragStart = {
+                            isDraggingThumb = true
                             lastDetentBucket = 0
                             haptics.gestureStart()
                         },
@@ -580,6 +614,7 @@ private fun SlideOrTapFocusPill(
                             }
                         },
                         onDragEnd = {
+                            isDraggingThumb = false
                             val triggered = offsetX.value >= maxDragPx * 0.78f
                             scope.launch {
                                 if (triggered) {
@@ -602,6 +637,7 @@ private fun SlideOrTapFocusPill(
                             }
                         },
                         onDragCancel = {
+                            isDraggingThumb = false
                             scope.launch {
                                 offsetX.animateTo(
                                     0f,
@@ -616,8 +652,8 @@ private fun SlideOrTapFocusPill(
             Icon(
                 imageVector = Icons.Outlined.Lock,
                 contentDescription = "Start Focus Mode",
-                tint = palette.onPrimary,
-                modifier = Modifier.size(21.dp)
+                tint = if (palette.isLiquidGlass) palette.textPrimary else palette.onPrimary,
+                modifier = Modifier.size(20.dp)
             )
         }
     }

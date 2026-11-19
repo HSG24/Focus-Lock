@@ -79,9 +79,9 @@ fun UpdateBottomSheet(
             if (!isDownloading) onDismiss()
         },
         sheetState = sheetState,
-        containerColor = palette.surface,
+        containerColor = if (palette.isLiquidGlass) Color(0xFA090B10) else palette.surface,
         contentColor = palette.textPrimary,
-        scrimColor = Color.Black.copy(alpha = 0.72f),
+        scrimColor = Color.Black.copy(alpha = 0.76f),
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -92,7 +92,7 @@ fun UpdateBottomSheet(
                     .background(palette.borderHighlight)
             )
         },
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
     ) {
         Column(
             modifier = Modifier
@@ -111,20 +111,19 @@ fun UpdateBottomSheet(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
                                 colors = listOf(palette.primary.copy(alpha = 0.24f), palette.primaryContainer)
                             )
-                        )
-                        .border(1.dp, palette.primaryBorderTint, RoundedCornerShape(14.dp)),
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.NewReleases,
                         contentDescription = "Update Available",
                         tint = palette.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(23.dp)
                     )
                 }
 
@@ -155,8 +154,7 @@ fun UpdateBottomSheet(
                         )
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color = palette.primaryContainer,
-                            border = BorderStroke(1.dp, palette.primaryBorderTint)
+                            color = palette.primaryContainer
                         ) {
                             Text(
                                 text = release.tagName,
@@ -164,7 +162,7 @@ fun UpdateBottomSheet(
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = palette.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                             )
                         }
                         if (release.apkSizeBytes > 0L) {
@@ -183,9 +181,8 @@ fun UpdateBottomSheet(
             when (updateState) {
                 is UpdateUiState.NeedsInstallPermission -> {
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = palette.primaryContainer.copy(alpha = 0.7f),
-                        border = BorderStroke(1.dp, palette.primaryBorderTint),
+                        shape = RoundedCornerShape(24.dp),
+                        color = palette.primaryContainer.copy(alpha = 0.78f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -253,9 +250,8 @@ fun UpdateBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(RoundedCornerShape(50))
                                 .background(palette.surfaceElevated)
-                                .border(0.5.dp, palette.border, RoundedCornerShape(4.dp))
                         ) {
                             Box(
                                 modifier = Modifier
@@ -265,7 +261,7 @@ fun UpdateBottomSheet(
                                         transformOrigin = TransformOrigin(0f, 0.5f)
                                         scaleX = animatedProgress.coerceAtLeast(0.03f)
                                     }
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .clip(RoundedCornerShape(50))
                                     .background(barBrush)
                             )
                         }
@@ -274,16 +270,15 @@ fun UpdateBottomSheet(
 
                 is UpdateUiState.Error -> {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(24.dp),
                         color = palette.primaryContainer,
-                        border = BorderStroke(1.dp, palette.primaryBorderTint),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = updateState.message,
                             style = MaterialTheme.typography.bodyMedium,
                             color = palette.primary,
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier.padding(14.dp)
                         )
                     }
                 }
@@ -310,7 +305,7 @@ fun UpdateBottomSheet(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp)
+                            .height(48.dp)
                             .graphicsLayer {
                                 scaleX = ctaScale
                                 scaleY = ctaScale
@@ -345,7 +340,7 @@ fun UpdateBottomSheet(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp)
+                            .height(48.dp)
                             .graphicsLayer {
                                 scaleX = ctaScale
                                 scaleY = ctaScale
@@ -367,20 +362,21 @@ fun UpdateBottomSheet(
                 }
 
                 is UpdateUiState.Downloading -> {
-                    OutlinedButton(
-                        onClick = {},
-                        enabled = false,
+                    Surface(
                         shape = RoundedCornerShape(50),
-                        border = BorderStroke(0.75.dp, palette.border),
+                        color = palette.surfaceElevated,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
+                            .height(48.dp)
                     ) {
-                        Text(
-                            text = "Downloading Release...",
-                            color = palette.textSecondary,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Downloading Release...",
+                                color = palette.textSecondary,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
 
@@ -398,7 +394,7 @@ fun UpdateBottomSheet(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp)
+                            .height(48.dp)
                             .graphicsLayer {
                                 scaleX = ctaScale
                                 scaleY = ctaScale
@@ -413,7 +409,7 @@ fun UpdateBottomSheet(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Update Now",
-                            fontSize = 15.5.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

@@ -19,12 +19,18 @@ class GitHubUpdaterTest {
 
     @Test
     fun isNewerVersion_handlesSemanticTagsAndPrefixes() {
+        assertTrue(GitHubUpdater.isNewerVersion("v2.0.0", "1.0.25"))
+        assertTrue(GitHubUpdater.isNewerVersion("2.0.0", "1.0.25"))
+        assertTrue(GitHubUpdater.isNewerVersion("v2.0.10", "2.0.9"))
+        assertTrue(GitHubUpdater.isNewerVersion("v2.0.1", "2.0.0"))
         assertTrue(GitHubUpdater.isNewerVersion("v1.0.15", "1.0"))
         assertTrue(GitHubUpdater.isNewerVersion("v1.1.0", "1.0.9"))
         assertTrue(GitHubUpdater.isNewerVersion("2.0.0", "1.9.9"))
         assertTrue(GitHubUpdater.isNewerVersion("V1.0.1", "v1.0.0"))
         assertTrue(GitHubUpdater.isNewerVersion("release-v1.0.16", "1.0.15"))
 
+        assertFalse(GitHubUpdater.isNewerVersion("v2.0.0", "2.0.0"))
+        assertFalse(GitHubUpdater.isNewerVersion("v1.0.25", "2.0.0"))
         assertFalse(GitHubUpdater.isNewerVersion("v1.0.15", "1.0.15"))
         assertFalse(GitHubUpdater.isNewerVersion("1.0.15", "v1.0.15"))
         assertFalse(GitHubUpdater.isNewerVersion("v1.0.0", "1.0"))

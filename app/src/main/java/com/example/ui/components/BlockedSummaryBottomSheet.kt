@@ -89,9 +89,9 @@ fun BlockedSummaryBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = palette.surface,
+        containerColor = if (palette.isLiquidGlass) Color(0xFA090B10) else palette.surface,
         contentColor = palette.textPrimary,
-        scrimColor = Color.Black.copy(alpha = 0.72f),
+        scrimColor = Color.Black.copy(alpha = 0.76f),
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -102,7 +102,7 @@ fun BlockedSummaryBottomSheet(
                     .background(palette.borderHighlight)
             )
         },
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
     ) {
         Column(
             modifier = Modifier
@@ -120,16 +120,15 @@ fun BlockedSummaryBottomSheet(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(palette.primaryContainer)
-                        .border(0.75.dp, palette.primaryBorderTint, RoundedCornerShape(14.dp)),
+                        .clip(CircleShape)
+                        .background(palette.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.NotificationsOff,
                         contentDescription = null,
                         tint = palette.primary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(21.dp)
                     )
                 }
 
@@ -148,8 +147,7 @@ fun BlockedSummaryBottomSheet(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = palette.primaryContainer,
-                    border = BorderStroke(0.75.dp, palette.primaryBorderTint)
+                    color = palette.primaryContainer
                 ) {
                     Text(
                         text = "$totalCount",
@@ -158,20 +156,19 @@ fun BlockedSummaryBottomSheet(
                         fontWeight = FontWeight.Bold,
                         color = palette.primary,
                         modifier = Modifier
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .padding(horizontal = 11.dp, vertical = 4.dp)
                             .testTag("blocked_summary_total_badge")
                     )
                 }
             }
 
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(50),
                 color = palette.surfaceElevated,
-                border = BorderStroke(0.75.dp, palette.border.copy(alpha = 0.7f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -192,9 +189,8 @@ fun BlockedSummaryBottomSheet(
 
             if (groups.isEmpty()) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(26.dp),
                     color = palette.surfaceElevated,
-                    border = BorderStroke(1.dp, palette.border),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
@@ -244,7 +240,7 @@ fun BlockedSummaryBottomSheet(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(48.dp)
                     .testTag("dismiss_blocked_summary_button")
             ) {
                 Text("Done", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
@@ -282,14 +278,14 @@ private fun BlockedAppGroupCard(
         }
     }
 
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = palette.surfaceElevated,
-        border = BorderStroke(0.75.dp, palette.border.copy(alpha = 0.7f)),
-        modifier = Modifier.fillMaxWidth()
+    val cardShape = remember { RoundedCornerShape(26.dp) }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusGlassPanel(shape = cardShape, palette = palette, elevated = true)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(15.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -299,8 +295,8 @@ private fun BlockedAppGroupCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(32.dp)
+                        .clip(CircleShape)
                         .background(palette.surface),
                     contentAlignment = Alignment.Center
                 ) {
@@ -309,7 +305,7 @@ private fun BlockedAppGroupCard(
                             bitmap = iconBitmap!!,
                             contentDescription = group.appLabel,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(22.dp).clip(RoundedCornerShape(5.dp))
+                            modifier = Modifier.size(22.dp).clip(CircleShape)
                         )
                     } else {
                         Icon(
@@ -333,8 +329,7 @@ private fun BlockedAppGroupCard(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = palette.primaryContainer,
-                    border = BorderStroke(1.dp, palette.primaryBorderTint)
+                    color = palette.primaryContainer
                 ) {
                     Text(
                         text = "${group.count}",
@@ -342,7 +337,7 @@ private fun BlockedAppGroupCard(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = palette.primary,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                     )
                 }
             }
@@ -370,11 +365,10 @@ private fun BlockedAppGroupCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(palette.primaryContainer.copy(alpha = 0.65f))
-                        .border(1.dp, palette.primaryBorderTint, RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(50))
+                        .background(palette.primaryContainer.copy(alpha = 0.78f))
                         .clickable(onClick = onToggleExpand)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
                         .testTag("expand_notifications_toggle_${group.packageName}"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween

@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Share
@@ -26,7 +30,6 @@ import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
@@ -44,6 +47,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -69,7 +75,9 @@ import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.TopBarRankXpPill
 import com.example.ui.components.UnifiedBentoMetricsGrid
 import com.example.ui.components.UnifiedHeroInfographicCard
+import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.rememberFocusHaptics
+import com.example.ui.components.rememberSpringPressScale
 import com.example.ui.theme.LocalFocusTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -148,11 +156,11 @@ fun StatsScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // Minimal, airy header bar
+            // Calm, minimal Fitbit-inspired top header with circular pill buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 22.dp, end = 10.dp, top = 12.dp, bottom = 8.dp),
+                    .padding(start = 22.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -162,10 +170,11 @@ fun StatsScreen(
                         .padding(end = 8.dp)
                 ) {
                     Text(
-                        text = "Insights",
+                        text = "Stats",
                         style = MaterialTheme.typography.titleLarge,
                         fontFamily = palette.displayFont,
-                        fontSize = 22.sp,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
                         color = palette.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -178,7 +187,7 @@ fun StatsScreen(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     TopBarRankXpPill(
                         xpState = xpState,
@@ -186,45 +195,30 @@ fun StatsScreen(
                             haptics.tap()
                             selectedBucketIndex = null
                             showRankXpSheet = true
-                        },
-                        modifier = Modifier.padding(end = 2.dp)
+                        }
                     )
 
-                    IconButton(
+                    StatsHeaderCircleButton(
+                        icon = Icons.Outlined.Share,
+                        contentDescription = "Share Stats",
                         onClick = {
                             haptics.tap()
                             selectedBucketIndex = null
                             onOpenShare(selectedDate.timeInMillis)
                         },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("stats_share_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Share,
-                            contentDescription = "Share Stats",
-                            tint = palette.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        modifier = Modifier.testTag("stats_share_button")
+                    )
 
-                    IconButton(
+                    StatsHeaderCircleButton(
+                        icon = Icons.Outlined.CalendarMonth,
+                        contentDescription = "Select Custom Date",
                         onClick = {
                             haptics.tap()
                             selectedBucketIndex = null
                             showDatePicker = true
                         },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("calendar_picker_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.CalendarMonth,
-                            contentDescription = "Select Custom Date",
-                            tint = palette.textSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        modifier = Modifier.testTag("calendar_picker_button")
+                    )
                 }
             }
 
@@ -252,7 +246,7 @@ fun StatsScreen(
                         end = 20.dp,
                         bottom = 116.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item(key = "timeframe_switcher", contentType = "switcher") {
                         StatsTimeframeSwitcher(
@@ -295,12 +289,6 @@ fun StatsScreen(
                             onOpenCalendarPicker = {
                                 showDatePicker = true
                             },
-                            onSelectStripDay = { dayMillis ->
-                                selectedBucketIndex = null
-                                selectedDate = Calendar.getInstance().apply {
-                                    timeInMillis = dayMillis
-                                }
-                            },
                             modifier = Modifier.widthIn(max = 600.dp)
                         )
                     }
@@ -311,10 +299,16 @@ fun StatsScreen(
                             dailyGoalMinutes = dailyGoalMinutes,
                             selectedBucketIndex = selectedBucketIndex,
                             onSelectBucket = { idx ->
-                                selectedBucketIndex = if (idx == null || selectedBucketIndex == idx) null else idx
+                                if (idx == null) {
+                                    selectedBucketIndex = null
+                                } else if ((report.chartBuckets.getOrNull(idx)?.durationMs ?: 0L) > 0L) {
+                                    selectedBucketIndex = if (selectedBucketIndex == idx) null else idx
+                                }
                             },
                             onScrubBucket = { idx ->
-                                selectedBucketIndex = idx
+                                if ((report.chartBuckets.getOrNull(idx)?.durationMs ?: 0L) > 0L) {
+                                    selectedBucketIndex = idx
+                                }
                             },
                             onEditGoal = {
                                 goalInputText = dailyGoalMinutes.toString()
@@ -366,6 +360,7 @@ fun StatsScreen(
     if (showGoalDialog) {
         AlertDialog(
             onDismissRequest = { showGoalDialog = false },
+            shape = RoundedCornerShape(30.dp),
             containerColor = palette.surface,
             titleContentColor = palette.textPrimary,
             textContentColor = palette.textSecondary,
@@ -386,6 +381,7 @@ fun StatsScreen(
                         },
                         label = { Text("Minutes") },
                         singleLine = true,
+                        shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -400,6 +396,7 @@ fun StatsScreen(
                         }
                         showGoalDialog = false
                     },
+                    shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = palette.primary,
                         contentColor = palette.onPrimary
@@ -419,6 +416,48 @@ fun StatsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun StatsHeaderCircleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalFocusTheme.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.90f)
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .focusGlassPanel(shape = CircleShape, palette = palette),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = palette.textPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 

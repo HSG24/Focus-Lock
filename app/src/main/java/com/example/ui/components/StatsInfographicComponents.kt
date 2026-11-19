@@ -2,36 +2,39 @@ package com.example.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,24 +44,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MilitaryTech
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -77,17 +84,16 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.FocusRank
@@ -103,9 +109,9 @@ import com.example.ui.theme.FocusThemePalette
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
 import java.util.Locale
-import kotlin.math.cos
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 @Composable
 fun StatsSyncStatusBadge(
@@ -160,7 +166,9 @@ fun TopBarRankXpPill(
 ) {
     val palette = LocalFocusTheme.current
     val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale = rememberSpringPressScale(interactionSource, pressedScale = 0.94f)
+    val pillShape = remember { RoundedCornerShape(50) }
     val animatedProgress by animateFloatAsState(
         targetValue = xpState.progressToNextRank.coerceIn(0f, 1f),
         animationSpec = spring(
@@ -185,10 +193,12 @@ fun TopBarRankXpPill(
             .testTag("top_bar_rank_xp_pill"),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = palette.surface,
-            border = BorderStroke(0.75.dp, palette.border)
+        Box(
+            modifier = Modifier.focusGlassPanel(
+                shape = pillShape,
+                palette = palette,
+                isPressed = isPressed
+            )
         ) {
             Column(
                 modifier = Modifier.width(IntrinsicSize.Max)
@@ -273,8 +283,9 @@ fun RankXpBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = palette.surface,
+        containerColor = if (palette.isLiquidGlass) Color(0xFA090B10) else palette.surface,
         contentColor = palette.textPrimary,
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         modifier = Modifier.testTag("rank_xp_bottom_sheet")
     ) {
         Column(
@@ -284,9 +295,8 @@ fun RankXpBottomSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Current Rank & Total XP Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -298,17 +308,16 @@ fun RankXpBottomSheet(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(palette.primaryContainer)
-                            .border(1.dp, palette.primaryBorderTint, RoundedCornerShape(14.dp)),
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(palette.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.MilitaryTech,
                             contentDescription = xpState.rank.title,
                             tint = palette.primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -330,8 +339,7 @@ fun RankXpBottomSheet(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = palette.primaryContainer,
-                    border = BorderStroke(1.dp, palette.primaryBorderTint)
+                    color = palette.primaryContainer
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -355,13 +363,12 @@ fun RankXpBottomSheet(
                 }
             }
 
-            // XP Progress Bar + Rules
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(9.dp)
-                        .clip(RoundedCornerShape(5.dp))
+                        .clip(RoundedCornerShape(50))
                         .background(palette.surfaceElevated)
                 ) {
                     if (animatedXpProgress > 0f) {
@@ -373,7 +380,7 @@ fun RankXpBottomSheet(
                                     transformOrigin = TransformOrigin(0f, 0.5f)
                                     scaleX = animatedXpProgress.coerceAtLeast(0.03f)
                                 }
-                                .clip(RoundedCornerShape(5.dp))
+                                .clip(RoundedCornerShape(50))
                                 .background(barBrush)
                         )
                     }
@@ -402,20 +409,15 @@ fun RankXpBottomSheet(
                 }
             }
 
-            // Active Daily Goal Penalty Countdown Pill
             Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = if (goalSafe) palette.success.copy(alpha = 0.12f) else palette.primaryContainer,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = if (goalSafe) palette.success.copy(alpha = 0.35f) else palette.primaryBorderTint
-                ),
+                shape = RoundedCornerShape(50),
+                color = if (goalSafe) palette.success.copy(alpha = 0.14f) else palette.primaryContainer,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("today_goal_penalty_status")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -423,7 +425,7 @@ fun RankXpBottomSheet(
                         imageVector = if (goalSafe) Icons.Outlined.CheckCircle else Icons.Outlined.WarningAmber,
                         contentDescription = null,
                         tint = if (goalSafe) palette.success else palette.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                     val remainingMins = (remainingMs / 60_000L).coerceAtLeast(1L)
                     val remHrs = remainingMins / 60L
@@ -446,7 +448,6 @@ fun RankXpBottomSheet(
 
             ThemedDivider(palette = palette)
 
-            // Full 6-Tier Rank Ladder
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "RANK LADDER • 6 TIERS",
@@ -457,12 +458,11 @@ fun RankXpBottomSheet(
                 )
 
                 val currentOrdinal = xpState.rank.ordinal
+                val ladderShape = remember { RoundedCornerShape(28.dp) }
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(palette.background.copy(alpha = 0.55f))
-                        .border(1.dp, palette.border, RoundedCornerShape(16.dp))
+                        .focusGlassPanel(shape = ladderShape, palette = palette, elevated = true)
                 ) {
                     FocusRank.entries.forEachIndexed { index, tier ->
                         val isCurrent = tier == xpState.rank
@@ -517,7 +517,7 @@ fun RankXpBottomSheet(
                                         )
                                         if (isCurrent) {
                                             Surface(
-                                                shape = RoundedCornerShape(4.dp),
+                                                shape = RoundedCornerShape(50),
                                                 color = palette.primary
                                             ) {
                                                 Text(
@@ -526,7 +526,7 @@ fun RankXpBottomSheet(
                                                     fontSize = 9.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = palette.onPrimary,
-                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp)
                                                 )
                                             }
                                         }
@@ -564,6 +564,9 @@ fun RankXpBottomSheet(
     }
 }
 
+/**
+ * Elastic iOS-style Day / Week / Month pill switcher for Google Health / Fitbit-style Stats.
+ */
 @Composable
 fun StatsTimeframeSwitcher(
     selectedTimeframe: StatsTimeframe,
@@ -571,56 +574,33 @@ fun StatsTimeframeSwitcher(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalFocusTheme.current
-    val haptics = rememberFocusHaptics()
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = palette.surface,
-        border = BorderStroke(0.75.dp, palette.border),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            StatsTimeframe.entries.forEach { timeframe ->
-                val isSelected = timeframe == selectedTimeframe
-                val tag = when (timeframe) {
-                    StatsTimeframe.DAY -> "timeframe_day_tab"
-                    StatsTimeframe.WEEK -> "timeframe_week_tab"
-                    StatsTimeframe.MONTH -> "timeframe_month_tab"
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) palette.primary else Color.Transparent)
-                        .clickable {
-                            if (!isSelected) {
-                                haptics.segment()
-                                onSelectTimeframe(timeframe)
-                            }
-                        }
-                        .testTag(tag),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = timeframe.label,
-                        fontFamily = palette.displayFont,
-                        fontSize = 11.5.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        letterSpacing = 1.sp,
-                        color = if (isSelected) palette.onPrimary else palette.textSecondary
-                    )
-                }
-            }
-        }
+    val segments = remember {
+        listOf(
+            ElasticPillSegment("Day", testTag = "timeframe_day_tab"),
+            ElasticPillSegment("Week", testTag = "timeframe_week_tab"),
+            ElasticPillSegment("Month", testTag = "timeframe_month_tab")
+        )
     }
+    val selectedIndex = StatsTimeframe.entries.indexOf(selectedTimeframe).coerceAtLeast(0)
+
+    ElasticMorphingSegmentedPill(
+        segments = segments,
+        selectedIndex = selectedIndex,
+        onSelectIndex = { idx ->
+            StatsTimeframe.entries.getOrNull(idx)?.let(onSelectTimeframe)
+        },
+        height = 42.dp,
+        fontSize = 13.sp,
+        fontFamily = palette.displayFont,
+        modifier = modifier
+    )
 }
 
+/**
+ * Ultra-minimal single-row Fitbit / Google Health floating date pill selector.
+ * Replaces the bulky multi-row date strip while keeping swipe navigation,
+ * calendar picker tap, and inline TODAY / CURRENT quick-jump pill.
+ */
 @Composable
 fun StatsDateNavigatorSection(
     report: StatsPeriodReport,
@@ -628,7 +608,7 @@ fun StatsDateNavigatorSection(
     onStepForward: () -> Unit,
     onJumpToToday: () -> Unit,
     onOpenCalendarPicker: () -> Unit,
-    onSelectStripDay: (Long) -> Unit,
+    onSelectStripDay: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val palette = LocalFocusTheme.current
@@ -638,27 +618,28 @@ fun StatsDateNavigatorSection(
     val currentOnBack by rememberUpdatedState(onStepBackward)
     val currentOnFwd by rememberUpdatedState(onStepForward)
     var dragAccumulated by remember { mutableFloatStateOf(0f) }
+    var slideDirection by remember { mutableIntStateOf(0) }
+    val pillShape = remember { RoundedCornerShape(50) }
 
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = palette.surface,
-        border = BorderStroke(0.75.dp, palette.border),
+    Box(
         modifier = modifier
             .fillMaxWidth()
+            .height(48.dp)
+            .focusGlassPanel(shape = pillShape, palette = palette)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragStart = { dragAccumulated = 0f },
-                    onHorizontalDrag = { _, dragAmount ->
-                        dragAccumulated += dragAmount
-                    },
+                    onHorizontalDrag = { _, dragAmount -> dragAccumulated += dragAmount },
                     onDragEnd = {
-                        val threshold = 72f
+                        val threshold = 64f
                         when {
                             dragAccumulated > threshold -> {
+                                slideDirection = -1
                                 haptics.segment()
                                 currentOnBack()
                             }
                             dragAccumulated < -threshold && currentCanForward -> {
+                                slideDirection = 1
                                 haptics.segment()
                                 currentOnFwd()
                             }
@@ -668,39 +649,46 @@ fun StatsDateNavigatorSection(
                     onDragCancel = { dragAccumulated = 0f }
                 )
             }
+            .padding(horizontal = 4.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            CircularNavChevronButton(
+                icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
+                contentDescription = "Previous Period",
+                enabled = true,
+                onClick = {
+                    slideDirection = -1
+                    view.performClockTickHaptic()
+                    onStepBackward()
+                },
+                modifier = Modifier.testTag("prev_day_button")
+            )
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = {
-                        view.performClockTickHaptic()
-                        onStepBackward()
+                AnimatedContent(
+                    targetState = report.headerDateLabel,
+                    transitionSpec = {
+                        val dir = if (slideDirection == 0) 1 else slideDirection
+                        (slideInHorizontally(
+                            animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                        ) { w -> (w * 0.22f * dir).toInt() } + fadeIn()) togetherWith
+                            (slideOutHorizontally(
+                                animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMedium)
+                            ) { w -> (-w * 0.22f * dir).toInt() } + fadeOut())
                     },
-                    modifier = Modifier.testTag("prev_day_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Previous Period",
-                        modifier = Modifier.size(18.dp),
-                        tint = palette.textPrimary
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    label = "stats_date_label_slide",
+                    modifier = Modifier.weight(1f, fill = false)
+                ) { label ->
                     Text(
-                        text = report.headerDateLabel,
+                        text = label,
                         fontFamily = JetBrainsMono,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -708,185 +696,131 @@ fun StatsDateNavigatorSection(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(pillShape)
                             .clickable {
                                 view.performKeyTapHaptic()
                                 onOpenCalendarPicker()
                             }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
                     )
-
-                    AnimatedVisibility(visible = !report.isCurrentPeriod) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .heightIn(min = 36.dp)
-                                .clip(RoundedCornerShape(50))
-                                .clickable {
-                                    view.performClockTickHaptic()
-                                    onJumpToToday()
-                                }
-                                .padding(horizontal = 2.dp)
-                                .testTag("jump_today_button")
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = palette.primaryContainer,
-                                border = BorderStroke(1.dp, palette.primaryBorderTint)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                ) {
-                                    val jumpLabel = when (report.timeframe) {
-                                        StatsTimeframe.DAY -> "TODAY"
-                                        StatsTimeframe.WEEK, StatsTimeframe.MONTH -> "CURRENT"
-                                    }
-                                    Text(
-                                        text = jumpLabel,
-                                        fontFamily = JetBrainsMono,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = palette.primary
-                                    )
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        tint = palette.primary,
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
 
-                IconButton(
-                    onClick = {
-                        if (report.canStepForward) {
-                            view.performClockTickHaptic()
-                            onStepForward()
-                        }
-                    },
-                    enabled = report.canStepForward,
-                    modifier = Modifier.testTag("next_day_button")
+                AnimatedVisibility(
+                    visible = !report.isCurrentPeriod,
+                    enter = fadeIn() + expandHorizontally(),
+                    exit = fadeOut() + shrinkHorizontally()
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Next Period",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (report.canStepForward) {
-                            palette.textPrimary
-                        } else {
-                            palette.textPrimary.copy(alpha = 0.22f)
-                        }
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = report.timeframe == StatsTimeframe.DAY,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                    val jumpLabel = when (report.timeframe) {
+                        StatsTimeframe.DAY -> "TODAY"
+                        StatsTimeframe.WEEK, StatsTimeframe.MONTH -> "CURRENT"
+                    }
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp)
-                            .height(0.5.dp)
-                            .background(palette.border.copy(alpha = 0.65f))
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        report.weekStrip.forEachIndexed { idx, day ->
-                            val isSelectedHighlight = day.isSelected
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        when {
-                                            isSelectedHighlight -> palette.primaryContainer
-                                            else -> Color.Transparent
-                                        }
-                                    )
-                                    .then(
-                                        if (isSelectedHighlight) {
-                                            Modifier.border(
-                                                1.dp,
-                                                palette.primaryBorderTint,
-                                                RoundedCornerShape(10.dp)
-                                            )
-                                        } else if (day.isToday) {
-                                            Modifier.border(
-                                                1.dp,
-                                                palette.borderHighlight,
-                                                RoundedCornerShape(10.dp)
-                                            )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .clickable(enabled = !day.isFuture) {
-                                        view.performClockTickHaptic()
-                                        onSelectStripDay(day.calendarMillis)
-                                    }
-                                    .padding(vertical = 3.dp)
-                                    .testTag("week_strip_day_$idx")
-                            ) {
-                                Text(
-                                    text = day.dayLetter,
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = when {
-                                        day.isFuture -> palette.textSecondary.copy(alpha = 0.35f)
-                                        isSelectedHighlight -> palette.primary
-                                        else -> palette.textSecondary
-                                    }
-                                )
-                                Text(
-                                    text = day.dayNumber,
-                                    fontFamily = palette.numeralFont,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelectedHighlight || day.isToday) FontWeight.Bold else FontWeight.Medium,
-                                    color = when {
-                                        day.isFuture -> palette.textSecondary.copy(alpha = 0.35f)
-                                        isSelectedHighlight -> palette.primary
-                                        else -> palette.textPrimary
-                                    }
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(4.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            when {
-                                                day.hasFocusData && isSelectedHighlight -> palette.primary
-                                                day.hasFocusData -> palette.primary.copy(alpha = 0.72f)
-                                                else -> Color.Transparent
-                                            }
-                                        )
-                                )
+                            .padding(start = 4.dp)
+                            .defaultMinSize(minHeight = 36.dp)
+                            .clip(pillShape)
+                            .background(palette.primaryContainer, pillShape)
+                            .clickable {
+                                slideDirection = 1
+                                view.performClockTickHaptic()
+                                onJumpToToday()
                             }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .testTag("jump_today_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text = jumpLabel,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.primary
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = palette.primary,
+                                modifier = Modifier.size(10.dp)
+                            )
                         }
                     }
                 }
             }
+
+            CircularNavChevronButton(
+                icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = "Next Period",
+                enabled = report.canStepForward,
+                onClick = {
+                    if (report.canStepForward) {
+                        slideDirection = 1
+                        view.performClockTickHaptic()
+                        onStepForward()
+                    }
+                },
+                modifier = Modifier.testTag("next_day_button")
+            )
         }
     }
 }
 
+@Composable
+private fun CircularNavChevronButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalFocusTheme.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.88f)
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(
+                    if (enabled) palette.surfaceElevated.copy(alpha = 0.85f)
+                    else palette.surfaceElevated.copy(alpha = 0.30f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (enabled) palette.textPrimary else palette.textSecondary.copy(alpha = 0.30f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Fitbit / Google Health-inspired minimal hero & capsule bar chart card.
+ * Features an airy editorial focus total, tappable goal pill, sleek full-pill progress bar,
+ * and interactive capsule bar chart where 0s bars remain completely non-clickable.
+ */
 @Composable
 fun UnifiedHeroInfographicCard(
     report: StatsPeriodReport,
@@ -900,220 +834,265 @@ fun UnifiedHeroInfographicCard(
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
     val view = LocalView.current
-    val heroGlowBrush = remember(palette) {
-        Brush.radialGradient(
-            colors = listOf(
-                palette.primaryGlow.copy(alpha = 0.24f),
-                Color.Transparent
-            )
-        )
-    }
 
-    val animatedRingProgress by animateFloatAsState(
+    val animatedProgress by animateFloatAsState(
         targetValue = report.progressFraction.coerceIn(0f, 1f),
         animationSpec = spring(
-            dampingRatio = 0.85f,
+            dampingRatio = 0.82f,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "hero_goal_ring_progress"
+        label = "fitbit_goal_progress_bar"
     )
 
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = palette.surface,
-        border = BorderStroke(0.75.dp, palette.border),
+    val heroCardShape = remember { RoundedCornerShape(32.dp) }
+    val pillShape = remember { RoundedCornerShape(50) }
+    val selectedBucket = selectedBucketIndex?.let { idx ->
+        report.chartBuckets.getOrNull(idx)
+    }
+
+    val goalShort = remember(dailyGoalMinutes) {
+        val h = dailyGoalMinutes / 60L
+        val m = dailyGoalMinutes % 60L
+        when {
+            h > 0L && m > 0L -> "${h}h ${m}m"
+            h > 0L -> "${h}h"
+            else -> "${m}m"
+        }
+    }
+    val goalTargetBadge = when (report.timeframe) {
+        StatsTimeframe.DAY -> "$goalShort goal"
+        StatsTimeframe.WEEK -> "${FocusStatsRepository.formatDurationShort(report.goalTargetMs)} wk"
+        StatsTimeframe.MONTH -> "${FocusStatsRepository.formatDurationShort(report.goalTargetMs)} mo"
+    }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
+            .focusGlassPanel(
+                shape = heroCardShape,
+                palette = palette
+            )
             .testTag("hero_infographic_card")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(heroGlowBrush)
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Top Half: Split Hero (Left = Total Focus + Status, Right = Theme Goal Ring + Edit Goal)
+            // Editorial Top Header Row: Focus Total (left) + Goal Edit Pill (right)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(end = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .padding(end = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = when (report.timeframe) {
-                            StatsTimeframe.DAY -> "TOTAL FOCUS TIME"
-                            StatsTimeframe.WEEK -> "WEEKLY FOCUS TIME"
-                            StatsTimeframe.MONTH -> "MONTHLY FOCUS TIME"
+                            StatsTimeframe.DAY -> "Focus time"
+                            StatsTimeframe.WEEK -> "Weekly focus"
+                            StatsTimeframe.MONTH -> "Monthly focus"
                         },
-                        fontFamily = JetBrainsMono,
-                        fontSize = 10.sp,
-                        letterSpacing = 1.2.sp,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
                         color = palette.textSecondary
                     )
 
-                    Text(
+                    RollingMetricText(
                         text = FocusStatsRepository.formatDurationHero(report.totalFocusMs),
-                        fontFamily = palette.numeralFont,
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = palette.textPrimary,
+                        style = TextStyle(
+                            fontFamily = palette.numeralFont,
+                            fontSize = 38.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.8).sp
+                        ),
+                        color = palette.textPrimary
+                    )
+                }
+
+                // Sleek borderless goal edit pill
+                val goalInteraction = remember { MutableInteractionSource() }
+                val goalScale = rememberSpringPressScale(goalInteraction, pressedScale = 0.93f)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = goalScale
+                            scaleY = goalScale
+                        }
+                        .defaultMinSize(minHeight = 36.dp)
+                        .clip(pillShape)
+                        .background(
+                            if (report.isGoalMet) palette.success.copy(alpha = 0.14f)
+                            else palette.surfaceElevated,
+                            pillShape
+                        )
+                        .clickable(
+                            interactionSource = goalInteraction,
+                            indication = null
+                        ) {
+                            view.performKeyTapHaptic()
+                            onEditGoal()
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .testTag("edit_goal_button")
+                ) {
+                    Text(
+                        text = goalTargetBadge,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (report.isGoalMet) palette.success else palette.textPrimary
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit Daily Goal",
+                        tint = if (report.isGoalMet) palette.success else palette.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+
+            // Fitbit-Style Horizontal Full-Pill Goal Progress Bar
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val statusText = when {
+                        report.isGoalMet -> "Goal reached"
+                        report.totalFocusMs == 0L -> "${FocusStatsRepository.formatDurationShort(report.remainingToGoalMs)} to daily goal"
+                        else -> "${FocusStatsRepository.formatDurationShort(report.remainingToGoalMs)} remaining"
+                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 12.sp,
+                        color = if (report.isGoalMet) palette.success else palette.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-
-                    val sessionWord = if (report.sessionCount == 1) "1 session" else "${report.sessionCount} sessions"
-                    val statusSuffix = if (report.isGoalMet) {
-                        "Goal Completed"
-                    } else {
-                        "${FocusStatsRepository.formatDurationShort(report.remainingToGoalMs)} left for goal"
-                    }
                     Surface(
-                        shape = RoundedCornerShape(50),
-                        color = if (report.isGoalMet) {
-                            palette.success.copy(alpha = 0.14f)
-                        } else {
-                            palette.primaryContainer
-                        },
-                        border = BorderStroke(
-                            1.dp,
-                            if (report.isGoalMet) palette.success.copy(alpha = 0.4f) else palette.primaryBorderTint
-                        )
+                        shape = pillShape,
+                        color = if (report.isGoalMet) palette.success.copy(alpha = 0.16f) else palette.primaryContainer
                     ) {
                         Text(
-                            text = "$sessionWord • $statusSuffix",
+                            text = "${report.progressPercent}%",
                             fontFamily = JetBrainsMono,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (report.isGoalMet) palette.success else palette.textPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (report.isGoalMet) palette.success else palette.primary,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                         )
                     }
                 }
 
-                // Right: Goal Ring + Compact Target Edit Trigger
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(pillShape)
+                        .background(palette.surfaceElevated)
                 ) {
-                    CompactGoalGaugeRing(
-                        progress = animatedRingProgress,
-                        percent = report.progressPercent,
-                        goalMet = report.isGoalMet,
-                        palette = palette,
-                        size = 82.dp
-                    )
-
-                    val goalHrs = dailyGoalMinutes / 60
-                    val goalMins = dailyGoalMinutes % 60
-                    val goalShort = if (goalHrs > 0) {
-                        "${goalHrs}h" + if (goalMins > 0) "${goalMins}m" else ""
-                    } else {
-                        "${goalMins}m"
-                    }
-                    val targetCaption = when (report.timeframe) {
-                        StatsTimeframe.DAY -> "$goalShort/day"
-                        StatsTimeframe.WEEK -> "${FocusStatsRepository.formatDurationShort(report.goalTargetMs)}/wk"
-                        StatsTimeframe.MONTH -> "${FocusStatsRepository.formatDurationShort(report.goalTargetMs)}/mo"
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier
-                            .defaultMinSize(minHeight = 32.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                view.performKeyTapHaptic()
-                                onEditGoal()
+                    if (animatedProgress > 0f) {
+                        val fillBrush = remember(palette, report.isGoalMet) {
+                            when {
+                                report.isGoalMet -> Brush.horizontalGradient(
+                                    listOf(palette.success.copy(alpha = 0.85f), palette.success)
+                                )
+                                palette.isLiquidGlass -> Brush.horizontalGradient(
+                                    listOf(Color(0xFF8A99B2), Color(0xFFE3EBF8))
+                                )
+                                else -> Brush.horizontalGradient(
+                                    listOf(palette.primaryDeep, palette.primary)
+                                )
                             }
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                            .testTag("edit_goal_button")
-                    ) {
-                        Text(
-                            text = targetCaption,
-                            fontFamily = JetBrainsMono,
-                            fontSize = 10.sp,
-                            color = palette.textSecondary
-                        )
-                        Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "Edit Daily Goal",
-                            tint = palette.primary,
-                            modifier = Modifier.size(12.dp)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .graphicsLayer {
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                    scaleX = animatedProgress.coerceAtLeast(0.03f)
+                                }
+                                .clip(pillShape)
+                                .background(fillBrush)
                         )
                     }
                 }
             }
 
-            ThemedDivider(palette = palette)
-
-            // Bottom Half: Built-In Infographic Chart + Inline Tooltip
-            val chartHeaderTitle = when (report.timeframe) {
-                StatsTimeframe.DAY -> "24H TIMELINE"
-                StatsTimeframe.WEEK -> "7-DAY BREAKDOWN"
-                StatsTimeframe.MONTH -> "MONTHLY CONSISTENCY"
-            }
-
-            val selectedBucket = selectedBucketIndex?.let { idx ->
-                report.chartBuckets.getOrNull(idx)
-            }
-
+            // Selected Bar Inspection Pill OR Quiet Chart Caption
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 28.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = chartHeaderTitle,
-                    fontFamily = JetBrainsMono,
-                    fontSize = 10.sp,
-                    letterSpacing = 1.sp,
-                    color = palette.textSecondary
-                )
-
                 AnimatedContent(
                     targetState = selectedBucket,
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "chart_tooltip"
+                    label = "fitbit_selected_bucket_pill"
                 ) { bucket ->
                     if (bucket != null) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = palette.primaryContainer,
-                            border = BorderStroke(1.dp, palette.primaryBorderTint),
-                            modifier = Modifier.testTag("selected_period_pill")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier
+                                .clip(pillShape)
+                                .background(palette.primaryContainer, pillShape)
+                                .clickable {
+                                    haptics.tick()
+                                    onSelectBucket(null)
+                                }
+                                .padding(horizontal = 11.dp, vertical = 5.dp)
+                                .testTag("selected_period_pill")
                         ) {
                             Text(
                                 text = bucket.tooltipTitle,
                                 fontFamily = JetBrainsMono,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = palette.primary,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Clear selection",
+                                tint = palette.primary.copy(alpha = 0.8f),
+                                modifier = Modifier.size(12.dp)
                             )
                         }
                     } else {
                         Text(
-                            text = if (report.totalFocusMs > 0L) "Tap or scrub bars" else "No sessions yet",
-                            fontFamily = JetBrainsMono,
-                            fontSize = 10.sp,
-                            color = palette.textSecondary.copy(alpha = 0.65f)
+                            text = when (report.timeframe) {
+                                StatsTimeframe.DAY -> "Hourly activity"
+                                StatsTimeframe.WEEK -> "Daily activity"
+                                StatsTimeframe.MONTH -> "Monthly activity"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.textSecondary
                         )
                     }
                 }
             }
 
-            InteractiveThemeBarChart(
+            // Minimal Capsule Pill Bar Chart (zero-data bars stay completely non-clickable)
+            FitbitPillBarChart(
+                reportKey = "${report.timeframe.name}_${report.headerDateLabel}",
                 timeframe = report.timeframe,
                 buckets = report.chartBuckets,
                 dailyTargetMs = report.dailyTargetMs,
@@ -1133,125 +1112,8 @@ fun UnifiedHeroInfographicCard(
 }
 
 @Composable
-private fun CompactGoalGaugeRing(
-    progress: Float,
-    percent: Int,
-    goalMet: Boolean,
-    palette: FocusThemePalette,
-    size: Dp
-) {
-    val activeColor = if (goalMet) palette.success else palette.primary
-    Box(
-        modifier = Modifier.size(size),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val clamped = progress.coerceIn(0f, 1f)
-            val cx = this.size.width / 2f
-            val cy = this.size.height / 2f
-            val radius = (minOf(this.size.width, this.size.height) / 2f) - 6.dp.toPx()
-
-            when (palette.theme) {
-                AppVisualTheme.NOTHING_CRIMSON -> {
-                    val totalDots = 28
-                    val activeDots = (totalDots * clamped).toInt()
-                        .let { if (clamped > 0f && it == 0) 1 else it }
-                    for (i in 0 until totalDots) {
-                        val angleRad = Math.toRadians(-90.0 + (360.0 / totalDots) * i)
-                        val dx = cx + (radius * cos(angleRad)).toFloat()
-                        val dy = cy + (radius * sin(angleRad)).toFloat()
-                        val isActive = i < activeDots
-                        drawCircle(
-                            color = if (isActive) activeColor else palette.borderHighlight,
-                            radius = if (isActive) 2.6.dp.toPx() else 1.7.dp.toPx(),
-                            center = Offset(dx, dy)
-                        )
-                    }
-                }
-                AppVisualTheme.CYBER_ICE -> {
-                    val strokeW = 4.dp.toPx()
-                    drawCircle(
-                        color = palette.border,
-                        radius = radius,
-                        center = Offset(cx, cy),
-                        style = Stroke(width = strokeW)
-                    )
-                    if (clamped > 0f) {
-                        drawArc(
-                            color = activeColor,
-                            startAngle = -90f,
-                            sweepAngle = 360f * clamped,
-                            useCenter = false,
-                            topLeft = Offset(cx - radius, cy - radius),
-                            size = Size(radius * 2f, radius * 2f),
-                            style = Stroke(width = strokeW, cap = StrokeCap.Butt)
-                        )
-                    }
-                }
-                AppVisualTheme.SOLAR_AMBER -> {
-                    val ticks = 40
-                    val activeTicks = (ticks * clamped).toInt()
-                        .let { if (clamped > 0f && it == 0) 1 else it }
-                    for (i in 0 until ticks) {
-                        val rad = Math.toRadians(-90.0 + (360.0 / ticks) * i)
-                        val isMajor = i % 5 == 0
-                        val outer = radius + if (isMajor) 2.5.dp.toPx() else 1.dp.toPx()
-                        val inner = radius - if (isMajor) 4.dp.toPx() else 2.dp.toPx()
-                        drawLine(
-                            color = if (i < activeTicks) activeColor else palette.borderHighlight,
-                            start = Offset(cx + (inner * cos(rad)).toFloat(), cy + (inner * sin(rad)).toFloat()),
-                            end = Offset(cx + (outer * cos(rad)).toFloat(), cy + (outer * sin(rad)).toFloat()),
-                            strokeWidth = if (isMajor) 1.8.dp.toPx() else 1.1.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
-                AppVisualTheme.ULTRAVIOLET_PULSE -> {
-                    val strokeW = 5.dp.toPx()
-                    drawCircle(
-                        color = palette.border,
-                        radius = radius,
-                        center = Offset(cx, cy),
-                        style = Stroke(width = strokeW)
-                    )
-                    if (clamped > 0f) {
-                        drawArc(
-                            brush = Brush.sweepGradient(
-                                colors = listOf(palette.primarySecondary, activeColor, palette.primarySecondary)
-                            ),
-                            startAngle = -90f,
-                            sweepAngle = 360f * clamped,
-                            useCenter = false,
-                            topLeft = Offset(cx - radius, cy - radius),
-                            size = Size(radius * 2f, radius * 2f),
-                            style = Stroke(width = strokeW, cap = StrokeCap.Round)
-                        )
-                    }
-                }
-            }
-        }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "$percent%",
-                fontFamily = palette.numeralFont,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (goalMet) palette.success else palette.textPrimary
-            )
-            Text(
-                text = "GOAL",
-                fontFamily = JetBrainsMono,
-                fontSize = 8.5.sp,
-                letterSpacing = 0.8.sp,
-                color = palette.textSecondary
-            )
-        }
-    }
-}
-
-@Composable
-private fun InteractiveThemeBarChart(
+private fun FitbitPillBarChart(
+    reportKey: String,
     timeframe: StatsTimeframe,
     buckets: List<StatsChartBucket>,
     dailyTargetMs: Long,
@@ -1291,6 +1153,33 @@ private fun InteractiveThemeBarChart(
         }
     }
 
+    // Smooth event-driven spring bar rise whenever period/timeframe changes (zero idle loop)
+    val barGrowth = remember { Animatable(1f) }
+    LaunchedEffect(reportKey) {
+        barGrowth.snapTo(0.18f)
+        barGrowth.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow)
+        )
+    }
+
+    // Event-driven spring pop when selecting or switching bars (zero idle animation)
+    val selectionPop = remember { Animatable(if (selectedIndex != null) 1f else 0f) }
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex != null) {
+            selectionPop.snapTo(0.25f)
+            selectionPop.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)
+            )
+        } else {
+            selectionPop.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
+            )
+        }
+    }
+
     val currentBuckets by rememberUpdatedState(buckets)
     val currentOnSelectBucket by rememberUpdatedState(onSelectBucket)
     val currentOnScrubBucket by rememberUpdatedState(onScrubBucket)
@@ -1298,27 +1187,32 @@ private fun InteractiveThemeBarChart(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (isGoalRefChart && !showGoalLine) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                Text(
-                    text = goalLineLabel,
-                    fontFamily = JetBrainsMono,
-                    fontSize = 9.sp,
-                    color = palette.textSecondary.copy(alpha = 0.85f),
-                    modifier = Modifier.testTag("chart_goal_caption")
-                )
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = palette.surfaceElevated
+                ) {
+                    Text(
+                        text = goalLineLabel,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                        color = palette.textSecondary,
+                        modifier = Modifier
+                            .padding(horizontal = 9.dp, vertical = 3.dp)
+                            .testTag("chart_goal_caption")
+                    )
+                }
             }
         }
 
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            val minMonthSlotWidth = 20.dp
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val minMonthSlotWidth = 22.dp
             val requiredMonthWidth = minMonthSlotWidth * buckets.size
             val needsHorizontalScroll = timeframe == StatsTimeframe.MONTH && requiredMonthWidth > maxWidth
             val contentWidth = if (needsHorizontalScroll) requiredMonthWidth else maxWidth
@@ -1335,220 +1229,362 @@ private fun InteractiveThemeBarChart(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (needsHorizontalScroll) {
-                                Modifier.horizontalScroll(hScrollState)
-                            } else {
-                                Modifier
-                            }
+                            if (needsHorizontalScroll) Modifier.horizontalScroll(hScrollState)
+                            else Modifier
                         )
                 ) {
                     Column(
                         modifier = Modifier.width(contentWidth),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(106.dp)
+                                .height(152.dp)
                         ) {
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .testTag("stats_bar_chart_canvas")
-                                    .pointerInput(Unit) {
-                                        detectTapGestures { offset ->
-                                            if (size.width > 0 && currentBuckets.isNotEmpty()) {
-                                                val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
-                                                val tapped = (offset.x / slotWidth).toInt()
-                                                    .coerceIn(0, currentBuckets.lastIndex)
-                                                currentOnSelectBucket(tapped)
+                                    .pointerInput(needsHorizontalScroll) {
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false)
+                                            if (size.width <= 0 || currentBuckets.isEmpty()) return@awaitEachGesture
+
+                                            val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
+                                            val downIdx = (down.position.x / slotWidth).toInt()
+                                                .coerceIn(0, currentBuckets.lastIndex)
+                                            val downBucket = currentBuckets.getOrNull(downIdx)
+
+                                            // Zero-data (0s) bars remain completely non-interactive so taps & swipes pass straight through.
+                                            if (downBucket == null || downBucket.durationMs <= 0L) {
+                                                return@awaitEachGesture
                                             }
+
+                                            val touchSlop = viewConfiguration.touchSlop
+                                            var isScrubbing = false
+                                            var handedOffToScroll = false
+                                            lastScrubbedBucket = -1
+
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val change = event.changes.firstOrNull { it.id == down.id }
+                                                    ?: event.changes.firstOrNull()
+                                                    ?: break
+
+                                                if (!change.pressed) {
+                                                    if (!isScrubbing && !handedOffToScroll && !change.isConsumed) {
+                                                        change.consume()
+                                                        currentOnSelectBucket(downIdx)
+                                                    }
+                                                    break
+                                                }
+
+                                                val totalDx = change.position.x - down.position.x
+                                                val totalDy = change.position.y - down.position.y
+
+                                                if (!isScrubbing && !handedOffToScroll) {
+                                                    if (hypot(totalDx.toDouble(), totalDy.toDouble()) > touchSlop) {
+                                                        if (abs(totalDy) >= abs(totalDx) || needsHorizontalScroll) {
+                                                            handedOffToScroll = true
+                                                            break
+                                                        } else {
+                                                            isScrubbing = true
+                                                            lastScrubbedBucket = downIdx
+                                                            currentOnScrubBucket(downIdx)
+                                                        }
+                                                    }
+                                                }
+
+                                                if (isScrubbing) {
+                                                    change.consume()
+                                                    val idx = (change.position.x / slotWidth).toInt()
+                                                        .coerceIn(0, currentBuckets.lastIndex)
+                                                    val hoverBucket = currentBuckets.getOrNull(idx)
+                                                    if (idx != lastScrubbedBucket && hoverBucket != null && hoverBucket.durationMs > 0L) {
+                                                        lastScrubbedBucket = idx
+                                                        currentOnScrubBucket(idx)
+                                                    }
+                                                }
+                                            }
+                                            lastScrubbedBucket = -1
                                         }
                                     }
-                                    .then(
-                                        if (!needsHorizontalScroll) {
-                                            Modifier.pointerInput(Unit) {
-                                                detectHorizontalDragGestures(
-                                                    onDragStart = { offset ->
-                                                        if (size.width > 0 && currentBuckets.isNotEmpty()) {
-                                                            val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
-                                                            val idx = (offset.x / slotWidth).toInt()
-                                                                .coerceIn(0, currentBuckets.lastIndex)
-                                                            lastScrubbedBucket = idx
-                                                            currentOnScrubBucket(idx)
-                                                        }
-                                                    },
-                                                    onHorizontalDrag = { change, _ ->
-                                                        change.consume()
-                                                        if (size.width > 0 && currentBuckets.isNotEmpty()) {
-                                                            val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
-                                                            val idx = (change.position.x / slotWidth).toInt()
-                                                                .coerceIn(0, currentBuckets.lastIndex)
-                                                            if (idx != lastScrubbedBucket) {
-                                                                lastScrubbedBucket = idx
-                                                                currentOnScrubBucket(idx)
-                                                            }
-                                                        }
-                                                    },
-                                                    onDragEnd = { lastScrubbedBucket = -1 },
-                                                    onDragCancel = { lastScrubbedBucket = -1 }
-                                                )
-                                            }
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
                             ) {
                                 val count = buckets.size
                                 if (count == 0) return@Canvas
                                 val w = size.width
                                 val h = size.height
-                                val topPad = 8.dp.toPx()
-                                val bottomPad = 4.dp.toPx()
-                                val plotH = (h - topPad - bottomPad).coerceAtLeast(10f)
+                                val topPad = 18.dp.toPx()
+                                val bottomPad = 6.dp.toPx()
+                                val plotH = (h - topPad - bottomPad).coerceAtLeast(14f)
                                 val slotW = w / count.toFloat()
 
-                                // Optional Cyber Ice subtle horizontal gridlines
-                                if (palette.theme == AppVisualTheme.CYBER_ICE) {
-                                    for (frac in listOf(0.25f, 0.5f, 0.75f)) {
-                                        val gy = topPad + plotH * (1f - frac)
-                                        drawLine(
-                                            color = palette.primary.copy(alpha = 0.08f),
-                                            start = Offset(0f, gy),
-                                            end = Offset(w, gy),
-                                            strokeWidth = 1f
-                                        )
-                                    }
-                                }
-
-                                // Baseline
-                                if (palette.useDottedDividers) {
-                                    val dotR = 1.dp.toPx()
-                                    val step = 6.dp.toPx()
-                                    var dx = dotR
-                                    while (dx < w) {
-                                        drawCircle(
-                                            color = palette.borderHighlight,
-                                            radius = dotR,
-                                            center = Offset(dx, h - 1.dp.toPx())
-                                        )
-                                        dx += step
-                                    }
-                                } else {
-                                    drawLine(
-                                        color = palette.border,
-                                        start = Offset(0f, h - 1.dp.toPx()),
-                                        end = Offset(w, h - 1.dp.toPx()),
-                                        strokeWidth = 1.dp.toPx()
-                                    )
-                                }
-
-                                // Bars
                                 val barGapRatio = when (timeframe) {
-                                    StatsTimeframe.WEEK -> 0.42f
-                                    StatsTimeframe.DAY -> 0.34f
+                                    StatsTimeframe.WEEK -> 0.44f
+                                    StatsTimeframe.DAY -> 0.36f
                                     StatsTimeframe.MONTH -> 0.34f
                                 }
-                                val maxBarW = if (timeframe == StatsTimeframe.MONTH) 18.dp.toPx() else 24.dp.toPx()
-                                val barW = (slotW * (1f - barGapRatio)).coerceIn(3.dp.toPx(), maxBarW)
-                                val cornerPx = when (palette.theme) {
-                                    AppVisualTheme.NOTHING_CRIMSON -> 1.5.dp.toPx()
-                                    AppVisualTheme.CYBER_ICE -> 2.dp.toPx()
-                                    AppVisualTheme.SOLAR_AMBER -> 3.dp.toPx()
-                                    AppVisualTheme.ULTRAVIOLET_PULSE -> 6.dp.toPx()
+                                val maxBarW = when (timeframe) {
+                                    StatsTimeframe.WEEK -> 22.dp.toPx()
+                                    StatsTimeframe.MONTH -> 14.dp.toPx()
+                                    StatsTimeframe.DAY -> 10.dp.toPx()
+                                }
+                                val barW = (slotW * (1f - barGapRatio)).coerceIn(4.dp.toPx(), maxBarW)
+                                val pillRadius = CornerRadius(barW / 2f, barW / 2f)
+                                val growth = barGrowth.value.coerceIn(0f, 1f)
+                                val selPop = selectionPop.value.coerceIn(0f, 1.15f)
+
+                                val trackColor = if (palette.isLiquidGlass) {
+                                    Color.White.copy(alpha = 0.055f)
+                                } else {
+                                    palette.surfaceElevated.copy(alpha = 0.55f)
+                                }
+
+                                // Theme-matched luminous selection colors (high contrast, zero borders)
+                                val selectedHighlightTop = when (palette.theme) {
+                                    AppVisualTheme.NOTHING_CRIMSON -> Color(0xFFFF8A90)
+                                    AppVisualTheme.LIQUID_GLASS -> Color(0xFFFFFFFF)
+                                    AppVisualTheme.SOLAR_AMBER -> Color(0xFFFFE596)
+                                    AppVisualTheme.NORDIC_SAGE -> Color(0xFFDCF8EC)
+                                }
+                                val selectedHighlightBottom = when (palette.theme) {
+                                    AppVisualTheme.NOTHING_CRIMSON -> palette.primary
+                                    AppVisualTheme.LIQUID_GLASS -> Color(0xFFB4C8E8)
+                                    AppVisualTheme.SOLAR_AMBER -> palette.primary
+                                    AppVisualTheme.NORDIC_SAGE -> palette.primary
+                                }
+                                val spotlightTint = when (palette.theme) {
+                                    AppVisualTheme.LIQUID_GLASS -> Color(0xFFD8E4FA)
+                                    else -> palette.primary
+                                }
+                                val beaconCoreColor = when (palette.theme) {
+                                    AppVisualTheme.NOTHING_CRIMSON -> Color.White
+                                    AppVisualTheme.LIQUID_GLASS -> Color.White
+                                    AppVisualTheme.SOLAR_AMBER -> Color(0xFFFFF4CC)
+                                    AppVisualTheme.NORDIC_SAGE -> Color(0xFFE8FFF4)
                                 }
 
                                 buckets.forEachIndexed { idx, bucket ->
                                     val centerX = slotW * idx + slotW / 2f
                                     val leftX = centerX - barW / 2f
-                                    val isSelected = selectedIndex == idx
                                     val hasValue = bucket.durationMs > 0L
-                                    val ratio = if (hasValue) {
-                                        (bucket.durationMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.06f, 1f)
+                                    val isSelected = hasValue && selectedIndex == idx
+                                    val dimmed = selectedIndex != null && !isSelected
+
+                                    // 1. Background capsule track (illuminated full-column spotlight pill when selected)
+                                    if (isSelected && selPop > 0.02f) {
+                                        val haloW = (barW + 10.dp.toPx() * selPop).coerceAtMost(slotW * 0.96f)
+                                        val haloLeft = centerX - haloW / 2f
+                                        val haloTop = (topPad - 6.dp.toPx()).coerceAtLeast(2f)
+                                        val haloH = (plotH + 10.dp.toPx()).coerceAtMost(h - haloTop)
+                                        drawRoundRect(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    spotlightTint.copy(alpha = 0.22f * selPop.coerceAtMost(1f)),
+                                                    spotlightTint.copy(alpha = 0.12f * selPop.coerceAtMost(1f)),
+                                                    spotlightTint.copy(alpha = 0.04f * selPop.coerceAtMost(1f))
+                                                ),
+                                                startY = haloTop,
+                                                endY = haloTop + haloH
+                                            ),
+                                            topLeft = Offset(haloLeft, haloTop),
+                                            size = Size(haloW, haloH),
+                                            cornerRadius = CornerRadius(haloW / 2f, haloW / 2f)
+                                        )
                                     } else {
-                                        0f
+                                        drawRoundRect(
+                                            color = if (dimmed) trackColor.copy(alpha = trackColor.alpha * 0.65f) else trackColor,
+                                            topLeft = Offset(leftX, topPad),
+                                            size = Size(barW, plotH),
+                                            cornerRadius = pillRadius
+                                        )
                                     }
 
                                     if (hasValue) {
-                                        val barH = plotH * ratio
-                                        val topY = topPad + (plotH - barH)
-                                        val barColor = when {
-                                            isSelected -> palette.primary
-                                            selectedIndex != null -> palette.primary.copy(alpha = 0.35f)
-                                            bucket.isCurrentPeriod -> palette.primary
-                                            else -> palette.primary.copy(alpha = 0.76f)
+                                        val rawRatio = (bucket.durationMs.toFloat() / scaleMaxMs.toFloat())
+                                            .coerceIn(0.08f, 1f)
+                                        val activeBarW = if (isSelected) {
+                                            (barW * (1f + 0.22f * selPop)).coerceAtMost(slotW * 0.86f)
+                                        } else {
+                                            barW
                                         }
+                                        val activeLeftX = centerX - activeBarW / 2f
+                                        val activeRadius = CornerRadius(activeBarW / 2f, activeBarW / 2f)
+                                        val barH = (plotH * rawRatio * growth).coerceAtLeast(activeBarW)
+                                        val topY = topPad + (plotH - barH)
 
-                                        if (palette.theme == AppVisualTheme.ULTRAVIOLET_PULSE) {
+                                        if (isSelected) {
+                                            // Soft luminous ambient bloom behind the active bar
+                                            val glowPad = 4.dp.toPx() * selPop.coerceAtMost(1f)
                                             drawRoundRect(
                                                 brush = Brush.verticalGradient(
-                                                    colors = listOf(barColor, palette.primarySecondary.copy(alpha = if (selectedIndex != null && !isSelected) 0.25f else 0.72f)),
+                                                    colors = listOf(
+                                                        spotlightTint.copy(alpha = 0.34f * selPop.coerceAtMost(1f)),
+                                                        spotlightTint.copy(alpha = 0.10f * selPop.coerceAtMost(1f))
+                                                    ),
+                                                    startY = (topY - glowPad).coerceAtLeast(0f),
+                                                    endY = topPad + plotH
+                                                ),
+                                                topLeft = Offset(activeLeftX - glowPad * 0.65f, (topY - glowPad * 0.4f).coerceAtLeast(0f)),
+                                                size = Size(activeBarW + glowPad * 1.3f, barH + glowPad * 0.6f),
+                                                cornerRadius = CornerRadius((activeBarW + glowPad) / 2f, (activeBarW + glowPad) / 2f)
+                                            )
+
+                                            // High-contrast luminous theme-matched selected bar fill
+                                            drawRoundRect(
+                                                brush = Brush.verticalGradient(
+                                                    colors = listOf(selectedHighlightTop, selectedHighlightBottom),
                                                     startY = topY,
                                                     endY = topPad + plotH
                                                 ),
-                                                topLeft = Offset(leftX, topY),
-                                                size = Size(barW, barH),
-                                                cornerRadius = CornerRadius(cornerPx, cornerPx)
+                                                topLeft = Offset(activeLeftX, topY),
+                                                size = Size(activeBarW, barH),
+                                                cornerRadius = activeRadius
+                                            )
+
+                                            // Subtle crisp top specular cap bead inside the selected pill
+                                            val capInset = (activeBarW * 0.22f).coerceAtLeast(1.5.dp.toPx())
+                                            val capSize = (activeBarW - capInset * 2f).coerceAtLeast(2.dp.toPx())
+                                            drawCircle(
+                                                color = Color.White.copy(alpha = 0.55f * selPop.coerceAtMost(1f)),
+                                                radius = (capSize * 0.38f).coerceAtMost(3.dp.toPx()),
+                                                center = Offset(centerX, topY + activeBarW * 0.5f)
+                                            )
+
+                                            // Floating active beacon dot above the selected bar cap
+                                            val beaconY = (topY - 8.dp.toPx()).coerceAtLeast(5.dp.toPx())
+                                            val beaconOuterR = 4.8.dp.toPx() * selPop.coerceAtMost(1f)
+                                            val beaconInnerR = 2.6.dp.toPx() * selPop.coerceAtMost(1f)
+                                            drawCircle(
+                                                color = spotlightTint.copy(alpha = 0.32f * selPop.coerceAtMost(1f)),
+                                                radius = beaconOuterR,
+                                                center = Offset(centerX, beaconY)
+                                            )
+                                            drawCircle(
+                                                color = beaconCoreColor,
+                                                radius = beaconInnerR,
+                                                center = Offset(centerX, beaconY)
                                             )
                                         } else {
-                                            drawRoundRect(
-                                                color = barColor,
-                                                topLeft = Offset(leftX, topY),
-                                                size = Size(barW, barH),
-                                                cornerRadius = CornerRadius(cornerPx, cornerPx)
-                                            )
+                                            when (palette.theme) {
+                                                AppVisualTheme.LIQUID_GLASS -> {
+                                                    drawRoundRect(
+                                                        brush = Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                Color(0xFFD2DCEB).copy(alpha = if (dimmed) 0.20f else 0.80f),
+                                                                Color(0xFF5D6B84).copy(alpha = if (dimmed) 0.11f else 0.42f)
+                                                            ),
+                                                            startY = topY,
+                                                            endY = topPad + plotH
+                                                        ),
+                                                        topLeft = Offset(activeLeftX, topY),
+                                                        size = Size(activeBarW, barH),
+                                                        cornerRadius = activeRadius
+                                                    )
+                                                }
+                                                AppVisualTheme.NORDIC_SAGE -> {
+                                                    val topCol = if (dimmed) palette.primary.copy(alpha = 0.22f) else palette.primary
+                                                    drawRoundRect(
+                                                        brush = Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                topCol,
+                                                                palette.primarySecondary.copy(alpha = if (dimmed) 0.14f else 0.76f)
+                                                            ),
+                                                            startY = topY,
+                                                            endY = topPad + plotH
+                                                        ),
+                                                        topLeft = Offset(activeLeftX, topY),
+                                                        size = Size(activeBarW, barH),
+                                                        cornerRadius = activeRadius
+                                                    )
+                                                }
+                                                else -> {
+                                                    val barCol = when {
+                                                        dimmed -> palette.primary.copy(alpha = 0.22f)
+                                                        bucket.isCurrentPeriod -> palette.primary
+                                                        else -> palette.primary.copy(alpha = 0.82f)
+                                                    }
+                                                    drawRoundRect(
+                                                        color = barCol,
+                                                        topLeft = Offset(activeLeftX, topY),
+                                                        size = Size(activeBarW, barH),
+                                                        cornerRadius = activeRadius
+                                                    )
+                                                }
+                                            }
                                         }
                                     } else {
-                                        val stubH = if (isSelected) 8.dp.toPx() else 3.dp.toPx()
+                                        // Quiet pill dot for zero-data bars
+                                        val dotH = 3.5.dp.toPx()
                                         drawRoundRect(
-                                            color = if (isSelected) palette.primary.copy(alpha = 0.65f) else palette.borderHighlight.copy(alpha = 0.45f),
-                                            topLeft = Offset(leftX, topPad + plotH - stubH),
-                                            size = Size(barW, stubH),
-                                            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                                            color = if (palette.isLiquidGlass) {
+                                                Color.White.copy(alpha = if (dimmed) 0.08f else 0.14f)
+                                            } else {
+                                                palette.textSecondary.copy(alpha = if (dimmed) 0.12f else 0.20f)
+                                            },
+                                            topLeft = Offset(leftX, topPad + plotH - dotH),
+                                            size = Size(barW, dotH),
+                                            cornerRadius = CornerRadius(dotH / 2f, dotH / 2f)
                                         )
                                     }
                                 }
 
-                                // Dashed horizontal Goal reference line only when highestBarMinutes >= periodGoalMinutes * 0.5f
+                                // Dashed horizontal goal reference line when highest bar >= 50% of daily goal
                                 if (showGoalLine) {
                                     val goalRatio = (goalReferenceMs.toFloat() / scaleMaxMs.toFloat()).coerceIn(0.05f, 1f)
                                     val goalY = topPad + plotH * (1f - goalRatio)
                                     drawLine(
-                                        color = palette.textSecondary.copy(alpha = 0.55f),
+                                        color = palette.textSecondary.copy(alpha = 0.45f),
                                         start = Offset(0f, goalY),
                                         end = Offset(w, goalY),
                                         strokeWidth = 1.2.dp.toPx(),
-                                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
                                     )
                                 }
                             }
                         }
 
-                        // X-Axis Labels aligned to slots
+                        // Minimal Pill-Aligned X-Axis Labels with Filled Active Pill Highlight
+                        val axisPillBg = if (palette.isLiquidGlass) Color(0xFF283142) else palette.primary
+                        val axisPillFg = if (palette.isLiquidGlass) palette.textPrimary else palette.onPrimary
+
                         when (timeframe) {
                             StatsTimeframe.WEEK -> {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     buckets.forEachIndexed { idx, bucket ->
                                         val isSel = selectedIndex == idx
-                                        Text(
-                                            text = bucket.axisLabel,
-                                            fontFamily = JetBrainsMono,
-                                            fontSize = 9.5.sp,
-                                            lineHeight = 11.sp,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontWeight = if (isSel || bucket.isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
-                                            color = when {
-                                                isSel -> palette.primary
-                                                bucket.isCurrentPeriod -> palette.textPrimary
-                                                else -> palette.textSecondary
-                                            },
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = bucket.axisLabel,
+                                                fontFamily = JetBrainsMono,
+                                                fontSize = 9.5.sp,
+                                                lineHeight = 11.sp,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                fontWeight = if (isSel || bucket.isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
+                                                color = when {
+                                                    isSel -> axisPillFg
+                                                    bucket.isCurrentPeriod -> palette.textPrimary
+                                                    else -> palette.textSecondary
+                                                },
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(if (isSel) axisPillBg else Color.Transparent)
+                                                    .padding(
+                                                        horizontal = if (isSel) 7.dp else 2.dp,
+                                                        vertical = if (isSel) 3.dp else 2.dp
+                                                    )
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1572,12 +1608,19 @@ private fun InteractiveThemeBarChart(
                                                 softWrap = false,
                                                 fontWeight = if (isSel || bucket.isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
                                                 color = when {
-                                                    isSel -> palette.primary
+                                                    isSel -> axisPillFg
                                                     bucket.isCurrentPeriod -> palette.textPrimary
                                                     else -> palette.textSecondary
                                                 },
                                                 textAlign = TextAlign.Center,
-                                                modifier = Modifier.testTag("month_axis_label_${bucket.axisLabel}")
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(if (isSel) axisPillBg else Color.Transparent)
+                                                    .padding(
+                                                        horizontal = if (isSel) 5.dp else 1.dp,
+                                                        vertical = 2.dp
+                                                    )
+                                                    .testTag("month_axis_label_${bucket.axisLabel}")
                                             )
                                         }
                                     }
@@ -1588,11 +1631,11 @@ private fun InteractiveThemeBarChart(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    listOf("12AM", "6AM", "12PM", "6PM", "12AM").forEach { label ->
+                                    listOf("12a", "6a", "12p", "6p", "12a").forEach { label ->
                                         Text(
                                             text = label,
                                             fontFamily = JetBrainsMono,
-                                            fontSize = 9.sp,
+                                            fontSize = 9.5.sp,
                                             color = palette.textSecondary,
                                             maxLines = 1,
                                             softWrap = false
@@ -1606,8 +1649,8 @@ private fun InteractiveThemeBarChart(
 
                 if (showGoalLine) {
                     Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = palette.surface.copy(alpha = 0.88f),
+                        shape = RoundedCornerShape(50),
+                        color = palette.surfaceElevated.copy(alpha = 0.92f),
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 2.dp, end = 2.dp)
@@ -1616,9 +1659,9 @@ private fun InteractiveThemeBarChart(
                         Text(
                             text = goalLineLabel,
                             fontFamily = JetBrainsMono,
-                            fontSize = 8.5.sp,
+                            fontSize = 9.sp,
                             color = palette.textSecondary,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.5.dp)
                         )
                     }
                 }
@@ -1627,6 +1670,10 @@ private fun InteractiveThemeBarChart(
     }
 }
 
+/**
+ * Airy 2×2 Fitbit / Google Health metric capsules with circular tinted icon badges
+ * and zero dividers or boxy borders.
+ */
 @Composable
 fun UnifiedBentoMetricsGrid(
     report: StatsPeriodReport,
@@ -1635,126 +1682,118 @@ fun UnifiedBentoMetricsGrid(
 ) {
     val palette = LocalFocusTheme.current
 
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = palette.surface,
-        border = BorderStroke(0.75.dp, palette.border),
+    AnimatedContent(
+        targetState = selectedBucket,
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "fitbit_metrics_capsules_mode",
         modifier = modifier
             .fillMaxWidth()
             .testTag("bento_metrics_grid")
-    ) {
-        AnimatedContent(
-            targetState = selectedBucket,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "bento_grid_mode"
-        ) { bucket ->
-            if (bucket != null) {
-                val periodSharePct = if (report.totalFocusMs > 0L) {
-                    ((bucket.durationMs.toFloat() / report.totalFocusMs.toFloat()) * 100f)
-                        .roundToInt()
-                        .coerceIn(0, 100)
-                } else {
-                    0
-                }
-                val goalPctRaw = if (report.goalTargetMs > 0L) {
-                    (bucket.durationMs.toFloat() / report.goalTargetMs.toFloat()) * 100f
-                } else {
-                    0f
-                }
-                val goalImpactValue = when {
-                    bucket.durationMs <= 0L -> "0%"
-                    goalPctRaw < 1f -> "<1%"
-                    else -> "${goalPctRaw.roundToInt().coerceAtMost(999)}%"
-                }
-
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        BentoMetricCell(
-                            label = "TOTAL SESSIONS",
-                            value = "${bucket.sessionCount}",
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                        BentoVerticalDivider(palette = palette)
-                        BentoMetricCell(
-                            label = "TOTAL TIME",
-                            value = FocusStatsRepository.formatDurationHero(bucket.durationMs),
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    BentoHorizontalDivider(palette = palette)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        BentoMetricCell(
-                            label = "SHARE OF ${report.timeframe.label}",
-                            value = "$periodSharePct%",
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                        BentoVerticalDivider(palette = palette)
-                        BentoMetricCell(
-                            label = "GOAL IMPACT",
-                            value = goalImpactValue,
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+    ) { bucket ->
+        if (bucket != null) {
+            val periodSharePct = if (report.totalFocusMs > 0L) {
+                ((bucket.durationMs.toFloat() / report.totalFocusMs.toFloat()) * 100f)
+                    .roundToInt()
+                    .coerceIn(0, 100)
             } else {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Top Row: SESSIONS | AVG SESSION
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        BentoMetricCell(
-                            label = "SESSIONS",
-                            value = "${report.sessionCount}",
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                        BentoVerticalDivider(palette = palette)
-                        BentoMetricCell(
-                            label = "AVG SESSION",
-                            value = formatDurationMinutes(report.avgSessionMs),
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                0
+            }
+            val goalPctRaw = if (report.goalTargetMs > 0L) {
+                (bucket.durationMs.toFloat() / report.goalTargetMs.toFloat()) * 100f
+            } else {
+                0f
+            }
+            val goalImpactValue = when {
+                bucket.durationMs <= 0L -> "0%"
+                goalPctRaw < 1f -> "<1%"
+                else -> "${goalPctRaw.roundToInt().coerceAtMost(999)}%"
+            }
 
-                    BentoHorizontalDivider(palette = palette)
-
-                    // Bottom Row: LONGEST FOCUS | STREAK
-                    Row(
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.Bolt,
+                        iconTint = palette.primary,
+                        label = "Sessions",
+                        value = "${bucket.sessionCount}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.AccessTime,
+                        iconTint = palette.primary,
+                        label = "Duration",
+                        value = FocusStatsRepository.formatDurationHero(bucket.durationMs),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.PieChart,
+                        iconTint = palette.primarySecondary,
+                        label = "Share",
+                        value = "$periodSharePct%",
+                        modifier = Modifier.weight(1f)
+                    )
+                    FitbitMetricCapsule(
+                        icon = Icons.AutoMirrored.Outlined.TrendingUp,
+                        iconTint = palette.success,
+                        label = "Goal impact",
+                        value = goalImpactValue,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            val currentUnit = if (report.currentStreak == 1) "day" else "days"
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.Bolt,
+                        iconTint = palette.primary,
+                        label = "Sessions",
+                        value = "${report.sessionCount}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.AccessTime,
+                        iconTint = palette.primarySecondary,
+                        label = "Average",
+                        value = formatDurationMinutes(report.avgSessionMs),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.Timer,
+                        iconTint = palette.primary,
+                        label = "Longest",
+                        value = formatDurationMinutes(report.longestSessionMs),
+                        modifier = Modifier.weight(1f)
+                    )
+                    FitbitMetricCapsule(
+                        icon = Icons.Outlined.LocalFireDepartment,
+                        iconTint = palette.primary,
+                        label = "Streak",
+                        value = "${report.currentStreak} $currentUnit",
+                        trailingBadge = "Best ${report.maxStreak}d",
+                        trailingBadgeIcon = Icons.Outlined.EmojiEvents,
+                        trailingBadgeTint = palette.warning,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        BentoMetricCell(
-                            label = "LONGEST FOCUS",
-                            value = formatDurationMinutes(report.longestSessionMs),
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                        BentoVerticalDivider(palette = palette)
-                        BentoStreakCell(
-                            currentStreak = report.currentStreak,
-                            maxStreak = report.maxStreak,
-                            palette = palette,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                            .weight(1f)
+                            .testTag("bento_streak_cell")
+                    )
                 }
             }
         }
@@ -1762,210 +1801,93 @@ fun UnifiedBentoMetricsGrid(
 }
 
 @Composable
-private fun BentoMetricCell(
+private fun FitbitMetricCapsule(
+    icon: ImageVector,
+    iconTint: Color,
     label: String,
     value: String,
-    palette: FocusThemePalette,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trailingBadge: String? = null,
+    trailingBadgeIcon: ImageVector? = null,
+    trailingBadgeTint: Color = iconTint
 ) {
-    Column(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            text = label,
-            fontFamily = JetBrainsMono,
-            fontSize = 10.sp,
-            letterSpacing = 1.sp,
-            color = palette.textSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = value,
-            fontFamily = palette.numeralFont,
-            fontSize = 21.sp,
-            fontWeight = FontWeight.Bold,
-            color = palette.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
+    val palette = LocalFocusTheme.current
+    val capsuleShape = remember { RoundedCornerShape(26.dp) }
 
-@Composable
-private fun BentoStreakCell(
-    currentStreak: Int,
-    maxStreak: Int,
-    palette: FocusThemePalette,
-    modifier: Modifier = Modifier
-) {
-    val currentUnit = if (currentStreak == 1) "day" else "days"
-    val bestUnit = if (maxStreak == 1) "day" else "days"
-
-    Row(
+    Box(
         modifier = modifier
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-            .testTag("bento_streak_cell"),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .focusGlassPanel(shape = capsuleShape, palette = palette)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        // Left: Current Streak
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.LocalFireDepartment,
-                    contentDescription = "Current Streak",
-                    tint = palette.primary,
-                    modifier = Modifier.size(13.dp)
-                )
-                Text(
-                    text = "STREAK",
-                    fontFamily = JetBrainsMono,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 0.8.sp,
-                    color = palette.textSecondary,
-                    maxLines = 1
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = "$currentStreak",
-                    fontFamily = palette.numeralFont,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.textPrimary,
-                    maxLines = 1,
-                    modifier = Modifier.alignByBaseline()
-                )
-                Text(
-                    text = currentUnit,
-                    fontFamily = JetBrainsMono,
-                    fontSize = 10.sp,
-                    color = palette.textSecondary,
-                    maxLines = 1,
-                    modifier = Modifier.alignByBaseline()
-                )
-            }
-        }
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = iconTint,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
 
-        // Right: Best Streak
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.EmojiEvents,
-                    contentDescription = "Best Streak",
-                    tint = palette.warning,
-                    modifier = Modifier.size(13.dp)
-                )
-                Text(
-                    text = "BEST",
-                    fontFamily = JetBrainsMono,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 0.8.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = palette.textSecondary,
-                    maxLines = 1
-                )
+                if (trailingBadge != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(palette.surfaceElevated)
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    ) {
+                        if (trailingBadgeIcon != null) {
+                            Icon(
+                                imageVector = trailingBadgeIcon,
+                                contentDescription = null,
+                                tint = trailingBadgeTint,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                        Text(
+                            text = trailingBadge,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.textSecondary,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = "$maxStreak",
-                    fontFamily = palette.numeralFont,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.textPrimary,
-                    maxLines = 1,
-                    modifier = Modifier.alignByBaseline()
-                )
-                Text(
-                    text = bestUnit,
-                    fontFamily = JetBrainsMono,
-                    fontSize = 10.sp,
-                    color = palette.textSecondary,
-                    maxLines = 1,
-                    modifier = Modifier.alignByBaseline()
-                )
-            }
-        }
-    }
-}
 
-@Composable
-private fun BentoHorizontalDivider(palette: FocusThemePalette) {
-    if (palette.useDottedDividers) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-        ) {
-            val dotR = 0.9.dp.toPx()
-            val spacing = 5.dp.toPx()
-            var x = dotR
-            while (x < size.width) {
-                drawCircle(
-                    color = palette.borderHighlight,
-                    radius = dotR,
-                    center = Offset(x, size.height / 2f)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                RollingMetricText(
+                    text = value,
+                    style = TextStyle(
+                        fontFamily = palette.numeralFont,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = palette.textPrimary
                 )
-                x += spacing
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontSize = 11.5.sp,
+                    color = palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
-    } else {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(palette.border)
-        )
-    }
-}
-
-@Composable
-private fun BentoVerticalDivider(palette: FocusThemePalette) {
-    if (palette.useDottedDividers) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(1.dp)
-        ) {
-            val dotR = 0.9.dp.toPx()
-            val spacing = 5.dp.toPx()
-            var y = dotR
-            while (y < size.height) {
-                drawCircle(
-                    color = palette.borderHighlight,
-                    radius = dotR,
-                    center = Offset(size.width / 2f, y)
-                )
-                y += spacing
-            }
-        }
-    } else {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(1.dp)
-                .background(palette.border)
-        )
     }
 }

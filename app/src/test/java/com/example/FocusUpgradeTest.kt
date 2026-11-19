@@ -355,9 +355,23 @@ class FocusUpgradeTest {
             assertEquals(theme, palette.theme)
             assertEquals(theme, AppVisualTheme.fromIdOrName(theme.id))
         }
-        // Removed Emerald Terminal must cleanly fall back to Nothing Crimson
+        assertTrue(FocusThemePalette.from(AppVisualTheme.LIQUID_GLASS).isLiquidGlass)
+        assertTrue(FocusThemePalette.from(AppVisualTheme.NORDIC_SAGE).useOrganicHorizon)
+        // Verify Dark Liquid Glass uses deep obsidian background and opaque surface for crisp dialogs
+        val darkGlass = FocusThemePalette.from(AppVisualTheme.LIQUID_GLASS)
+        assertTrue(darkGlass.background.red < 0.05f && darkGlass.background.green < 0.05f && darkGlass.background.blue < 0.06f)
+        assertEquals(1f, darkGlass.surface.alpha, 0.001f)
+        // Verify crisp textPrimary contrast against background across all themes
+        AppVisualTheme.entries.forEach { theme ->
+            val p = FocusThemePalette.from(theme)
+            assertTrue("Expected bright textPrimary for $theme", p.textPrimary.red > 0.85f && p.textPrimary.green > 0.85f)
+            assertTrue("Expected dark background for $theme", p.background.red < 0.10f && p.background.green < 0.10f && p.background.blue < 0.10f)
+        }
+        // Removed legacy themes cleanly fall back to Nothing Crimson
         assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("emerald_terminal"))
         assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("EMERALD_TERMINAL"))
+        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("cyber_ice"))
+        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("ultraviolet_pulse"))
 
         val settings = FocusSettingsRepository.getCurrent(context)
         assertEquals(240L, settings.dailyGoalMinutes)

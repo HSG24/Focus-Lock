@@ -177,7 +177,8 @@ fun LockAllowedAppsSection(
     readFromCacheOnly: Boolean = true
 ) {
     if (apps.isEmpty()) return
-    val activeTheme = LocalFocusTheme.current.theme
+    val themePalette = LocalFocusTheme.current
+    val activeTheme = themePalette.theme
     val haptics = rememberFocusHaptics()
     val softBorder = palette.border.copy(alpha = 0.7f)
 
@@ -212,9 +213,7 @@ fun LockAllowedAppsSection(
                         horizontalArrangement = Arrangement.spacedBy(innerGap),
                         modifier = Modifier
                             .height(pillHeight)
-                            .clip(pillShape)
-                            .background(palette.surface, pillShape)
-                            .border(0.75.dp, softBorder, pillShape)
+                            .focusGlassPanel(shape = pillShape, palette = themePalette)
                             .clickable(enabled = !isPreview) {
                                 haptics.tap()
                                 onAppClick(app)
@@ -249,9 +248,7 @@ fun LockAllowedAppsSection(
             val dockShape = RoundedCornerShape(50)
             Row(
                 modifier = modifier
-                    .clip(dockShape)
-                    .background(palette.surface, dockShape)
-                    .border(0.75.dp, softBorder, dockShape)
+                    .focusGlassPanel(shape = dockShape, palette = themePalette)
                     .horizontalScroll(rememberScrollState())
                     .padding(
                         horizontal = if (isPreview) 10.dp else 14.dp,
@@ -265,7 +262,7 @@ fun LockAllowedAppsSection(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(50))
                             .clickable(enabled = !isPreview) {
                                 haptics.tap()
                                 onAppClick(app)
@@ -299,13 +296,11 @@ fun LockAllowedAppsSection(
 
         LockAppLayout.COMPACT_LIST -> {
             val visibleApps = if (isPreview) apps.take(3) else apps
-            val cardShape = RoundedCornerShape(if (isPreview) 14.dp else 18.dp)
+            val cardShape = RoundedCornerShape(if (isPreview) 22.dp else 28.dp)
             Column(
                 modifier = modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(palette.surface, cardShape)
-                    .border(0.75.dp, softBorder, cardShape)
+                    .focusGlassPanel(shape = cardShape, palette = themePalette)
             ) {
                 visibleApps.forEachIndexed { index, app ->
                     Row(
@@ -315,8 +310,8 @@ fun LockAllowedAppsSection(
                                 haptics.tap()
                                 onAppClick(app)
                             }
-                            .height(if (isPreview) 36.dp else 48.dp)
-                            .padding(horizontal = 12.dp)
+                            .height(if (isPreview) 34.dp else 46.dp)
+                            .padding(horizontal = 14.dp)
                             .testTag(testTagForApp(app)),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -327,7 +322,7 @@ fun LockAllowedAppsSection(
                             badgeBackground = palette.surfaceElevated,
                             iconSize = if (isPreview) 14.dp else 16.dp,
                             containerSize = if (isPreview) 24.dp else 30.dp,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = CircleShape,
                             preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                             loadIfMissing = !readFromCacheOnly
                         )
@@ -350,7 +345,8 @@ fun LockAllowedAppsSection(
                     if (index < visibleApps.lastIndex) {
                         HorizontalDivider(
                             thickness = 0.5.dp,
-                            color = palette.border
+                            color = palette.border.copy(alpha = 0.45f),
+                            modifier = Modifier.padding(horizontal = 14.dp)
                         )
                     }
                 }
@@ -359,7 +355,7 @@ fun LockAllowedAppsSection(
 
         LockAppLayout.SPLIT_CHIPS -> {
             val rows = apps.chunked(2)
-            val chipShape = RoundedCornerShape(14.dp)
+            val chipShape = RoundedCornerShape(50)
             Column(
                 modifier = modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -375,10 +371,8 @@ fun LockAllowedAppsSection(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(if (isPreview) 36.dp else 48.dp)
-                                    .clip(chipShape)
-                                    .background(palette.surfaceElevated, chipShape)
-                                    .border(0.75.dp, softBorder, chipShape)
+                                    .height(if (isPreview) 34.dp else 44.dp)
+                                    .focusGlassPanel(shape = chipShape, palette = themePalette, elevated = true)
                                     .clickable(enabled = !isPreview) {
                                         haptics.tap()
                                         onAppClick(app)
@@ -392,7 +386,7 @@ fun LockAllowedAppsSection(
                                     badgeBackground = palette.surface,
                                     iconSize = if (isPreview) 14.dp else 16.dp,
                                     containerSize = if (isPreview) 22.dp else 28.dp,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = CircleShape,
                                     preloadedIcon = iconCache[FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)],
                                     loadIfMissing = !readFromCacheOnly
                                 )

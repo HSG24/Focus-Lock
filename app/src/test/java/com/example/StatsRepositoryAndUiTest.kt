@@ -203,16 +203,28 @@ class StatsRepositoryAndUiTest {
     @Test
     fun statsScreen_lowFocusHidesGoalLine_rendersGoalCaption_andTodayVsCurrentJumpButtons() {
         val now = System.currentTimeMillis()
+        // Place the 35-minute session firmly inside today's local hour 10 so both empty & populated bars are deterministic
+        val sessionStartCal = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 10)
+            set(Calendar.MINUTE, 10)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val sessionStartMs = minOf(sessionStartCal.timeInMillis, now - 40 * 60_000L)
+        val populatedHour = Calendar.getInstance().apply { timeInMillis = sessionStartMs }.get(Calendar.HOUR_OF_DAY)
+        val emptyHour = (populatedHour + 6) % 24
+
         // 35 minutes (< 50% of 300m daily goal = 150m) -> dashed goal line stays hidden, caption shown above chart
         FocusXpRepository.recordCompletedSession(
             context = context,
-            sessionStartTimeMs = now - 45 * 60_000L,
+            sessionStartTimeMs = sessionStartMs,
             durationMs = 35 * 60_000L,
             dailyGoalMinutes = 300L
         )
         FocusStatsRepository.recordCompletedSession(
             context = context,
-            startTimeMs = now - 45 * 60_000L,
+            startTimeMs = sessionStartMs,
             durationMs = 35 * 60_000L
         )
 
@@ -232,14 +244,24 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeRule.onNodeWithTag("jump_today_button").performClick()
 
-        // Tap bar -> selects, tap same bar again -> deselects
+        // Tap an empty (0s) bar -> MUST NOT select or show selected_period_pill
         composeRule.onNodeWithTag("stats_bar_chart_canvas").performTouchInput {
-            click(Offset(center.x, center.y))
+            val emptyX = width * ((emptyHour + 0.5f) / 24f)
+            click(Offset(emptyX, center.y))
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("selected_period_pill").assertDoesNotExist()
+
+        // Tap the bar WITH focus data -> selects, tap same bar again -> deselects
+        composeRule.onNodeWithTag("stats_bar_chart_canvas").performTouchInput {
+            val dataX = width * ((populatedHour + 0.5f) / 24f)
+            click(Offset(dataX, center.y))
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("selected_period_pill").assertIsDisplayed()
         composeRule.onNodeWithTag("stats_bar_chart_canvas").performTouchInput {
-            click(Offset(center.x, center.y))
+            val dataX = width * ((populatedHour + 0.5f) / 24f)
+            click(Offset(dataX, center.y))
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("selected_period_pill").assertDoesNotExist()
@@ -284,7 +306,7 @@ class StatsRepositoryAndUiTest {
         )
 
         composeRule.setContent {
-            MyApplicationTheme(appTheme = AppVisualTheme.CYBER_ICE) {
+            MyApplicationTheme(appTheme = AppVisualTheme.LIQUID_GLASS) {
                 StatsScreen(
                     dailyGoalMinutes = 300L,
                     onOpenShare = {}
@@ -436,7 +458,20 @@ class StatsRepositoryAndUiTest {
 
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertIsDisplayed()
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
-        composeRule.onNodeWithText("Minimal Visual Redesign").assertIsDisplayed()
+        composeRule.onNodeWithTag("whats_new_section_new").assertIsDisplayed()
+        composeRule.onNodeWithText("NEW").assertIsDisplayed()
+        composeRule.onNodeWithText("Minimal Pill Stats Redesign").assertIsDisplayed()
+        composeRule.onNodeWithText("Fluid Elastic Pill Animations").assertIsDisplayed()
+        composeRule.onNodeWithText("Minimal Share Screen Redesign").assertExists()
+        composeRule.onNodeWithText("Dark Liquid Glass & Nordic Sage").assertExists()
+        composeRule.onNodeWithText("Borderless Pill Redesign").assertExists()
+        composeRule.onNodeWithTag("whats_new_section_fixes").assertExists()
+        composeRule.onNodeWithText("FIXES").assertExists()
+        composeRule.onNodeWithText("Unmistakable Selected Stats Bars").assertExists()
+        composeRule.onNodeWithText("Static Dark Glass & Classic Focus Slider").assertExists()
+        composeRule.onNodeWithText("Universal Contrast & Visibility").assertExists()
+        composeRule.onNodeWithText("Smarter Stats Bar Interaction").assertExists()
+        composeRule.onNodeWithText("Minimal Visual Redesign").assertExists()
         composeRule.onNodeWithText("Day-by-Day Monthly Chart").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
         composeRule.onNodeWithText("Earlier Updates").assertDoesNotExist()

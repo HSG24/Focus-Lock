@@ -6,7 +6,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -57,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.LocalFocusTheme
 import com.example.ui.theme.PureWhite
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 fun View.performClockTickHaptic() {
     performFocusTick()
@@ -282,8 +283,8 @@ data class PillNavTab(
 )
 
 /**
- * Minimal floating glass navigation pill with continuous pager indicator tracking
- * and horizontal thumb-scrub swipe gesture with tactile haptic detents.
+ * Minimal floating navigation pill with iOS-style elastic edge-stretching indicator
+ * and directional icon/label glide on both tab taps and horizontal swipes/scrubbing.
  */
 @Composable
 fun FloatingPillBottomBar(
@@ -295,52 +296,68 @@ fun FloatingPillBottomBar(
 ) {
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
-    val pillShape = remember { RoundedCornerShape(30.dp) }
-    val indicatorShape = remember { RoundedCornerShape(25.dp) }
+    val pillShape = remember { RoundedCornerShape(50) }
+    val indicatorShape = remember { RoundedCornerShape(50) }
     val tabCount = tabs.size.coerceAtLeast(1)
     val maxIdx = (tabCount - 1).coerceAtLeast(0).toFloat()
     val currentSelected by rememberUpdatedState(selectedIndex)
     val currentOnSelect by rememberUpdatedState(onSelectTab)
     var lastScrubbedIndex by remember { mutableIntStateOf(selectedIndex) }
 
+    // Asymmetric leading/trailing edge springs for crisp iOS-style rubber-band pill morph on tap
+    val leftEdge = remember { androidx.compose.animation.core.Animatable(selectedIndex.toFloat()) }
+    val rightEdge = remember { androidx.compose.animation.core.Animatable((selectedIndex + 1).toFloat()) }
+    var previousTabIndex by remember { mutableIntStateOf(selectedIndex) }
+
+    androidx.compose.runtime.LaunchedEffect(selectedIndex) {
+        val prev = previousTabIndex
+        previousTabIndex = selectedIndex
+        val leadSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 560f)
+        val trailSpring = spring<Float>(dampingRatio = 0.80f, stiffness = 250f)
+        if (selectedIndex > prev) {
+            // Moving right: right edge surges ahead first, left edge stretches smoothly behind
+            coroutineScope {
+                launch { rightEdge.animateTo((selectedIndex + 1).toFloat(), leadSpring) }
+                launch { leftEdge.animateTo(selectedIndex.toFloat(), trailSpring) }
+            }
+        } else if (selectedIndex < prev) {
+            // Moving left: left edge surges ahead first, right edge stretches smoothly behind
+            coroutineScope {
+                launch { leftEdge.animateTo(selectedIndex.toFloat(), leadSpring) }
+                launch { rightEdge.animateTo((selectedIndex + 1).toFloat(), trailSpring) }
+            }
+        } else {
+            leftEdge.snapTo(selectedIndex.toFloat())
+            rightEdge.snapTo((selectedIndex + 1).toFloat())
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            .padding(horizontal = 28.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
+        val pillBgModifier = if (palette.isLiquidGlass) {
+            Modifier.focusGlassPanel(
+                shape = pillShape,
+                palette = palette,
+                elevated = true,
+                shimmer = false
+            )
+        } else {
+            Modifier
+                .clip(pillShape)
+                .background(palette.pillGlassFill, pillShape)
+        }
+
         Box(
             modifier = Modifier
-                .widthIn(max = 360.dp)
+                .widthIn(max = 336.dp)
                 .fillMaxWidth()
-                .height(58.dp)
-                .clip(pillShape)
-                .background(palette.pillGlassFill)
-                .drawWithCache {
-                    val strokePx = 0.75.dp.toPx()
-                    val cornerPx = size.height / 2f
-                    onDrawWithContent {
-                        drawContent()
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(
-                                0f to PillTopSheenColor,
-                                0.25f to Color.Transparent,
-                                startY = strokePx,
-                                endY = size.height * 0.5f
-                            ),
-                            topLeft = Offset(strokePx, strokePx),
-                            size = Size(size.width - strokePx * 2f, size.height - strokePx * 2f),
-                            cornerRadius = CornerRadius(cornerPx, cornerPx),
-                            style = Stroke(width = strokePx)
-                        )
-                    }
-                }
-                .border(
-                    width = 0.75.dp,
-                    color = palette.borderHighlight.copy(alpha = 0.65f),
-                    shape = pillShape
-                )
+                .height(52.dp)
+                .then(pillBgModifier)
                 .pointerInput(tabCount) {
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
@@ -367,22 +384,66 @@ fun FloatingPillBottomBar(
                 }
                 .padding(4.dp)
         ) {
+            // Helper to blend live pager swipe position + asymmetric spring morph into [left, right] in slot units
+            fun computePillSpan(): Pair<Float, Float> {
+                val pagerPos = pagerPositionProvider().coerceIn(0f, maxIdx)
+                val springSpan = (rightEdge.value - leftEdge.value).coerceAtLeast(1f)
+                val springStretch = (springSpan - 1f).coerceAtLeast(0f)
+                val pagerFrac = pagerPos - kotlin.math.floor(pagerPos)
+                val isSwipingPager = pagerFrac > 0.005f && pagerFrac < 0.995f
+
+                return if (isSwipingPager && springStretch < 0.06f) {
+                    // During live HorizontalPager swipe: stretch leading/trailing edges organically
+                    val swipeStretch = kotlin.math.sin(pagerFrac * Math.PI).toFloat() * 0.34f
+                    val halfStretch = swipeStretch * 0.5f
+                    val l = (pagerPos - halfStretch).coerceIn(0f, maxIdx)
+                    val r = (pagerPos + 1f + halfStretch).coerceIn(l + 0.85f, tabCount.toFloat())
+                    l to r
+                } else {
+                    val l = leftEdge.value.coerceIn(0f, maxIdx)
+                    val r = rightEdge.value.coerceIn(l + 0.85f, tabCount.toFloat())
+                    l to r
+                }
+            }
+
             Box(modifier = Modifier.fillMaxSize()) {
+                // Elastic morphing pill indicator drawn on GPU canvas
                 Box(
                     modifier = Modifier
-                        .graphicsLayer {
-                            val clamped = pagerPositionProvider().coerceIn(0f, maxIdx)
-                            translationX = size.width * clamped
+                        .fillMaxSize()
+                        .drawWithCache {
+                            val liquidBrushColors = listOf(Color(0xFF283040), Color(0xFF191E2A))
+                            onDrawBehind {
+                                val (spanL, spanR) = computePillSpan()
+                                val slotW = size.width / tabCount.toFloat()
+                                val stretchExcess = ((spanR - spanL) - 1f).coerceAtLeast(0f)
+                                val vInset = (size.height * stretchExcess * 0.09f).coerceIn(0f, size.height * 0.12f)
+                                val pillX = spanL * slotW
+                                val pillW = ((spanR - spanL) * slotW).coerceAtLeast(1f)
+                                val pillH = (size.height - vInset * 2f).coerceAtLeast(1f)
+                                val corner = CornerRadius(pillH / 2f, pillH / 2f)
+
+                                if (palette.isLiquidGlass) {
+                                    drawRoundRect(
+                                        brush = Brush.verticalGradient(
+                                            colors = liquidBrushColors,
+                                            startY = vInset,
+                                            endY = vInset + pillH
+                                        ),
+                                        topLeft = Offset(pillX, vInset),
+                                        size = Size(pillW, pillH),
+                                        cornerRadius = corner
+                                    )
+                                } else {
+                                    drawRoundRect(
+                                        color = palette.primary,
+                                        topLeft = Offset(pillX, vInset),
+                                        size = Size(pillW, pillH),
+                                        cornerRadius = corner
+                                    )
+                                }
+                            }
                         }
-                        .fillMaxWidth(1f / tabCount)
-                        .fillMaxHeight()
-                        .clip(indicatorShape)
-                        .background(palette.primary)
-                        .border(
-                            width = 0.5.dp,
-                            color = PureWhite.copy(alpha = 0.16f),
-                            shape = indicatorShape
-                        )
                 )
 
                 Row(
@@ -392,9 +453,11 @@ fun FloatingPillBottomBar(
                     tabs.forEachIndexed { index, tab ->
                         PillTabItem(
                             tab = tab,
+                            index = index,
                             isSelected = selectedIndex == index,
+                            spanProvider = { computePillSpan() },
                             indicatorShape = indicatorShape,
-                            selectedColor = palette.onPrimary,
+                            selectedColor = if (palette.isLiquidGlass) palette.textPrimary else palette.onPrimary,
                             unselectedColor = palette.textSecondary,
                             onClick = { onSelectTab(index) },
                             modifier = Modifier
@@ -411,7 +474,9 @@ fun FloatingPillBottomBar(
 @Composable
 private fun PillTabItem(
     tab: PillNavTab,
+    index: Int,
     isSelected: Boolean,
+    spanProvider: () -> Pair<Float, Float>,
     indicatorShape: RoundedCornerShape,
     selectedColor: Color,
     unselectedColor: Color,
@@ -419,7 +484,7 @@ private fun PillTabItem(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.93f)
+    val pressScale = rememberSpringPressScale(interactionSource, pressedScale = 0.92f)
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) selectedColor else unselectedColor,
         animationSpec = spring(
@@ -431,16 +496,30 @@ private fun PillTabItem(
 
     Row(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .clip(indicatorShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )
+            .graphicsLayer {
+                val (spanL, spanR) = spanProvider()
+                val pillCenter = (spanL + spanR) * 0.5f
+                val slotCenter = index + 0.5f
+                val stretch = ((spanR - spanL) - 1f).coerceIn(0f, 1.4f)
+                val delta = pillCenter - slotCenter
+                val proximity = (1f - kotlin.math.abs(delta) * 0.85f).coerceIn(0f, 1f)
+                val dir = when {
+                    delta > 0.02f -> 1f
+                    delta < -0.02f -> -1f
+                    else -> 0f
+                }
+                // Outgoing & incoming button icon+text glide subtly toward the elastic pill edge
+                translationX = dir * stretch * proximity * 8.dp.toPx()
+                val bounceScale = pressScale * (1f + if (isSelected) stretch * 0.045f else -stretch * proximity * 0.02f)
+                scaleX = bounceScale
+                scaleY = bounceScale
+            }
             .testTag(tab.testTag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center

@@ -21,8 +21,9 @@ android {
     val propVersionCode = (project.findProperty("versionCode") as? String)?.toIntOrNull()
     val propVersionName = (project.findProperty("versionName") as? String)?.takeIf { it.isNotBlank() }
 
-    versionCode = propVersionCode ?: ghRunNumber ?: 1
-    versionName = propVersionName ?: if (ghRunNumber != null) "1.0.$ghRunNumber" else "1.0"
+    versionCode = propVersionCode ?: ghRunNumber?.let { 100 + it } ?: 1
+    versionName = propVersionName?.removePrefix("v")?.removePrefix("V")
+      ?: if (ghRunNumber != null) "2.0.$ghRunNumber" else "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

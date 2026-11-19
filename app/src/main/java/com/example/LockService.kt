@@ -30,8 +30,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,8 +104,8 @@ import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
 import com.example.ui.components.ThemeBackdropLayer
-import com.example.ui.components.ThemedDivider
 import com.example.ui.components.ThemedTimerRing
+import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.performFocusGestureEnd
 import com.example.ui.components.performFocusGestureStart
 import com.example.ui.components.rememberFocusHaptics
@@ -1095,17 +1097,8 @@ fun LockScreen(
                                 when {
                                     wrongPinError -> MaterialTheme.colorScheme.error
                                     filled -> palette.accent
-                                    else -> Color.Transparent
+                                    else -> palette.surfaceElevated
                                 }
-                            )
-                            .border(
-                                width = 1.5.dp,
-                                color = when {
-                                    wrongPinError -> MaterialTheme.colorScheme.error
-                                    filled -> palette.accent
-                                    else -> palette.border
-                                },
-                                shape = CircleShape
                             )
                     )
                 }
@@ -1240,42 +1233,74 @@ fun KeypadButton(
 ) {
     val themePalette = LocalFocusTheme.current
     val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.88f)
     val isDelete = text == "DEL"
 
-    Button(
-        onClick = onClick,
-        interactionSource = interactionSource,
-        modifier = Modifier
-            .size(66.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isDelete) Color.Transparent else palette.surface.copy(alpha = 0.85f),
-            contentColor = palette.primaryText
-        ),
-        border = if (isDelete) null else BorderStroke(0.75.dp, palette.border.copy(alpha = 0.65f)),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-        contentPadding = PaddingValues(0.dp)
-    ) {
-        if (isDelete) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.Backspace,
-                contentDescription = "Delete",
-                tint = palette.secondaryText,
-                modifier = Modifier.size(20.dp)
-            )
-        } else {
+    if (!isDelete && themePalette.isLiquidGlass) {
+        Box(
+            modifier = Modifier
+                .size(66.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .focusGlassPanel(
+                    shape = CircleShape,
+                    palette = themePalette,
+                    elevated = true,
+                    isPressed = isPressed
+                )
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
             Text(
                 text = text,
                 fontFamily = themePalette.numeralFont,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Medium,
+                color = palette.primaryText,
                 textAlign = TextAlign.Center
             )
+        }
+    } else {
+        Button(
+            onClick = onClick,
+            interactionSource = interactionSource,
+            modifier = Modifier
+                .size(66.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isDelete) Color.Transparent else palette.surface,
+                contentColor = palette.primaryText
+            ),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            if (isDelete) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Backspace,
+                    contentDescription = "Delete",
+                    tint = palette.secondaryText,
+                    modifier = Modifier.size(20.dp)
+                )
+            } else {
+                Text(
+                    text = text,
+                    fontFamily = themePalette.numeralFont,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
@@ -1284,31 +1309,20 @@ fun KeypadButton(
 fun FloatingBubble(onResumeLock: () -> Unit) {
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
-    Surface(
-        onClick = {
-            haptics.confirm()
-            onResumeLock()
-        },
-        color = palette.pillGlassFill,
-        contentColor = palette.textPrimary,
-        shape = RoundedCornerShape(26.dp),
-        border = BorderStroke(0.75.dp, palette.primaryBorderTint),
-        shadowElevation = 6.dp,
-        modifier = Modifier
-            .padding(4.dp)
-            .heightIn(min = 48.dp)
-            .wrapContentSize()
-            .testTag("floating_back_to_lock_bubble")
-    ) {
+    val bubbleShape = remember { RoundedCornerShape(50) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val contentRow: @Composable () -> Unit = {
         Row(
-            modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 imageVector = Icons.Filled.DragIndicator,
                 contentDescription = "Drag to move",
-                tint = palette.textSecondary.copy(alpha = 0.65f),
+                tint = palette.textSecondary,
                 modifier = Modifier.size(15.dp)
             )
             Icon(
@@ -1323,6 +1337,51 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
                 fontWeight = FontWeight.Medium,
                 color = palette.textPrimary
             )
+        }
+    }
+
+    if (palette.isLiquidGlass) {
+        Box(
+            modifier = Modifier
+                .padding(4.dp)
+                .heightIn(min = 44.dp)
+                .wrapContentSize()
+                .focusGlassPanel(
+                    shape = bubbleShape,
+                    palette = palette,
+                    elevated = true,
+                    isPressed = isPressed,
+                    shimmer = true
+                )
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) {
+                    haptics.confirm()
+                    onResumeLock()
+                }
+                .testTag("floating_back_to_lock_bubble"),
+            contentAlignment = Alignment.Center
+        ) {
+            contentRow()
+        }
+    } else {
+        Surface(
+            onClick = {
+                haptics.confirm()
+                onResumeLock()
+            },
+            color = palette.pillGlassFill,
+            contentColor = palette.textPrimary,
+            shape = bubbleShape,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .padding(4.dp)
+                .heightIn(min = 44.dp)
+                .wrapContentSize()
+                .testTag("floating_back_to_lock_bubble")
+        ) {
+            contentRow()
         }
     }
 }

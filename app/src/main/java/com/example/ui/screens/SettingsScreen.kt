@@ -4,9 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -49,7 +47,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -102,6 +99,8 @@ import com.example.service.FocusPowerBlockerAccessibilityService
 import com.example.ui.components.AllowedAppIconBadge
 import com.example.ui.components.AppearanceAndThemesSection
 import com.example.ui.components.DailyStudyGoalSection
+import com.example.ui.components.ElasticMorphingSegmentedPill
+import com.example.ui.components.ElasticPillSegment
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.HomeScreenWidgetSection
 import com.example.ui.components.LockAllowedAppsSection
@@ -506,7 +505,7 @@ private fun AllowedAppsSection(
     onOpenAddApp: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val iconShape = remember { RoundedCornerShape(10.dp) }
+    val iconShape = CircleShape
 
     ThemedSettingsSectionCard(
         title = "ALLOWED APPS IN LOCK MODE",
@@ -598,7 +597,7 @@ private fun AllowedAppsSection(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(palette.surface)
+                                    .background(if (palette.isLiquidGlass) Color(0xFF0C0F15) else palette.surface)
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -664,7 +663,7 @@ private fun AllowedAppsSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp))
+                    .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
                     .clickable(onClick = onOpenAddApp)
                     .padding(horizontal = 14.dp, vertical = 14.dp)
                     .testTag("add_allowed_app_button"),
@@ -699,8 +698,8 @@ private fun LockScreenLayoutSection(
     onSelectPillSize: (Int) -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val previewShape = remember { RoundedCornerShape(16.dp) }
-    val optionShape = remember { RoundedCornerShape(12.dp) }
+    val previewShape = remember { RoundedCornerShape(24.dp) }
+    val optionShape = remember { RoundedCornerShape(22.dp) }
     val noopPreviewClick = remember<((AllowedApp) -> Unit)> { {} }
     val previewPalette = remember(palette) { LockPalette.fromFocusTheme(palette) }
     val previewApps = remember(allowedApps) {
@@ -717,7 +716,6 @@ private fun LockScreenLayoutSection(
                     .fillMaxWidth()
                     .clip(previewShape)
                     .background(previewPalette.background, previewShape)
-                    .border(1.dp, palette.border, previewShape)
                     .padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -763,9 +761,8 @@ private fun LockScreenLayoutSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(optionShape)
-                        .background(palette.surfaceElevated.copy(alpha = 0.65f), optionShape)
-                        .border(1.dp, palette.border, optionShape)
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .background(palette.surfaceElevated.copy(alpha = 0.72f), optionShape)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                         .testTag("pill_size_control_card"),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -784,8 +781,7 @@ private fun LockScreenLayoutSection(
                         )
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color = palette.primaryContainer,
-                            border = BorderStroke(1.dp, palette.primaryBorderTint)
+                            color = palette.primaryContainer
                         ) {
                             Text(
                                 text = "${pillButtonSizeDp}dp",
@@ -794,7 +790,7 @@ private fun LockScreenLayoutSection(
                                 fontWeight = FontWeight.Bold,
                                 color = palette.primary,
                                 modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .padding(horizontal = 10.dp, vertical = 3.dp)
                                     .testTag("pill_size_value_label")
                             )
                         }
@@ -838,7 +834,7 @@ private fun LockScreenLayoutSection(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 LockAppLayout.entries.forEach { layout ->
                     val selected = selectedLayout == layout
                     Row(
@@ -846,18 +842,15 @@ private fun LockScreenLayoutSection(
                             .fillMaxWidth()
                             .clip(optionShape)
                             .background(
-                                color = if (selected) palette.primaryContainer else palette.surfaceElevated.copy(alpha = 0.55f),
+                                color = if (selected) {
+                                    if (palette.isLiquidGlass) Color(0xFF1F2634) else palette.primaryContainer
+                                } else {
+                                    palette.surfaceElevated.copy(alpha = 0.6f)
+                                },
                                 shape = optionShape
                             )
-                            .then(
-                                if (selected) {
-                                    Modifier.border(1.dp, palette.primaryBorderTint, optionShape)
-                                } else {
-                                    Modifier
-                                }
-                            )
                             .clickable { onSelectLayout(layout) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
                             .testTag("layout_option_${layout.name.lowercase()}"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -902,7 +895,7 @@ private fun FocusBehaviorSection(
     onSelectGraceSeconds: (Int) -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val chipShape = remember { RoundedCornerShape(10.dp) }
+    val chipShape = remember { RoundedCornerShape(50) }
 
     ThemedSettingsSectionCard(title = "FOCUS & LOCK BEHAVIOR") {
         Column(
@@ -954,39 +947,25 @@ private fun FocusBehaviorSection(
                         color = palette.textSecondary
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(1, 2, 3, 5).forEach { sec ->
-                        val selected = appSwitchGraceSeconds == sec
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .clip(chipShape)
-                                .background(
-                                    color = if (selected) palette.primaryContainer else palette.surfaceElevated,
-                                    shape = chipShape
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = if (selected) palette.primaryBorderTint else palette.border,
-                                    shape = chipShape
-                                )
-                                .clickable { onSelectGraceSeconds(sec) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${sec}s",
-                                fontFamily = JetBrainsMono,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (selected) palette.primary else palette.textSecondary
-                            )
-                        }
-                    }
+                val graceOptions = remember { listOf(1, 2, 3, 5) }
+                val graceSegments = remember {
+                    listOf(
+                        ElasticPillSegment("1s"),
+                        ElasticPillSegment("2s"),
+                        ElasticPillSegment("3s"),
+                        ElasticPillSegment("5s")
+                    )
                 }
+                ElasticMorphingSegmentedPill(
+                    segments = graceSegments,
+                    selectedIndex = graceOptions.indexOf(appSwitchGraceSeconds).coerceAtLeast(0),
+                    onSelectIndex = { idx ->
+                        graceOptions.getOrNull(idx)?.let(onSelectGraceSeconds)
+                    },
+                    height = 42.dp,
+                    fontSize = 13.sp,
+                    useElevatedContainer = true
+                )
             }
         }
     }
@@ -1003,8 +982,6 @@ private fun AppUpdatesSection(
     val palette = LocalFocusTheme.current
     val view = LocalView.current
     val pillShape = remember { RoundedCornerShape(50) }
-    val bannerShape = remember { RoundedCornerShape(12.dp) }
-    val iconShape = remember { RoundedCornerShape(10.dp) }
 
     ThemedSettingsSectionCard(title = "APP UPDATES") {
         Column(
@@ -1024,9 +1001,8 @@ private fun AppUpdatesSection(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .clip(iconShape)
-                            .background(palette.primaryContainer, iconShape)
-                            .border(1.dp, palette.primaryBorderTint, iconShape),
+                            .clip(CircleShape)
+                            .background(palette.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1074,7 +1050,6 @@ private fun AppUpdatesSection(
                             modifier = Modifier
                                 .clip(pillShape)
                                 .background(palette.primaryContainer, pillShape)
-                                .border(1.dp, palette.primaryBorderTint, pillShape)
                                 .clickable { onOpenUpdateSheet() }
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         )
@@ -1088,10 +1063,9 @@ private fun AppUpdatesSection(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(bannerShape)
-                            .background(palette.success.copy(alpha = 0.10f), bannerShape)
-                            .border(1.dp, palette.success.copy(alpha = 0.28f), bannerShape)
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .clip(pillShape)
+                            .background(palette.success.copy(alpha = 0.12f), pillShape)
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
                             .testTag("latest_version_banner"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1137,15 +1111,15 @@ private fun AppUpdatesSection(
                 },
                 enabled = !isChecking,
                 interactionSource = btnInteraction,
-                shape = RoundedCornerShape(14.dp),
+                shape = pillShape,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = palette.surfaceElevated,
                     contentColor = palette.textPrimary
                 ),
-                border = BorderStroke(1.dp, palette.primaryBorderTint),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(44.dp)
                     .graphicsLayer {
                         scaleX = btnScale
                         scaleY = btnScale
@@ -1154,18 +1128,18 @@ private fun AppUpdatesSection(
             ) {
                 if (isChecking) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(17.dp),
                         strokeWidth = 2.dp,
                         color = palette.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Checking GitHub...", fontSize = 13.5.sp)
+                    Text("Checking GitHub...", fontSize = 13.sp)
                 } else {
                     Icon(
                         imageVector = Icons.Outlined.Refresh,
                         contentDescription = null,
                         tint = palette.primary,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -1174,34 +1148,35 @@ private fun AppUpdatesSection(
                         } else {
                             "Check for Updates"
                         },
-                        fontSize = 13.5.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
-            OutlinedButton(
+            Button(
                 onClick = onOpenWhatsNew,
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, palette.borderHighlight),
-                colors = ButtonDefaults.outlinedButtonColors(
+                shape = pillShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.primaryContainer,
                     contentColor = palette.textPrimary
                 ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(44.dp)
                     .testTag("whats_new_settings_button")
             ) {
                 Icon(
                     imageVector = Icons.Outlined.AutoAwesome,
                     contentDescription = null,
                     tint = palette.primary,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "What's New",
-                    fontSize = 13.5.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -1262,10 +1237,11 @@ private fun DailyGoalDialog(
 ) {
     val palette = LocalFocusTheme.current
     val view = LocalView.current
-    val chipShape = remember { RoundedCornerShape(8.dp) }
+    val chipShape = remember { RoundedCornerShape(50) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(30.dp),
         containerColor = palette.surface,
         titleContentColor = palette.textPrimary,
         textContentColor = palette.textSecondary,
@@ -1286,21 +1262,20 @@ private fun DailyGoalDialog(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
+                                .height(38.dp)
                                 .clip(chipShape)
                                 .background(
-                                    color = if (isChosen) palette.primaryContainer else palette.surfaceElevated,
-                                    shape = chipShape
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = if (isChosen) palette.primaryBorderTint else palette.border,
+                                    color = if (isChosen) {
+                                        if (palette.isLiquidGlass) Color(0xFF283040) else palette.primaryContainer
+                                    } else {
+                                        palette.surfaceElevated
+                                    },
                                     shape = chipShape
                                 )
                                 .clickable {
                                     view.performClockTickHaptic()
                                     onGoalInputChange(preset.toString())
-                                }
-                                .padding(vertical = 8.dp),
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -1308,7 +1283,11 @@ private fun DailyGoalDialog(
                                 fontFamily = JetBrainsMono,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = palette.textPrimary
+                                color = if (isChosen) {
+                                    if (palette.isLiquidGlass) palette.textPrimary else palette.primary
+                                } else {
+                                    palette.textPrimary
+                                }
                             )
                         }
                     }
@@ -1322,6 +1301,7 @@ private fun DailyGoalDialog(
                     },
                     label = { Text("Minutes") },
                     singleLine = true,
+                    shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1329,6 +1309,7 @@ private fun DailyGoalDialog(
         confirmButton = {
             Button(
                 onClick = onSave,
+                shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = palette.primary,
                     contentColor = palette.onPrimary
@@ -1356,7 +1337,7 @@ private fun PermissionStatusRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(pillShape)
             .clickable(onClick = onClick)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1390,9 +1371,6 @@ private fun PermissionStatusRow(
                 .background(
                     color = if (granted) palette.success.copy(alpha = 0.14f) else palette.primaryContainer,
                     shape = pillShape
-                )
-                .then(
-                    if (granted) Modifier else Modifier.border(1.dp, palette.primaryBorderTint, pillShape)
                 )
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         )
@@ -1436,6 +1414,7 @@ private fun AddAllowedAppDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(30.dp),
         containerColor = palette.surface,
         titleContentColor = palette.textPrimary,
         textContentColor = palette.textSecondary,
@@ -1461,7 +1440,7 @@ private fun AddAllowedAppDialog(
                         )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1500,7 +1479,7 @@ private fun AddAllowedAppDialog(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(RoundedCornerShape(22.dp))
                                         .clickable { onAddApp(preset) }
                                         .padding(horizontal = 8.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1564,7 +1543,7 @@ private fun AddAllowedAppDialog(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(RoundedCornerShape(22.dp))
                                         .clickable { onAddApp(previewAllowedApp) }
                                         .padding(horizontal = 8.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1576,7 +1555,7 @@ private fun AddAllowedAppDialog(
                                         badgeBackground = palette.surfaceElevated,
                                         iconSize = 18.dp,
                                         containerSize = 34.dp,
-                                        shape = RoundedCornerShape(10.dp),
+                                        shape = CircleShape,
                                         loadIfMissing = true
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
