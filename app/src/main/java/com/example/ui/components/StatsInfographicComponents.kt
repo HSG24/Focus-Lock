@@ -15,6 +15,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,6 +46,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MilitaryTech
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -60,8 +63,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -181,16 +187,16 @@ fun TopBarRankXpPill(
     ) {
         Surface(
             shape = RoundedCornerShape(50),
-            color = palette.primaryContainer,
-            border = BorderStroke(1.dp, palette.primaryBorderTint)
+            color = palette.surface,
+            border = BorderStroke(0.75.dp, palette.border)
         ) {
             Column(
                 modifier = Modifier.width(IntrinsicSize.Max)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Bolt,
@@ -199,7 +205,7 @@ fun TopBarRankXpPill(
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        text = "${xpState.rank.title.uppercase(Locale.US)} • ${xpState.totalXp} XP",
+                        text = "${xpState.rank.title.uppercase(Locale.US)} · ${xpState.totalXp} XP",
                         fontFamily = palette.numeralFont,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
@@ -212,7 +218,7 @@ fun TopBarRankXpPill(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(2.5.dp)
+                        .height(2.dp)
                         .background(palette.surfaceElevated)
                 ) {
                     if (animatedProgress > 0f) {
@@ -565,12 +571,12 @@ fun StatsTimeframeSwitcher(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalFocusTheme.current
-    val view = LocalView.current
+    val haptics = rememberFocusHaptics()
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = palette.surface,
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(0.75.dp, palette.border),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -590,11 +596,11 @@ fun StatsTimeframeSwitcher(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 38.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(if (isSelected) palette.primary else Color.Transparent)
                         .clickable {
                             if (!isSelected) {
-                                view.performClockTickHaptic()
+                                haptics.segment()
                                 onSelectTimeframe(timeframe)
                             }
                         }
@@ -604,7 +610,7 @@ fun StatsTimeframeSwitcher(
                     Text(
                         text = timeframe.label,
                         fontFamily = palette.displayFont,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         letterSpacing = 1.sp,
                         color = if (isSelected) palette.onPrimary else palette.textSecondary
@@ -626,18 +632,47 @@ fun StatsDateNavigatorSection(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     val view = LocalView.current
+    val currentCanForward by rememberUpdatedState(report.canStepForward)
+    val currentOnBack by rememberUpdatedState(onStepBackward)
+    val currentOnFwd by rememberUpdatedState(onStepForward)
+    var dragAccumulated by remember { mutableFloatStateOf(0f) }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         color = palette.surface,
-        border = BorderStroke(1.dp, palette.border),
-        modifier = modifier.fillMaxWidth()
+        border = BorderStroke(0.75.dp, palette.border),
+        modifier = modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragAccumulated = 0f },
+                    onHorizontalDrag = { _, dragAmount ->
+                        dragAccumulated += dragAmount
+                    },
+                    onDragEnd = {
+                        val threshold = 72f
+                        when {
+                            dragAccumulated > threshold -> {
+                                haptics.segment()
+                                currentOnBack()
+                            }
+                            dragAccumulated < -threshold && currentCanForward -> {
+                                haptics.segment()
+                                currentOnFwd()
+                            }
+                        }
+                        dragAccumulated = 0f
+                    },
+                    onDragCancel = { dragAccumulated = 0f }
+                )
+            }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -858,15 +893,17 @@ fun UnifiedHeroInfographicCard(
     dailyGoalMinutes: Long,
     selectedBucketIndex: Int?,
     onSelectBucket: (Int?) -> Unit,
+    onScrubBucket: (Int) -> Unit = onSelectBucket,
     onEditGoal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     val view = LocalView.current
     val heroGlowBrush = remember(palette) {
         Brush.radialGradient(
             colors = listOf(
-                palette.primaryGlow.copy(alpha = 0.38f),
+                palette.primaryGlow.copy(alpha = 0.24f),
                 Color.Transparent
             )
         )
@@ -882,9 +919,9 @@ fun UnifiedHeroInfographicCard(
     )
 
     Surface(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = palette.surface,
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(0.75.dp, palette.border),
         modifier = modifier
             .fillMaxWidth()
             .testTag("hero_infographic_card")
@@ -893,8 +930,8 @@ fun UnifiedHeroInfographicCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(heroGlowBrush)
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Top Half: Split Hero (Left = Total Focus + Status, Right = Theme Goal Ring + Edit Goal)
             Row(
@@ -1067,10 +1104,10 @@ fun UnifiedHeroInfographicCard(
                         }
                     } else {
                         Text(
-                            text = if (report.totalFocusMs > 0L) "Tap bar for details" else "No sessions yet",
+                            text = if (report.totalFocusMs > 0L) "Tap or scrub bars" else "No sessions yet",
                             fontFamily = JetBrainsMono,
                             fontSize = 10.sp,
-                            color = palette.textSecondary.copy(alpha = 0.7f)
+                            color = palette.textSecondary.copy(alpha = 0.65f)
                         )
                     }
                 }
@@ -1082,8 +1119,12 @@ fun UnifiedHeroInfographicCard(
                 dailyTargetMs = report.dailyTargetMs,
                 selectedIndex = selectedBucketIndex,
                 onSelectBucket = { idx ->
-                    view.performClockTickHaptic()
+                    haptics.tick()
                     onSelectBucket(idx)
+                },
+                onScrubBucket = { idx ->
+                    haptics.tick()
+                    onScrubBucket(idx)
                 },
                 palette = palette
             )
@@ -1216,6 +1257,7 @@ private fun InteractiveThemeBarChart(
     dailyTargetMs: Long,
     selectedIndex: Int?,
     onSelectBucket: (Int) -> Unit,
+    onScrubBucket: (Int) -> Unit,
     palette: FocusThemePalette
 ) {
     if (buckets.isEmpty()) return
@@ -1251,6 +1293,8 @@ private fun InteractiveThemeBarChart(
 
     val currentBuckets by rememberUpdatedState(buckets)
     val currentOnSelectBucket by rememberUpdatedState(onSelectBucket)
+    val currentOnScrubBucket by rememberUpdatedState(onScrubBucket)
+    var lastScrubbedBucket by remember { mutableIntStateOf(-1) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1321,6 +1365,39 @@ private fun InteractiveThemeBarChart(
                                             }
                                         }
                                     }
+                                    .then(
+                                        if (!needsHorizontalScroll) {
+                                            Modifier.pointerInput(Unit) {
+                                                detectHorizontalDragGestures(
+                                                    onDragStart = { offset ->
+                                                        if (size.width > 0 && currentBuckets.isNotEmpty()) {
+                                                            val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
+                                                            val idx = (offset.x / slotWidth).toInt()
+                                                                .coerceIn(0, currentBuckets.lastIndex)
+                                                            lastScrubbedBucket = idx
+                                                            currentOnScrubBucket(idx)
+                                                        }
+                                                    },
+                                                    onHorizontalDrag = { change, _ ->
+                                                        change.consume()
+                                                        if (size.width > 0 && currentBuckets.isNotEmpty()) {
+                                                            val slotWidth = size.width.toFloat() / currentBuckets.size.toFloat()
+                                                            val idx = (change.position.x / slotWidth).toInt()
+                                                                .coerceIn(0, currentBuckets.lastIndex)
+                                                            if (idx != lastScrubbedBucket) {
+                                                                lastScrubbedBucket = idx
+                                                                currentOnScrubBucket(idx)
+                                                            }
+                                                        }
+                                                    },
+                                                    onDragEnd = { lastScrubbedBucket = -1 },
+                                                    onDragCancel = { lastScrubbedBucket = -1 }
+                                                )
+                                            }
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
                             ) {
                                 val count = buckets.size
                                 if (count == 0) return@Canvas
@@ -1559,9 +1636,9 @@ fun UnifiedBentoMetricsGrid(
     val palette = LocalFocusTheme.current
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         color = palette.surface,
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(0.75.dp, palette.border),
         modifier = modifier
             .fillMaxWidth()
             .testTag("bento_metrics_grid")
@@ -1740,11 +1817,13 @@ private fun BentoStreakCell(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "\uD83D\uDD25",
-                    fontSize = 10.sp
+                Icon(
+                    imageVector = Icons.Outlined.LocalFireDepartment,
+                    contentDescription = "Current Streak",
+                    tint = palette.primary,
+                    modifier = Modifier.size(13.dp)
                 )
                 Text(
                     text = "STREAK",
@@ -1787,16 +1866,19 @@ private fun BentoStreakCell(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "\uD83C\uDFC6",
-                    fontSize = 10.sp
+                Icon(
+                    imageVector = Icons.Outlined.EmojiEvents,
+                    contentDescription = "Best Streak",
+                    tint = palette.warning,
+                    modifier = Modifier.size(13.dp)
                 )
                 Text(
-                    text = "Best",
+                    text = "BEST",
                     fontFamily = JetBrainsMono,
-                    fontSize = 10.sp,
+                    fontSize = 9.5.sp,
+                    letterSpacing = 0.8.sp,
                     fontWeight = FontWeight.Medium,
                     color = palette.textSecondary,
                     maxLines = 1

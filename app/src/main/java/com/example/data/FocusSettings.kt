@@ -481,7 +481,7 @@ object FocusSettingsRepository {
                 appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), appContext.packageName)
             }
             mode == AppOpsManager.MODE_ALLOWED
-        }.getOrDefault(true)
+        }.getOrDefault(false)
     }
 
     internal fun toMonochromeTintedBitmap(

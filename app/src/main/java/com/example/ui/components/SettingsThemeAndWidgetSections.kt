@@ -1,11 +1,20 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,29 +30,33 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhoneInTalk
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,20 +81,21 @@ fun ThemedSettingsSectionCard(
     content: @Composable () -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val cardShape = remember { RoundedCornerShape(18.dp) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val cardShape = remember { RoundedCornerShape(22.dp) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+                .padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelSmall,
-                fontFamily = if (palette.useDottedDividers) DotGothic16 else palette.displayFont,
-                letterSpacing = 1.2.sp,
+                fontFamily = JetBrainsMono,
+                fontSize = 10.5.sp,
+                letterSpacing = 1.4.sp,
                 color = palette.textSecondary
             )
             trailingAction?.invoke()
@@ -91,7 +105,7 @@ fun ThemedSettingsSectionCard(
                 .fillMaxWidth()
                 .clip(cardShape)
                 .background(palette.surface, cardShape)
-                .border(1.dp, palette.border, cardShape)
+                .border(0.75.dp, palette.border, cardShape)
         ) {
             content()
         }
@@ -107,6 +121,7 @@ fun ThemedSettingsSwitchRow(
     testTag: String
 ) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -115,12 +130,14 @@ fun ThemedSettingsSwitchRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(end = 12.dp)
+                .padding(end = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontSize = 15.sp,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
                 color = palette.textPrimary
             )
             Text(
@@ -132,7 +149,10 @@ fun ThemedSettingsSwitchRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = { next ->
+                haptics.toggle(next)
+                onCheckedChange(next)
+            },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = palette.onPrimary,
                 checkedTrackColor = palette.primary,
@@ -145,160 +165,127 @@ fun ThemedSettingsSwitchRow(
     }
 }
 
+/**
+ * Minimal 4-column theme swatch selector replacing tall vertical theme cards.
+ */
 @Composable
 fun AppearanceAndThemesSection(
     selectedTheme: AppVisualTheme,
     onSelectTheme: (AppVisualTheme) -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val itemShape = remember { RoundedCornerShape(14.dp) }
+    val haptics = rememberFocusHaptics()
+    val tileShape = remember { RoundedCornerShape(16.dp) }
 
-    ThemedSettingsSectionCard(title = "APPEARANCE & THEMES") {
+    ThemedSettingsSectionCard(title = "THEME") {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Unified themes restyle both the app and the active lock screen.",
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 12.sp,
-                color = palette.textSecondary
-            )
-
-            AppVisualTheme.entries.forEach { themeOption ->
-                val preview = remember(themeOption) { FocusThemePalette.from(themeOption) }
-                val isSelected = selectedTheme == themeOption
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(itemShape)
-                        .background(
-                            color = if (isSelected) palette.primaryContainer else palette.surfaceElevated,
-                            shape = itemShape
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (isSelected) palette.primaryBorderTint else palette.border,
-                            shape = itemShape
-                        )
-                        .clickable { onSelectTheme(themeOption) }
-                        .padding(12.dp)
-                        .testTag("theme_option_${themeOption.id}"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Live miniature theme + lock preview swatch
-                    ThemeMiniPreviewCard(preview = preview)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AppVisualTheme.entries.forEach { themeOption ->
+                    val preview = remember(themeOption) { FocusThemePalette.from(themeOption) }
+                    val isSelected = selectedTheme == themeOption
+                    val interaction = remember { MutableInteractionSource() }
+                    val scale = rememberSpringPressScale(interaction, pressedScale = 0.94f)
+                    val shortName = remember(themeOption) {
+                        when (themeOption) {
+                            AppVisualTheme.NOTHING_CRIMSON -> "Crimson"
+                            AppVisualTheme.CYBER_ICE -> "Ice"
+                            AppVisualTheme.SOLAR_AMBER -> "Amber"
+                            AppVisualTheme.ULTRAVIOLET_PULSE -> "Violet"
+                        }
+                    }
 
                     Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = themeOption.displayName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontSize = 14.5.sp,
-                                color = palette.textPrimary
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                            .clip(tileShape)
+                            .background(
+                                color = if (isSelected) palette.primaryContainer.copy(alpha = 0.7f) else palette.surfaceElevated.copy(alpha = 0.65f),
+                                shape = tileShape
                             )
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = preview.primary.copy(alpha = 0.16f),
-                                border = BorderStroke(0.75.dp, preview.primary.copy(alpha = 0.45f))
+                            .border(
+                                width = if (isSelected) 1.25.dp else 0.75.dp,
+                                color = if (isSelected) preview.primary else palette.border,
+                                shape = tileShape
+                            )
+                            .clickable(
+                                interactionSource = interaction,
+                                indication = null
                             ) {
-                                Text(
-                                    text = themeOption.badgeTag,
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = preview.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                if (!isSelected) {
+                                    haptics.segment()
+                                    onSelectTheme(themeOption)
+                                }
+                            }
+                            .padding(vertical = 12.dp, horizontal = 4.dp)
+                            .testTag("theme_option_${themeOption.id}")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(preview.background)
+                                .border(2.dp, preview.primary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = themeOption.displayName,
+                                    tint = preview.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(preview.primary)
                                 )
                             }
                         }
+
                         Text(
-                            text = themeOption.subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = shortName,
+                            style = MaterialTheme.typography.labelMedium,
                             fontSize = 11.5.sp,
-                            color = palette.textSecondary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (isSelected) palette.textPrimary else palette.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
                         )
                     }
-
-                    RadioButton(
-                        selected = isSelected,
-                        onClick = { onSelectTheme(themeOption) },
-                        colors = RadioButtonDefaults.colors(
-                            selectedColor = palette.primary,
-                            unselectedColor = palette.textSecondary
-                        )
-                    )
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun ThemeMiniPreviewCard(preview: FocusThemePalette) {
-    val swatchShape = remember { RoundedCornerShape(12.dp) }
-    Box(
-        modifier = Modifier
-            .size(width = 62.dp, height = 58.dp)
-            .clip(swatchShape)
-            .background(preview.background)
-            .border(1.dp, preview.borderHighlight, swatchShape)
-            .padding(6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
             Text(
-                text = "02:45",
-                fontFamily = preview.numeralFont,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = preview.textPrimary
+                text = "${selectedTheme.displayName} · ${selectedTheme.subtitle}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 11.5.sp,
+                color = palette.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 2.dp)
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(preview.surface)
-                    .border(0.75.dp, preview.primary.copy(alpha = 0.55f), RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(preview.primary)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(18.dp)
-                            .height(3.dp)
-                            .clip(CircleShape)
-                            .background(preview.textSecondary.copy(alpha = 0.6f))
-                    )
-                }
-            }
         }
     }
 }
 
+/**
+ * Collapsible Home Widget studio so Settings stays uncluttered until customized.
+ */
 @Composable
 fun HomeScreenWidgetSection(
     settingsState: FocusSettingsState,
@@ -310,74 +297,145 @@ fun HomeScreenWidgetSection(
     onToggleRankXpTag: (Boolean) -> Unit
 ) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
+    var expanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+        label = "widget_chevron_rotation"
+    )
 
-    ThemedSettingsSectionCard(title = "HOME SCREEN WIDGET (2X2)") {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Live Nothing OS 2x2 widget preview. Toggle any element below and placed widgets refresh immediately.",
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 12.sp,
-                color = palette.textSecondary
-            )
-
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
+    ThemedSettingsSectionCard(title = "HOME WIDGET") {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptics.tap()
+                        expanded = !expanded
+                    }
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .testTag("widget_studio_toggle"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                NothingWidgetLivePreview(
-                    settingsState = settingsState,
-                    xpState = xpState
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(palette.surfaceElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Widgets,
+                            contentDescription = null,
+                            tint = palette.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "2×2 Widget Studio",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.textPrimary
+                        )
+                        Text(
+                            text = if (expanded) "Live preview & visibility toggles" else "Tap to customize ring, hours & rank",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 12.sp,
+                            color = palette.textSecondary
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.Outlined.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = palette.textSecondary,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .graphicsLayer { rotationZ = chevronRotation }
                 )
             }
 
-            ThemedDivider(palette = palette)
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ThemedDivider(palette = palette)
 
-            ThemedSettingsSwitchRow(
-                title = "Dotted Progress Ring",
-                subtitle = "Circular dot-matrix daily goal ring",
-                checked = settingsState.widgetShowDottedRing,
-                onCheckedChange = onToggleDottedRing,
-                testTag = "switch_widget_dotted_ring"
-            )
-            ThemedDivider(palette = palette)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NothingWidgetLivePreview(
+                            settingsState = settingsState,
+                            xpState = xpState
+                        )
+                    }
 
-            ThemedSettingsSwitchRow(
-                title = "Today's Study Hours",
-                subtitle = "Display focused hours & minutes (02H 45M)",
-                checked = settingsState.widgetShowStudyHours,
-                onCheckedChange = onToggleStudyHours,
-                testTag = "switch_widget_study_hours"
-            )
-            ThemedDivider(palette = palette)
+                    ThemedDivider(palette = palette)
 
-            ThemedSettingsSwitchRow(
-                title = "Daily Goal Progress %",
-                subtitle = "Percentage toward daily study target",
-                checked = settingsState.widgetShowGoalPercent,
-                onCheckedChange = onToggleGoalPercent,
-                testTag = "switch_widget_goal_percent"
-            )
-            ThemedDivider(palette = palette)
+                    ThemedSettingsSwitchRow(
+                        title = "Dotted Progress Ring",
+                        subtitle = "Circular dot-matrix daily goal ring",
+                        checked = settingsState.widgetShowDottedRing,
+                        onCheckedChange = onToggleDottedRing,
+                        testTag = "switch_widget_dotted_ring"
+                    )
+                    ThemedDivider(palette = palette)
 
-            ThemedSettingsSwitchRow(
-                title = "Current Streak Badge",
-                subtitle = "Consecutive study days pill",
-                checked = settingsState.widgetShowStreakBadge,
-                onCheckedChange = onToggleStreakBadge,
-                testTag = "switch_widget_streak_badge"
-            )
-            ThemedDivider(palette = palette)
+                    ThemedSettingsSwitchRow(
+                        title = "Today's Study Hours",
+                        subtitle = "Display focused hours & minutes",
+                        checked = settingsState.widgetShowStudyHours,
+                        onCheckedChange = onToggleStudyHours,
+                        testTag = "switch_widget_study_hours"
+                    )
+                    ThemedDivider(palette = palette)
 
-            ThemedSettingsSwitchRow(
-                title = "Rank & Focus XP Tag",
-                subtitle = "Current progression tier and XP counter",
-                checked = settingsState.widgetShowRankXpTag,
-                onCheckedChange = onToggleRankXpTag,
-                testTag = "switch_widget_rank_xp"
-            )
+                    ThemedSettingsSwitchRow(
+                        title = "Daily Goal Progress %",
+                        subtitle = "Percentage toward daily target",
+                        checked = settingsState.widgetShowGoalPercent,
+                        onCheckedChange = onToggleGoalPercent,
+                        testTag = "switch_widget_goal_percent"
+                    )
+                    ThemedDivider(palette = palette)
+
+                    ThemedSettingsSwitchRow(
+                        title = "Current Streak Badge",
+                        subtitle = "Consecutive study days pill",
+                        checked = settingsState.widgetShowStreakBadge,
+                        onCheckedChange = onToggleStreakBadge,
+                        testTag = "switch_widget_streak_badge"
+                    )
+                    ThemedDivider(palette = palette)
+
+                    ThemedSettingsSwitchRow(
+                        title = "Rank & Focus XP Tag",
+                        subtitle = "Progression tier and XP counter",
+                        checked = settingsState.widgetShowRankXpTag,
+                        onCheckedChange = onToggleRankXpTag,
+                        testTag = "switch_widget_rank_xp"
+                    )
+                }
+            }
         }
     }
 }
@@ -387,21 +445,21 @@ private fun NothingWidgetLivePreview(
     settingsState: FocusSettingsState,
     xpState: FocusXpState
 ) {
-    val widgetCardBg = Color(0xFF1B1B1D)
-    val widgetChipBg = Color(0xFF232327)
-    val widgetChipBorder = Color(0xFF3A3A40)
-    val nothingRed = Color(0xFFD71921)
-    val widgetBorder = Color(0xFF2D2D32)
+    val widgetCardBg = Color(0xFF16161A)
+    val widgetChipBg = Color(0xFF202026)
+    val widgetChipBorder = Color(0xFF33333C)
+    val nothingRed = Color(0xFFFF242E)
+    val widgetBorder = Color(0xFF282830)
 
     val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
-    val sampleMs = xpState.todayFocusMs.takeIf { it > 0L } ?: (60_000L)
+    val sampleMs = xpState.todayFocusMs
     val fraction = (sampleMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
     val pct = (fraction * 100f).toInt().coerceIn(0, 999)
     val hours = sampleMs / 3_600_000L
     val mins = (sampleMs % 3_600_000L) / 60_000L
     val timeLabel = String.format(Locale.US, "%02dH %02dM", hours, mins)
 
-    val cardSize = 200.dp
+    val cardSize = 186.dp
     val ringSize = cardSize * 0.64f
 
     Box(
@@ -409,14 +467,13 @@ private fun NothingWidgetLivePreview(
             .size(cardSize)
             .clip(RoundedCornerShape(26.dp))
             .background(widgetCardBg)
-            .border(1.dp, widgetBorder, RoundedCornerShape(26.dp))
+            .border(0.75.dp, widgetBorder, RoundedCornerShape(26.dp))
     ) {
-        // Top Row anchored 14dp from top edge
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(top = 14.dp, start = 14.dp, end = 14.dp),
+                .padding(top = 13.dp, start = 13.dp, end = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -433,7 +490,7 @@ private fun NothingWidgetLivePreview(
                 Text(
                     text = "FOCUS LOCK",
                     fontFamily = DotGothic16,
-                    fontSize = 10.sp,
+                    fontSize = 9.5.sp,
                     color = Color.White,
                     letterSpacing = 0.9.sp
                 )
@@ -444,13 +501,13 @@ private fun NothingWidgetLivePreview(
                     modifier = Modifier
                         .clip(RoundedCornerShape(9.dp))
                         .background(widgetChipBg)
-                        .border(1.dp, widgetChipBorder, RoundedCornerShape(9.dp))
+                        .border(0.75.dp, widgetChipBorder, RoundedCornerShape(9.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "${xpState.currentStreak.coerceAtLeast(1)}D",
+                        text = "${xpState.currentStreak}D",
                         fontFamily = JetBrainsMono,
-                        fontSize = 9.5.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -458,7 +515,6 @@ private fun NothingWidgetLivePreview(
             }
         }
 
-        // Center Ring (64% height) or Compact Readout
         Box(
             modifier = Modifier.align(Alignment.Center),
             contentAlignment = Alignment.Center
@@ -478,7 +534,7 @@ private fun NothingWidgetLivePreview(
                         } else {
                             0
                         }
-                        val headIndex = (activeCount - 1).coerceAtLeast(0)
+                        val headIndex = if (activeCount > 0) activeCount - 1 else -1
 
                         for (i in 0 until dots) {
                             val angle = Math.toRadians(-90.0 + (360.0 / dots) * i)
@@ -490,27 +546,14 @@ private fun NothingWidgetLivePreview(
                                 color = when {
                                     isHead -> nothingRed
                                     isCompleted -> Color.White
-                                    else -> Color(0xFF3A3A40)
+                                    else -> Color(0xFF34343C)
                                 },
                                 radius = when {
-                                    isHead -> 2.4.dp.toPx()
-                                    isCompleted -> 1.8.dp.toPx()
-                                    else -> 1.75.dp.toPx()
+                                    isHead -> 2.3.dp.toPx()
+                                    isCompleted -> 1.7.dp.toPx()
+                                    else -> 1.5.dp.toPx()
                                 },
                                 center = Offset(dx, dy)
-                            )
-                        }
-
-                        // 4 subtle cardinal accent ticks inside the ring
-                        val tickOuter = radius - 4.5.dp.toPx()
-                        val tickInner = radius - 8.dp.toPx()
-                        for (deg in listOf(-90.0, 0.0, 90.0, 180.0)) {
-                            val rad = Math.toRadians(deg)
-                            drawLine(
-                                color = Color(0xFF5A5A64),
-                                start = Offset(cx + (tickInner * cos(rad)).toFloat(), cy + (tickInner * sin(rad)).toFloat()),
-                                end = Offset(cx + (tickOuter * cos(rad)).toFloat(), cy + (tickOuter * sin(rad)).toFloat()),
-                                strokeWidth = 1.2.dp.toPx()
                             )
                         }
                     }
@@ -523,7 +566,7 @@ private fun NothingWidgetLivePreview(
                             Text(
                                 text = timeLabel,
                                 fontFamily = DotGothic16,
-                                fontSize = 18.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
@@ -532,7 +575,7 @@ private fun NothingWidgetLivePreview(
                             Text(
                                 text = "$pct%",
                                 fontFamily = DotGothic16,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = nothingRed
                             )
@@ -548,7 +591,7 @@ private fun NothingWidgetLivePreview(
                         Text(
                             text = timeLabel,
                             fontFamily = DotGothic16,
-                            fontSize = 20.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -557,7 +600,7 @@ private fun NothingWidgetLivePreview(
                         Text(
                             text = "$pct%",
                             fontFamily = DotGothic16,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = nothingRed
                         )
@@ -566,27 +609,26 @@ private fun NothingWidgetLivePreview(
             }
         }
 
-        // Footer centered 14dp from bottom edge
         if (settingsState.widgetShowRankXpTag) {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 14.dp, start = 12.dp, end = 12.dp),
+                    .padding(bottom = 13.dp, start = 12.dp, end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = xpState.rank.title.uppercase(Locale.US),
                     fontFamily = JetBrainsMono,
-                    fontSize = 10.5.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     maxLines = 1
                 )
                 Text(
-                    text = " • ${xpState.totalXp} XP",
+                    text = " · ${xpState.totalXp} XP",
                     fontFamily = JetBrainsMono,
-                    fontSize = 10.5.sp,
+                    fontSize = 10.sp,
                     color = Color(0xFFA0A0A8),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -603,13 +645,23 @@ fun DailyStudyGoalSection(
     onOpenCustomGoalDialog: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     val selectedHours = (dailyGoalMinutes / 60L).toInt()
-    val chipShape = remember { RoundedCornerShape(10.dp) }
+    val chipShape = remember { RoundedCornerShape(12.dp) }
+    val goalFormatted = remember(dailyGoalMinutes) {
+        val h = dailyGoalMinutes / 60L
+        val m = dailyGoalMinutes % 60L
+        when {
+            h > 0L && m > 0L -> "${h}h ${m}m"
+            h > 0L -> "${h}h"
+            else -> "${m}m"
+        }
+    }
 
-    ThemedSettingsSectionCard(title = "DAILY STUDY HOUR GOAL & XP PENALTY") {
+    ThemedSettingsSectionCard(title = "DAILY GOAL") {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -624,12 +676,13 @@ fun DailyStudyGoalSection(
                         imageVector = Icons.Outlined.Schedule,
                         contentDescription = null,
                         tint = palette.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                     Text(
-                        text = "Daily Goal (${dailyGoalMinutes / 60}h ${if (dailyGoalMinutes % 60 > 0) "${dailyGoalMinutes % 60}m" else ""})".trim(),
+                        text = "Target · $goalFormatted",
                         style = MaterialTheme.typography.titleMedium,
-                        fontSize = 15.sp,
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Medium,
                         color = palette.textPrimary
                     )
                 }
@@ -641,18 +694,14 @@ fun DailyStudyGoalSection(
                     color = palette.primary,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenCustomGoalDialog)
+                        .clickable {
+                            haptics.tap()
+                            onOpenCustomGoalDialog()
+                        }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .testTag("settings_daily_goal_row")
                 )
             }
-
-            Text(
-                text = "Earn +10 XP/min +100 XP goal bonus. Falling short deducts -150 XP at midnight.",
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 12.sp,
-                color = palette.textSecondary
-            )
 
             Row(
                 modifier = Modifier
@@ -664,18 +713,16 @@ fun DailyStudyGoalSection(
                     val isSelected = selectedHours == hours && dailyGoalMinutes % 60L == 0L
                     Box(
                         modifier = Modifier
-                            .height(44.dp)
+                            .height(40.dp)
                             .clip(chipShape)
                             .background(
-                                color = if (isSelected) palette.primaryContainer else palette.surfaceElevated,
+                                color = if (isSelected) palette.primary else palette.surfaceElevated,
                                 shape = chipShape
                             )
-                            .border(
-                                width = 1.dp,
-                                color = if (isSelected) palette.primaryBorderTint else palette.border,
-                                shape = chipShape
-                            )
-                            .clickable { onSelectGoalMinutes(hours * 60L) }
+                            .clickable {
+                                haptics.tick()
+                                onSelectGoalMinutes(hours * 60L)
+                            }
                             .padding(horizontal = 14.dp)
                             .testTag("goal_hour_${hours}h"),
                         contentAlignment = Alignment.Center
@@ -683,13 +730,20 @@ fun DailyStudyGoalSection(
                         Text(
                             text = "${hours}h",
                             fontFamily = JetBrainsMono,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) palette.primary else palette.textSecondary
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isSelected) palette.onPrimary else palette.textSecondary
                         )
                     }
                 }
             }
+
+            Text(
+                text = "+10 XP/min · +100 XP goal bonus · -150 XP missed target",
+                fontFamily = JetBrainsMono,
+                fontSize = 10.5.sp,
+                color = palette.textSecondary.copy(alpha = 0.85f)
+            )
         }
     }
 }
@@ -708,95 +762,60 @@ fun ProtectionAndBlockersSection(
     onOpenAccessibilitySettings: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     val pillShape = remember { RoundedCornerShape(50) }
 
-    ThemedSettingsSectionCard(title = "NOTIFICATION & POWER BLOCKERS") {
+    ThemedSettingsSectionCard(title = "SHIELD & GUARDS") {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.NotificationsOff,
-                    contentDescription = null,
-                    tint = palette.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Notification Shield",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontSize = 15.sp,
-                    color = palette.textPrimary
-                )
-            }
-
             ThemedSettingsSwitchRow(
-                title = "Block Notifications During Lock",
-                subtitle = "Dismisses distracting notifications into an unlock summary",
+                title = "Notification Shield",
+                subtitle = "Silences distractions into an unlock digest (calls & alarms exempt)",
                 checked = blockNotifications,
                 onCheckedChange = onToggleBlockNotifications,
                 testTag = "switch_block_notifications"
             )
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = palette.surfaceElevated,
-                border = BorderStroke(1.dp, palette.border),
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        haptics.tap()
+                        onOpenNotificationAccessSettings()
+                    }
+                    .padding(vertical = 4.dp)
+                    .testTag("notification_access_row"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.PhoneInTalk,
                         contentDescription = null,
-                        tint = palette.success,
-                        modifier = Modifier.size(16.dp)
+                        tint = if (notificationAccessGranted) palette.success else palette.textSecondary,
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
-                        text = "Call-Safe: Incoming & ongoing phone calls and alarms are never blocked.",
+                        text = "Notification Access",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 11.5.sp,
                         color = palette.textSecondary
                     )
                 }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onOpenNotificationAccessSettings)
-                    .padding(vertical = 4.dp)
-                    .testTag("notification_access_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
                 Text(
-                    text = "Notification Listener Access",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = palette.textPrimary
-                )
-                Text(
-                    text = if (notificationAccessGranted) "Granted" else "Enable Access",
+                    text = if (notificationAccessGranted) "Active" else "Enable",
                     fontFamily = JetBrainsMono,
                     fontSize = 11.sp,
                     color = if (notificationAccessGranted) palette.success else palette.primary,
                     modifier = Modifier
                         .clip(pillShape)
                         .background(
-                            color = if (notificationAccessGranted) palette.success.copy(alpha = 0.14f) else palette.primaryContainer,
-                            shape = pillShape
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (notificationAccessGranted) palette.success.copy(alpha = 0.35f) else palette.primaryBorderTint,
+                            color = if (notificationAccessGranted) palette.success.copy(alpha = 0.12f) else palette.primaryContainer,
                             shape = pillShape
                         )
                         .padding(horizontal = 10.dp, vertical = 4.dp)
@@ -805,10 +824,13 @@ fun ProtectionAndBlockersSection(
 
             if (hasBlockedLog) {
                 OutlinedButton(
-                    onClick = onOpenLastUnlockSummary,
+                    onClick = {
+                        haptics.tap()
+                        onOpenLastUnlockSummary()
+                    },
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, palette.primaryBorderTint),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.primary),
+                    border = BorderStroke(0.75.dp, palette.borderHighlight),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.textPrimary),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -818,36 +840,19 @@ fun ProtectionAndBlockersSection(
                     Icon(
                         imageVector = Icons.Outlined.Visibility,
                         contentDescription = null,
+                        tint = palette.primary,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("View Last Unlock Summary", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("View Last Unlock Summary", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
             }
 
             ThemedDivider(palette = palette)
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.PowerSettingsNew,
-                    contentDescription = null,
-                    tint = palette.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Power Menu & Restart Guard",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontSize = 15.sp,
-                    color = palette.textPrimary
-                )
-            }
-
             ThemedSettingsSwitchRow(
-                title = "Block Power Menu During Lock",
-                subtitle = "Dismisses power/restart dialogs to prevent timer bypasses",
+                title = "Power Menu Guard",
+                subtitle = "Dismisses power & restart dialogs while locked",
                 checked = blockPowerMenu,
                 onCheckedChange = onToggleBlockPowerMenu,
                 testTag = "switch_block_power_menu"
@@ -857,7 +862,10 @@ fun ProtectionAndBlockersSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onOpenAccessibilitySettings)
+                    .clickable {
+                        haptics.tap()
+                        onOpenAccessibilitySettings()
+                    }
                     .padding(vertical = 4.dp)
                     .testTag("accessibility_guard_row"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -865,36 +873,29 @@ fun ProtectionAndBlockersSection(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.weight(1f)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
+                        imageVector = Icons.Outlined.PowerSettingsNew,
                         contentDescription = null,
-                        tint = if (accessibilityGranted) palette.success else palette.primary,
-                        modifier = Modifier.size(16.dp)
+                        tint = if (accessibilityGranted) palette.success else palette.textSecondary,
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
-                        text = "Accessibility Power Guard",
+                        text = "Accessibility Service",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = palette.textPrimary
+                        color = palette.textSecondary
                     )
                 }
                 Text(
-                    text = if (accessibilityGranted) "Active" else "Enable Service",
+                    text = if (accessibilityGranted) "Active" else "Enable",
                     fontFamily = JetBrainsMono,
                     fontSize = 11.sp,
                     color = if (accessibilityGranted) palette.success else palette.primary,
                     modifier = Modifier
                         .clip(pillShape)
                         .background(
-                            color = if (accessibilityGranted) palette.success.copy(alpha = 0.14f) else palette.primaryContainer,
-                            shape = pillShape
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (accessibilityGranted) palette.success.copy(alpha = 0.35f) else palette.primaryBorderTint,
+                            color = if (accessibilityGranted) palette.success.copy(alpha = 0.12f) else palette.primaryContainer,
                             shape = pillShape
                         )
                         .padding(horizontal = 10.dp, vertical = 4.dp)

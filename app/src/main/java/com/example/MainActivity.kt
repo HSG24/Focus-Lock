@@ -10,6 +10,7 @@ import android.os.Process
 import android.view.Display
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -172,7 +173,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.BLACK),
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         configureHighRefreshRate()
@@ -357,6 +358,19 @@ class MainActivity : ComponentActivity() {
                     .collect {
                         view.performClockTickHaptic()
                     }
+            }
+
+            BackHandler(enabled = !showShare && pagerState.currentPage != 0) {
+                view.performClockTickHaptic()
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(
+                        page = 0,
+                        animationSpec = spring(
+                            dampingRatio = 0.85f,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    )
+                }
             }
 
             val onOpenShareHome = remember {

@@ -7,13 +7,18 @@ import android.widget.Toast
 
 class PhoneLauncherActivity : Activity() {
     private var hasPaused = false
+    private var launchStartedAtMs = 0L
+
+    private fun sendLockAction(actionName: String) {
+        if (!LockService.isRunning) return
+        runCatching {
+            startService(Intent(this, LockService::class.java).apply { action = actionName })
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Minimize the lock screen overlay immediately
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
-        
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchPhone()
     }
@@ -21,20 +26,20 @@ class PhoneLauncherActivity : Activity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchPhone()
     }
 
     private fun launchPhone() {
         var launched = false
-        
-        // 1. Try launching dialer via ACTION_DIAL
+
         try {
             val dialIntent = Intent(Intent.ACTION_DIAL).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
             }
             if (dialIntent.resolveActivity(packageManager) != null) {
+                launchStartedAtMs = System.currentTimeMillis()
                 startActivity(dialIntent)
                 launched = true
             }
@@ -42,13 +47,13 @@ class PhoneLauncherActivity : Activity() {
             e.printStackTrace()
         }
 
-        // 2. Fallback to ACTION_CALL_BUTTON
         if (!launched) {
             try {
                 val callButtonIntent = Intent(Intent.ACTION_CALL_BUTTON).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                 }
                 if (callButtonIntent.resolveActivity(packageManager) != null) {
+                    launchStartedAtMs = System.currentTimeMillis()
                     startActivity(callButtonIntent)
                     launched = true
                 }
@@ -57,7 +62,6 @@ class PhoneLauncherActivity : Activity() {
             }
         }
 
-        // 3. Fallback to specific phone dialer packages
         if (!launched) {
             val dialerPackages = listOf(
                 "com.google.android.dialer",
@@ -71,6 +75,7 @@ class PhoneLauncherActivity : Activity() {
                     val intent = packageManager.getLaunchIntentForPackage(pkg)
                     if (intent != null) {
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                        launchStartedAtMs = System.currentTimeMillis()
                         startActivity(intent)
                         launched = true
                         break
@@ -83,8 +88,7 @@ class PhoneLauncherActivity : Activity() {
 
         if (!launched) {
             Toast.makeText(this, "Phone app not found", Toast.LENGTH_SHORT).show()
-            // If failed, restore the lock screen right away
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+            sendLockAction("MAXIMIZE")
             finish()
         }
     }
@@ -96,9 +100,8 @@ class PhoneLauncherActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPaused) {
-            // Returned from Phone app! Maximize lock screen and finish
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+        if (hasPaused && System.currentTimeMillis() - launchStartedAtMs > 450L) {
+            sendLockAction("MAXIMIZE")
             finish()
             @Suppress("DEPRECATION")
             overridePendingTransition(0, 0)

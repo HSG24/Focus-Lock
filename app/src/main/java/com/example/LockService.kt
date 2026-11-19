@@ -1,5 +1,6 @@
 package com.example
 
+import android.animation.ValueAnimator
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -20,10 +21,16 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +63,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,10 +73,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -97,6 +104,9 @@ import com.example.ui.components.LockPalette
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemedDivider
 import com.example.ui.components.ThemedTimerRing
+import com.example.ui.components.performFocusGestureEnd
+import com.example.ui.components.performFocusGestureStart
+import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.components.rememberSpringPressScale
 import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.FocusThemePalette
@@ -106,12 +116,13 @@ import com.example.widget.NothingFocusWidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
@@ -119,9 +130,14 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val OVERLAY_PREFS = "focus_lock_overlay_prefs"
         private const val KEY_BUBBLE_X = "floating_bubble_x"
         private const val KEY_BUBBLE_Y = "floating_bubble_y"
+        private const val KEY_ACTIVE_SESSION_START = "active_session_start_ms"
+        private const val KEY_ACTIVE_SESSION_PIN = "active_session_pin"
 
         @Volatile
         var currentSessionStartTimeMs: Long = 0L
+
+        @Volatile
+        var isRunning: Boolean = false
 
         fun clampBubblePosition(
             x: Int,
@@ -153,6 +169,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var overlayContainer: DraggableOverlayContainer? = null
     private var composeView: ComposeView? = null
     private var currentMinimizedParams: WindowManager.LayoutParams? = null
+    private var snapAnimator: ValueAnimator? = null
     private var bubbleX: Int = -1
     private var bubbleY: Int = -1
     private var targetPin: String = ""
@@ -161,9 +178,35 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     @Volatile
     private var minimizeTimestamp: Long = 0L
 
+    @Volatile
+    private var isMinimizedVolatile: Boolean = false
+
+    private val isStoppingLock = AtomicBoolean(false)
     private var isMinimizedState = mutableStateOf(false)
     private var monitorJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val serviceJob = SupervisorJob()
+    private val scope = CoroutineScope(serviceJob + Dispatchers.IO)
+
+    private fun setMinimized(minimized: Boolean) {
+        isMinimizedVolatile = minimized
+        isMinimizedState.value = minimized
+    }
+
+    private fun persistActiveSession(startMs: Long, pin: String) {
+        getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_ACTIVE_SESSION_START, startMs)
+            .putString(KEY_ACTIVE_SESSION_PIN, pin)
+            .apply()
+    }
+
+    private fun clearActiveSession() {
+        getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_ACTIVE_SESSION_START)
+            .remove(KEY_ACTIVE_SESSION_PIN)
+            .apply()
+    }
 
     private val transientSystemPackages = setOf(
         "android",
@@ -267,7 +310,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             var cachedAllowedPackages: Set<String> = emptySet()
 
             while (isActive) {
-                if (isMinimizedState.value) {
+                if (isMinimizedVolatile) {
                     val currentMinimizeTs = minimizeTimestamp
                     if (currentMinimizeTs != trackedSessionMinimizeTs) {
                         trackedSessionMinimizeTs = currentMinimizeTs
@@ -321,7 +364,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             if (unauthorizedStreak >= 2) {
                                 unauthorizedStreak = 0
                                 launch(Dispatchers.Main) {
-                                    isMinimizedState.value = false
+                                    setMinimized(false)
                                     updateOverlayState(false)
                                 }
                             }
@@ -353,34 +396,52 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (startTime == 0L) {
-            startTime = System.currentTimeMillis()
-            currentSessionStartTimeMs = startTime
-            NotificationBlockerRepository.startFreshSession(applicationContext)
-            NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
-            scope.launch {
-                ShareRepository.syncLiveShareOnSessionStart(applicationContext, startTime)
+        val action = intent?.action
+        if (action == "MAXIMIZE" || action == "MINIMIZE") {
+            if (overlayContainer == null) {
+                if (!isRunning) {
+                    stopSelf()
+                }
+                return START_NOT_STICKY
             }
-        }
-
-        when (intent?.action) {
-            "MAXIMIZE" -> {
-                isMinimizedState.value = false
+            if (action == "MAXIMIZE") {
+                setMinimized(false)
                 updateOverlayState(false)
-                return START_STICKY
-            }
-            "MINIMIZE" -> {
+            } else {
                 val now = System.currentTimeMillis()
-                if (!isMinimizedState.value || now - minimizeTimestamp > 500L) {
+                if (!isMinimizedVolatile || now - minimizeTimestamp > 500L) {
                     minimizeTimestamp = now
-                    isMinimizedState.value = true
+                    setMinimized(true)
                     updateOverlayState(true)
                 }
-                return START_STICKY
             }
-            else -> {
-                targetPin = intent?.getStringExtra("TARGET_PIN") ?: intent?.getStringExtra("PIN") ?: "000000"
+            return START_STICKY
+        }
+
+        val prefs = getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
+        val incomingPin = intent?.getStringExtra("TARGET_PIN") ?: intent?.getStringExtra("PIN")
+        if (incomingPin != null) {
+            targetPin = incomingPin
+        } else if (targetPin.isBlank()) {
+            targetPin = prefs.getString(KEY_ACTIVE_SESSION_PIN, null) ?: "000000"
+        }
+
+        if (startTime == 0L) {
+            val restoredStart = if (intent == null) prefs.getLong(KEY_ACTIVE_SESSION_START, 0L) else 0L
+            startTime = if (restoredStart > 0L) restoredStart else System.currentTimeMillis()
+            currentSessionStartTimeMs = startTime
+            isRunning = true
+            isStoppingLock.set(false)
+            persistActiveSession(startTime, targetPin)
+            if (restoredStart == 0L) {
+                NotificationBlockerRepository.startFreshSession(applicationContext)
+                NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
+                scope.launch {
+                    ShareRepository.syncLiveShareOnSessionStart(applicationContext, startTime)
+                }
             }
+        } else if (incomingPin != null) {
+            persistActiveSession(startTime, targetPin)
         }
 
         createNotificationChannel()
@@ -404,8 +465,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             startForeground(1, notification)
         }
 
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        if (lifecycleRegistry.currentState == Lifecycle.State.CREATED) {
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        }
 
         showOverlay()
 
@@ -544,7 +607,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun launchAllowedApp(app: AllowedApp) {
         minimizeTimestamp = System.currentTimeMillis()
-        isMinimizedState.value = true
+        setMinimized(true)
         updateOverlayState(true)
 
         val intent = when (app.packageName) {
@@ -581,7 +644,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     if (minimized) {
                         FloatingBubble(
                             onResumeLock = {
-                                isMinimizedState.value = false
+                                setMinimized(false)
                                 updateOverlayState(false)
                             }
                         )
@@ -685,6 +748,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             if (!isMinimizedState.value) return false
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    snapAnimator?.cancel()
                     downRawX = ev.rawX
                     downRawY = ev.rawY
                     val lp = currentMinimizedParams
@@ -697,6 +761,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val dy = ev.rawY - downRawY
                     if (hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
                         isDragging = true
+                        performFocusGestureStart()
                         return true
                     }
                 }
@@ -708,12 +773,12 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (!isMinimizedState.value) return super.onTouchEvent(event)
+            if (!isMinimizedVolatile) return super.onTouchEvent(event)
             when (event.actionMasked) {
                 MotionEvent.ACTION_MOVE -> {
                     if (isDragging) {
                         val (screenW, screenH) = getScreenBounds()
-                        val marginPx = (8 * resources.displayMetrics.density).roundToInt()
+                        val marginPx = (10 * resources.displayMetrics.density).roundToInt()
                         val rawNewX = startWindowX + (event.rawX - downRawX).roundToInt()
                         val rawNewY = startWindowY + (event.rawY - downRawY).roundToInt()
                         val (clampedX, clampedY) = clampBubblePosition(
@@ -731,7 +796,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             if (lp.x != clampedX || lp.y != clampedY) {
                                 lp.x = clampedX
                                 lp.y = clampedY
-                                windowManager?.updateViewLayout(this, lp)
+                                runCatching { windowManager?.updateViewLayout(this, lp) }
                             }
                         }
                         return true
@@ -740,7 +805,32 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (isDragging) {
                         isDragging = false
-                        saveBubblePosition(bubbleX, bubbleY)
+                        val (screenW, _) = getScreenBounds()
+                        val marginPx = (10 * resources.displayMetrics.density).roundToInt()
+                        val centerX = bubbleX + width / 2
+                        val targetEdgeX = if (centerX < screenW / 2) {
+                            marginPx
+                        } else {
+                            (screenW - width - marginPx).coerceAtLeast(marginPx)
+                        }
+                        val fromX = bubbleX
+                        snapAnimator?.cancel()
+                        snapAnimator = ValueAnimator.ofInt(fromX, targetEdgeX).apply {
+                            duration = 210L
+                            interpolator = DecelerateInterpolator()
+                            addUpdateListener { anim ->
+                                val nextX = anim.animatedValue as Int
+                                bubbleX = nextX
+                                currentMinimizedParams?.let { lp ->
+                                    lp.x = nextX
+                                    runCatching { windowManager?.updateViewLayout(this@DraggableOverlayContainer, lp) }
+                                }
+                            }
+                            start()
+                        }
+                        bubbleX = targetEdgeX
+                        saveBubblePosition(targetEdgeX, bubbleY)
+                        performFocusGestureEnd()
                         performClick()
                         return true
                     }
@@ -756,15 +846,22 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun stopLock() {
+        if (!isStoppingLock.compareAndSet(false, true)) return
+
+        snapAnimator?.cancel()
+        isRunning = false
+        clearActiveSession()
+
         if (overlayContainer != null) {
-            windowManager?.removeView(overlayContainer)
+            runCatching { windowManager?.removeView(overlayContainer) }
             overlayContainer = null
             composeView = null
         }
 
         val capturedStart = startTime
         val endTime = System.currentTimeMillis()
-        val duration = endTime - capturedStart
+        val duration = if (capturedStart > 0L) endTime - capturedStart else 0L
+        startTime = 0L
         currentSessionStartTimeMs = 0L
         val appCtx = applicationContext
 
@@ -784,9 +881,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 durationMs = duration
             )
 
-            CoroutineScope(Dispatchers.IO).launch {
-                ShareRepository.syncLiveShareOnSessionEnd(appCtx)
-                NothingFocusWidgetUpdater.updateAllWidgets(appCtx)
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                runCatching { ShareRepository.syncLiveShareOnSessionEnd(appCtx) }
+                runCatching { NothingFocusWidgetUpdater.updateAllWidgets(appCtx) }
             }
         } else {
             NothingFocusWidgetUpdater.scheduleUpdateAll(appCtx)
@@ -807,12 +904,15 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onDestroy() {
         super.onDestroy()
+        snapAnimator?.cancel()
+        isRunning = false
         currentSessionStartTimeMs = 0L
         NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
         stopMonitoringForegroundApp()
+        scope.cancel()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         if (overlayContainer != null) {
-            windowManager?.removeView(overlayContainer)
+            runCatching { windowManager?.removeView(overlayContainer) }
             overlayContainer = null
             composeView = null
         }
@@ -850,25 +950,39 @@ fun LockScreen(
     val themePalette = LocalFocusTheme.current
     val palette = remember(themePalette) { LockPalette.fromFocusTheme(themePalette) }
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
+    val haptics = rememberFocusHaptics()
     val iconCache by FocusSettingsRepository.appIconsState.collectAsState()
     var enteredPin by remember { mutableStateOf("") }
     var wrongPinError by remember { mutableStateOf(false) }
+    val shakeOffset = remember { Animatable(0f) }
+    var pinDragAccumulated by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(allowedApps, themePalette.theme) {
         FocusSettingsRepository.preloadAppIcons(context, allowedApps, themePalette.theme)
     }
 
     LaunchedEffect(wrongPinError, autoClearWrongPin) {
-        if (wrongPinError && autoClearWrongPin) {
-            delay(350L)
-            enteredPin = ""
-            wrongPinError = false
+        if (wrongPinError) {
+            if (hapticKeypad) {
+                haptics.reject()
+            }
+            for (target in listOf(-16f, 16f, -12f, 12f, -6f, 6f, 0f)) {
+                shakeOffset.animateTo(
+                    target,
+                    spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh)
+                )
+            }
+            if (autoClearWrongPin) {
+                delay(180L)
+                enteredPin = ""
+                wrongPinError = false
+            }
         }
     }
 
-    val resolvedAppClick: (AllowedApp) -> Unit = remember(onLaunchApp, onLaunchGoogleLens, onLaunchPhone, onLaunchXiaomiHome) {
+    val resolvedAppClick: (AllowedApp) -> Unit = remember(onLaunchApp, onLaunchGoogleLens, onLaunchPhone, onLaunchXiaomiHome, haptics) {
         { app ->
+            haptics.tap()
             if (onLaunchApp != null) {
                 onLaunchApp(app)
             } else {
@@ -885,20 +999,20 @@ fun LockScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.background)
-            .padding(horizontal = 24.dp, vertical = 28.dp),
+            .padding(horizontal = 28.dp, vertical = 32.dp),
         contentAlignment = Alignment.Center
     ) {
         ThemeBackdropLayer(palette = themePalette)
 
         Column(
             modifier = Modifier
-                .widthIn(max = 420.dp)
+                .widthIn(max = 400.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
-            // Themed Lock Header + Ring + Live Session Clock
+            // Serene Minimal Timer Hero
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -915,55 +1029,67 @@ fun LockScreen(
                         size = 112.dp,
                         palette = themePalette
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(palette.surface)
-                                .border(1.dp, themePalette.primaryBorderTint, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            FocusLockEmblem(
-                                size = 48.dp,
-                                showAmbientGlow = true
-                            )
-                        }
+                        FocusLockEmblem(
+                            size = 52.dp,
+                            showAmbientGlow = true
+                        )
                     }
                 }
 
-                val lockHeaderLabel = when (themePalette.theme) {
-                    AppVisualTheme.NOTHING_CRIMSON -> "FOCUS MODE ACTIVE"
-                    AppVisualTheme.CYBER_ICE -> "HUD LOCK // ENGAGED"
-                    AppVisualTheme.SOLAR_AMBER -> "CHRONO LOCK ACTIVE"
-                    AppVisualTheme.ULTRAVIOLET_PULSE -> "Focus Mode Active"
-                }
-
                 Text(
-                    text = lockHeaderLabel,
-                    fontFamily = themePalette.displayFont,
-                    color = palette.primaryText,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = if (themePalette.theme == AppVisualTheme.NOTHING_CRIMSON) 1.2.sp else 0.sp
-                )
-
-                Text(
-                    text = if (wrongPinError) "Incorrect PIN" else "Enter 6-digit PIN to unlock",
+                    text = if (wrongPinError) {
+                        "Incorrect PIN"
+                    } else if (enteredPin.isNotEmpty()) {
+                        "Swipe dots left to clear"
+                    } else {
+                        "Enter 6-digit PIN"
+                    },
                     color = if (wrongPinError) MaterialTheme.colorScheme.error else palette.secondaryText,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    letterSpacing = 0.2.sp
                 )
             }
 
-            // Sleek PIN Dots
+            // Animated Minimal PIN Dots with Shake + Swipe-Left-to-Backspace
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                modifier = Modifier.fillMaxWidth()
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { translationX = shakeOffset.value }
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { pinDragAccumulated = 0f },
+                            onHorizontalDrag = { _, dragAmount ->
+                                pinDragAccumulated += dragAmount
+                            },
+                            onDragEnd = {
+                                if (pinDragAccumulated < -48f && enteredPin.isNotEmpty()) {
+                                    if (hapticKeypad) haptics.tick()
+                                    wrongPinError = false
+                                    enteredPin = if (pinDragAccumulated < -160f) {
+                                        ""
+                                    } else {
+                                        enteredPin.dropLast(1)
+                                    }
+                                }
+                                pinDragAccumulated = 0f
+                            },
+                            onDragCancel = { pinDragAccumulated = 0f }
+                        )
+                    }
+                    .padding(vertical = 8.dp)
             ) {
                 for (i in 0 until 6) {
                     val filled = i < enteredPin.length
+                    val dotSize by animateDpAsState(
+                        targetValue = if (filled) 14.dp else 11.dp,
+                        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+                        label = "pin_dot_size_$i"
+                    )
                     Box(
                         modifier = Modifier
-                            .size(13.dp)
+                            .size(dotSize)
                             .clip(CircleShape)
                             .background(
                                 when {
@@ -985,13 +1111,6 @@ fun LockScreen(
                 }
             }
 
-            if (themePalette.useDottedDividers) {
-                ThemedDivider(
-                    palette = themePalette,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
-            }
-
             // Dynamic Allowed Apps in Chosen Sleek Layout
             if (allowedApps.isNotEmpty()) {
                 LockAllowedAppsSection(
@@ -1005,7 +1124,7 @@ fun LockScreen(
                 )
             }
 
-            // Minimalist Keypad
+            // Minimalist Tactile Keypad
             val keys = listOf(
                 listOf("1", "2", "3"),
                 listOf("4", "5", "6"),
@@ -1013,22 +1132,22 @@ fun LockScreen(
                 listOf("", "0", "DEL")
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 for (row in keys) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+                        horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         for (key in row) {
                             if (key.isEmpty()) {
-                                Spacer(modifier = Modifier.size(64.dp))
+                                Spacer(modifier = Modifier.size(66.dp))
                             } else {
                                 KeypadButton(
                                     text = key,
                                     palette = palette
                                 ) {
                                     if (hapticKeypad) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (key == "DEL") haptics.tick() else haptics.tap()
                                     }
                                     if (key == "DEL") {
                                         wrongPinError = false
@@ -1040,6 +1159,7 @@ fun LockScreen(
                                             wrongPinError = false
                                             enteredPin += key
                                             if (enteredPin == targetPin) {
+                                                if (hapticKeypad) haptics.confirm()
                                                 onUnlock()
                                             } else if (enteredPin.length == 6) {
                                                 wrongPinError = true
@@ -1087,30 +1207,26 @@ private fun ThemedSessionClockHero(
 
     ThemedTimerRing(
         progress = minuteProgress,
-        size = 148.dp,
+        size = 160.dp,
         palette = themePalette
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            FocusLockEmblem(
-                size = 30.dp,
-                showAmbientGlow = false
-            )
             Text(
                 text = String.format(Locale.US, "%02d:%02d", mins, secs),
                 fontFamily = themePalette.numeralFont,
                 color = palette.primaryText,
-                fontSize = 24.sp,
+                fontSize = 30.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "FOCUS",
+                text = "FOCUSING",
                 fontFamily = themePalette.displayFont,
                 color = palette.accent,
-                fontSize = 10.sp,
-                letterSpacing = 1.4.sp
+                fontSize = 9.5.sp,
+                letterSpacing = 1.8.sp
             )
         }
     }
@@ -1124,38 +1240,39 @@ fun KeypadButton(
 ) {
     val themePalette = LocalFocusTheme.current
     val interactionSource = remember { MutableInteractionSource() }
-    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.90f)
+    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.88f)
+    val isDelete = text == "DEL"
 
     Button(
         onClick = onClick,
         interactionSource = interactionSource,
         modifier = Modifier
-            .size(64.dp)
+            .size(66.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             },
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = palette.surface,
+            containerColor = if (isDelete) Color.Transparent else palette.surface.copy(alpha = 0.85f),
             contentColor = palette.primaryText
         ),
-        border = BorderStroke(1.dp, palette.border),
+        border = if (isDelete) null else BorderStroke(0.75.dp, palette.border.copy(alpha = 0.65f)),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
         contentPadding = PaddingValues(0.dp)
     ) {
-        if (text == "DEL") {
+        if (isDelete) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Backspace,
                 contentDescription = "Delete",
                 tint = palette.secondaryText,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
         } else {
             Text(
                 text = text,
                 fontFamily = themePalette.numeralFont,
-                fontSize = 20.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
@@ -1166,13 +1283,17 @@ fun KeypadButton(
 @Composable
 fun FloatingBubble(onResumeLock: () -> Unit) {
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     Surface(
-        onClick = onResumeLock,
-        color = palette.surfaceElevated,
+        onClick = {
+            haptics.confirm()
+            onResumeLock()
+        },
+        color = palette.pillGlassFill,
         contentColor = palette.textPrimary,
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, palette.primaryBorderTint),
-        shadowElevation = 4.dp,
+        shape = RoundedCornerShape(26.dp),
+        border = BorderStroke(0.75.dp, palette.primaryBorderTint),
+        shadowElevation = 6.dp,
         modifier = Modifier
             .padding(4.dp)
             .heightIn(min = 48.dp)
@@ -1187,19 +1308,19 @@ fun FloatingBubble(onResumeLock: () -> Unit) {
             Icon(
                 imageVector = Icons.Filled.DragIndicator,
                 contentDescription = "Drag to move",
-                tint = palette.textSecondary.copy(alpha = 0.72f),
-                modifier = Modifier.size(16.dp)
+                tint = palette.textSecondary.copy(alpha = 0.65f),
+                modifier = Modifier.size(15.dp)
             )
             Icon(
                 imageVector = Icons.Filled.Lock,
                 contentDescription = "Lock icon",
                 tint = palette.primary,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(15.dp)
             )
             Text(
-                text = "Back to Lock",
+                text = "Return to Lock",
                 fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 color = palette.textPrimary
             )
         }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -113,6 +114,7 @@ import com.example.ui.components.ThemedSettingsSwitchRow
 import com.example.ui.components.WhatsNewBottomSheet
 import com.example.ui.components.performClockTickHaptic
 import com.example.ui.components.performKeyTapHaptic
+import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.components.rememberSpringPressScale
 import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.JetBrainsMono
@@ -133,6 +135,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val haptics = rememberFocusHaptics()
     val palette = LocalFocusTheme.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
@@ -209,70 +212,95 @@ fun SettingsScreen(
             FocusSettingsRepository.setLockAppLayout(context, layout)
         }
     }
-    val onSelectPillSize = remember(context) {
+    val onSelectPillSize = remember(context, haptics) {
         { sizeDp: Int ->
-            FocusSettingsRepository.setMinimalPillButtonSizeDp(context, sizeDp)
+            if (sizeDp != FocusSettingsRepository.getCurrent(context).minimalPillButtonSizeDp) {
+                haptics.tick()
+                FocusSettingsRepository.setMinimalPillButtonSizeDp(context, sizeDp)
+            }
         }
     }
-    val onOpenGoalDialog = remember(view, settingsState.dailyGoalMinutes) {
+    val onOpenGoalDialog = remember(haptics, settingsState.dailyGoalMinutes) {
         {
-            view.performKeyTapHaptic()
+            haptics.tap()
             goalInputText = settingsState.dailyGoalMinutes.toString()
             showGoalDialog = true
         }
     }
-    val onToggleSessionTimer = remember(context, view) {
+    val onToggleSessionTimer = remember(context) {
         { enabled: Boolean ->
-            view.performClockTickHaptic()
             FocusSettingsRepository.setShowSessionTimer(context, enabled)
         }
     }
-    val onToggleHapticKeypad = remember(context, view) {
+    val onToggleHapticKeypad = remember(context) {
         { enabled: Boolean ->
-            view.performClockTickHaptic()
             FocusSettingsRepository.setHapticKeypad(context, enabled)
         }
     }
-    val onToggleAutoClearWrongPin = remember(context, view) {
+    val onToggleAutoClearWrongPin = remember(context) {
         { enabled: Boolean ->
-            view.performClockTickHaptic()
             FocusSettingsRepository.setAutoClearWrongPin(context, enabled)
         }
     }
-    val onSelectGraceSeconds = remember(context, view) {
+    val onSelectGraceSeconds = remember(context, haptics) {
         { sec: Int ->
-            view.performClockTickHaptic()
+            haptics.tick()
             FocusSettingsRepository.setAppSwitchGraceSeconds(context, sec)
         }
     }
-    val onOpenOverlaySettings = remember(context, view) {
+    val onOpenOverlaySettings = remember(context, haptics) {
         {
-            view.performKeyTapHaptic()
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${context.packageName}")
-            )
-            context.startActivity(intent)
+            haptics.tap()
+            runCatching {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                )
+            }.onFailure {
+                runCatching {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                    )
+                }
+            }
+            Unit
         }
     }
-    val onOpenUsageSettings = remember(context, view) {
+    val onOpenUsageSettings = remember(context, haptics) {
         {
-            view.performKeyTapHaptic()
-            context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            haptics.tap()
+            runCatching {
+                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            }.onFailure {
+                runCatching {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                    )
+                }
+            }
+            Unit
         }
     }
-    val onOpenNotificationListenerSettings = remember(context, view) {
+    val onOpenNotificationListenerSettings = remember(context, haptics) {
         {
-            view.performKeyTapHaptic()
+            haptics.tap()
             runCatching {
                 context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             }
             Unit
         }
     }
-    val onOpenAccessibilitySettings = remember(context, view) {
+    val onOpenAccessibilitySettings = remember(context, haptics) {
         {
-            view.performKeyTapHaptic()
+            haptics.tap()
             runCatching {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
@@ -288,36 +316,32 @@ fun SettingsScreen(
     ) {
         ThemeBackdropLayer(palette = palette)
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        FocusLockEmblem(
-                            size = 26.dp,
-                            showAmbientGlow = false
-                        )
-                        Text(
-                            text = "Settings",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontFamily = palette.displayFont,
-                            color = palette.textPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = palette.displayFont,
+                    fontSize = 22.sp,
+                    color = palette.textPrimary
                 )
-            )
+            }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                    .padding(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 116.dp),
+                verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
                 AppearanceAndThemesSection(
                     selectedTheme = settingsState.appTheme,
@@ -527,9 +551,11 @@ private fun AllowedAppsSection(
             } else {
                 allowedApps.forEachIndexed { index, app ->
                     key(app.id) {
+                        val rowHaptics = rememberFocusHaptics()
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
                                 if (value == SwipeToDismissBoxValue.EndToStart) {
+                                    rowHaptics.reject()
                                     onRemoveApp(app.id)
                                     true
                                 } else {

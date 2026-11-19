@@ -30,22 +30,30 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 4
+    const val CURRENT_RELEASE_ID = 5
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 4,
+            releaseId = 5,
             versionLabel = "Latest Update",
-            headline = "Daily Bars in Monthly Stats",
-            summary = "Your Month view now displays focus progress for every individual day of the month.",
+            headline = "Minimal Redesign, Gestures & Haptics",
+            summary = "A cleaner, calmer interface with tactile haptics, fluid swipe gestures, and reliability improvements.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Day-by-Day Monthly Chart",
-                    description = "The Month tab in Stats now shows a separate bar for each day of the month (with its date shown right underneath) up to today, making your daily habits easier to follow."
+                    title = "Minimal Visual Redesign",
+                    description = "Decluttered Home, Stats, Settings, and Lock screens with a centered daily-goal ring, softer hairline cards, compact theme swatches, and a collapsible Widget Studio."
                 ),
                 WhatsNewItem(
-                    title = "Tap Any Day for Details",
-                    description = "Tap any day bar in your monthly chart to see how many sessions and how much focus time you logged on that exact date."
+                    title = "Fluid Swipe Gestures",
+                    description = "Slide or tap the Focus pill to start locking, swipe across the bottom capsule to scrub tabs, drag across Stats charts to inspect bars, pull to refresh Stats, and swipe left on PIN dots to delete."
+                ),
+                WhatsNewItem(
+                    title = "Refined Tactile Haptics",
+                    description = "Added crisp haptic feedback across buttons, switches, sliders, swipes, link actions, and PIN entry, plus a subtle shake when an incorrect PIN is entered."
+                ),
+                WhatsNewItem(
+                    title = "Reliability & Accuracy Fixes",
+                    description = "Fixed Stats calendar date shifts, offline streak calculations, sub-hour goal labels, widget preview values, and lock session persistence across background restarts."
                 )
             )
         )

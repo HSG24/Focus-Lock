@@ -7,13 +7,18 @@ import android.widget.Toast
 
 class XiaomiLauncherActivity : Activity() {
     private var hasPaused = false
+    private var launchStartedAtMs = 0L
+
+    private fun sendLockAction(actionName: String) {
+        if (!LockService.isRunning) return
+        runCatching {
+            startService(Intent(this, LockService::class.java).apply { action = actionName })
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Minimize the lock screen overlay immediately
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
-        
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchXiaomiHome()
     }
@@ -21,7 +26,7 @@ class XiaomiLauncherActivity : Activity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchXiaomiHome()
     }
@@ -31,13 +36,14 @@ class XiaomiLauncherActivity : Activity() {
             "com.xiaomi.smarthome",
             "com.xiaomi.mihome"
         )
-        
+
         var launched = false
         for (pkg in xiaomiPackages) {
             try {
                 val intent = packageManager.getLaunchIntentForPackage(pkg)
                 if (intent != null) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                    launchStartedAtMs = System.currentTimeMillis()
                     startActivity(intent)
                     launched = true
                     break
@@ -49,8 +55,7 @@ class XiaomiLauncherActivity : Activity() {
 
         if (!launched) {
             Toast.makeText(this, "Xiaomi Home app not found", Toast.LENGTH_SHORT).show()
-            // If failed, restore the lock screen right away
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+            sendLockAction("MAXIMIZE")
             finish()
         }
     }
@@ -62,9 +67,8 @@ class XiaomiLauncherActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPaused) {
-            // Returned from Xiaomi Home app! Maximize lock screen and finish
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+        if (hasPaused && System.currentTimeMillis() - launchStartedAtMs > 450L) {
+            sendLockAction("MAXIMIZE")
             finish()
             @Suppress("DEPRECATION")
             overridePendingTransition(0, 0)

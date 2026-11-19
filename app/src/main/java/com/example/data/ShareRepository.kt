@@ -68,7 +68,8 @@ object ShareRepository {
         "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app"
     const val WEB_VIEWER_BASE_URL = "https://focuslock-b6c0f.web.app"
 
-    private val client = OkHttpClient()
+    private val client: OkHttpClient
+        get() = com.example.sharedHttpClient
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val shareIdChars = "abcdefghijkmnopqrstuvwxyz23456789"
     private val random = SecureRandom()

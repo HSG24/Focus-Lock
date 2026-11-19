@@ -15,9 +15,16 @@ class AppLauncherActivity : Activity() {
     private var hasPaused = false
     private var launchStartedAtMs = 0L
 
+    private fun sendLockAction(actionName: String) {
+        if (!LockService.isRunning) return
+        runCatching {
+            startService(Intent(this, LockService::class.java).apply { action = actionName })
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchTarget(intent)
     }
@@ -25,7 +32,7 @@ class AppLauncherActivity : Activity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchTarget(intent)
     }
@@ -54,7 +61,7 @@ class AppLauncherActivity : Activity() {
 
         if (!launched) {
             Toast.makeText(this, "$label could not be launched", Toast.LENGTH_SHORT).show()
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+            sendLockAction("MAXIMIZE")
             finish()
         }
     }
@@ -90,7 +97,7 @@ class AppLauncherActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (hasPaused && System.currentTimeMillis() - launchStartedAtMs > 500L) {
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+            sendLockAction("MAXIMIZE")
             finish()
             @Suppress("DEPRECATION")
             overridePendingTransition(0, 0)

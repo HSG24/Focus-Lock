@@ -80,7 +80,7 @@ fun BlockedSummaryBottomSheet(
     onDismiss: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val view = LocalView.current
+    val haptics = rememberFocusHaptics()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val groups = blockerState.groupedLastSummary
     val totalCount = blockerState.totalBlockedCount
@@ -91,18 +91,18 @@ fun BlockedSummaryBottomSheet(
         sheetState = sheetState,
         containerColor = palette.surface,
         contentColor = palette.textPrimary,
-        scrimColor = Color.Black.copy(alpha = 0.80f),
+        scrimColor = Color.Black.copy(alpha = 0.72f),
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(top = 12.dp, bottom = 6.dp)
-                    .width(42.dp)
+                    .width(38.dp)
                     .height(4.dp)
                     .clip(CircleShape)
                     .background(palette.borderHighlight)
             )
         },
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
             modifier = Modifier
@@ -122,7 +122,7 @@ fun BlockedSummaryBottomSheet(
                         .size(44.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(palette.primaryContainer)
-                        .border(1.dp, palette.primaryBorderTint, RoundedCornerShape(14.dp)),
+                        .border(0.75.dp, palette.primaryBorderTint, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -149,7 +149,7 @@ fun BlockedSummaryBottomSheet(
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = palette.primaryContainer,
-                    border = BorderStroke(1.dp, palette.primaryBorderTint)
+                    border = BorderStroke(0.75.dp, palette.primaryBorderTint)
                 ) {
                     Text(
                         text = "$totalCount",
@@ -165,9 +165,9 @@ fun BlockedSummaryBottomSheet(
             }
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = palette.surfaceElevated,
-                border = BorderStroke(1.dp, palette.border),
+                border = BorderStroke(0.75.dp, palette.border.copy(alpha = 0.7f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -220,7 +220,7 @@ fun BlockedSummaryBottomSheet(
                             group = group,
                             isExpanded = isExpanded,
                             onToggleExpand = {
-                                view.performClockTickHaptic()
+                                haptics.tick()
                                 expandedPackages = if (isExpanded) {
                                     expandedPackages - group.packageName
                                 } else {
@@ -234,17 +234,17 @@ fun BlockedSummaryBottomSheet(
 
             Button(
                 onClick = {
-                    view.performClockTickHaptic()
+                    haptics.confirm()
                     onDoneClearLog()
                 },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = palette.primary,
                     contentColor = palette.onPrimary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(52.dp)
                     .testTag("dismiss_blocked_summary_button")
             ) {
                 Text("Done", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
@@ -283,9 +283,9 @@ private fun BlockedAppGroupCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         color = palette.surfaceElevated,
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(0.75.dp, palette.border.copy(alpha = 0.7f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

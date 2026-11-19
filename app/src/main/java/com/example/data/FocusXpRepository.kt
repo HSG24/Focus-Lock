@@ -184,7 +184,8 @@ object FocusXpRepository {
             )
         }
 
-        val currentStreak = (prefs.getInt(KEY_CACHED_STREAK, 0)).coerceAtLeast(1)
+        val computedStreak = calculateStreakFromDailyMap(dailyMap, Calendar.getInstance())
+        val currentStreak = maxOf(computedStreak, 1)
 
         prefs.edit()
             .putInt(KEY_TOTAL_XP, totalXp)
@@ -279,7 +280,7 @@ object FocusXpRepository {
                             timestampMs = System.currentTimeMillis(),
                             dateKey = dayKey,
                             deltaXp = actualDelta,
-                            reason = "Missed ${dailyGoalMinutes / 60}h daily goal ($dayKey)",
+                            reason = "Missed ${formatGoalLabel(dailyGoalMinutes)} daily goal ($dayKey)",
                             resultingTotalXp = totalXp
                         )
                     )
@@ -428,5 +429,40 @@ object FocusXpRepository {
             obj.put(k, v)
         }
         return obj.toString()
+    }
+
+    private fun calculateStreakFromDailyMap(dailyMap: Map<String, Long>, nowCal: Calendar): Int {
+        val cursor = (nowCal.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val todayKey = dateKeyForMs(cursor.timeInMillis)
+        if ((dailyMap[todayKey] ?: 0L) <= 0L) {
+            cursor.add(Calendar.DATE, -1)
+        }
+        var streak = 0
+        while (streak < 365) {
+            val key = dateKeyForMs(cursor.timeInMillis)
+            if ((dailyMap[key] ?: 0L) > 0L) {
+                streak++
+                cursor.add(Calendar.DATE, -1)
+            } else {
+                break
+            }
+        }
+        return streak
+    }
+
+    private fun formatGoalLabel(goalMinutes: Long): String {
+        val safe = goalMinutes.coerceAtLeast(1L)
+        val hours = safe / 60L
+        val mins = safe % 60L
+        return when {
+            hours > 0L && mins > 0L -> "${hours}h ${mins}m"
+            hours > 0L -> "${hours}h"
+            else -> "${mins}m"
+        }
     }
 }

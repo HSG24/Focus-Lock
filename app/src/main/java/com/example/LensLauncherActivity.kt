@@ -7,13 +7,18 @@ import android.widget.Toast
 
 class LensLauncherActivity : Activity() {
     private var hasPaused = false
+    private var launchStartedAtMs = 0L
+
+    private fun sendLockAction(actionName: String) {
+        if (!LockService.isRunning) return
+        runCatching {
+            startService(Intent(this, LockService::class.java).apply { action = actionName })
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Minimize the lock screen overlay immediately
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
-        
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchLens()
     }
@@ -21,7 +26,7 @@ class LensLauncherActivity : Activity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        startService(Intent(this, LockService::class.java).apply { action = "MINIMIZE" })
+        sendLockAction("MINIMIZE")
         hasPaused = false
         launchLens()
     }
@@ -32,14 +37,14 @@ class LensLauncherActivity : Activity() {
             "com.google.ar.lens",
             "com.google.lens"
         )
-        
+
         var launched = false
-        // 1. Try launching dedicated Lens package if installed
         for (pkg in lensPackages) {
             try {
                 val intent = packageManager.getLaunchIntentForPackage(pkg)
                 if (intent != null) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                    launchStartedAtMs = System.currentTimeMillis()
                     startActivity(intent)
                     launched = true
                     break
@@ -48,23 +53,21 @@ class LensLauncherActivity : Activity() {
                 e.printStackTrace()
             }
         }
-        
-        // 2. Fallback to Google App
+
         if (!launched) {
             try {
                 val searchIntent = Intent(Intent.ACTION_WEB_SEARCH)
                 searchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                launchStartedAtMs = System.currentTimeMillis()
                 startActivity(searchIntent)
                 launched = true
-            } catch (e: Exception) {
-                // Ignore fallback error
+            } catch (_: Exception) {
             }
         }
-        
+
         if (!launched) {
             Toast.makeText(this, "Google App/Lens not found", Toast.LENGTH_SHORT).show()
-            // If failed, restore the lock screen right away
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+            sendLockAction("MAXIMIZE")
             finish()
         }
     }
@@ -76,9 +79,8 @@ class LensLauncherActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPaused) {
-            // Returned from Google Lens/App! Maximize lock screen and finish
-            startService(Intent(this, LockService::class.java).apply { action = "MAXIMIZE" })
+        if (hasPaused && System.currentTimeMillis() - launchStartedAtMs > 450L) {
+            sendLockAction("MAXIMIZE")
             finish()
             @Suppress("DEPRECATION")
             overridePendingTransition(0, 0)

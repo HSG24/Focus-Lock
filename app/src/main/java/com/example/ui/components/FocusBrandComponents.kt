@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -9,6 +8,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +48,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,14 +59,14 @@ import com.example.ui.theme.LocalFocusTheme
 import com.example.ui.theme.PureWhite
 
 fun View.performClockTickHaptic() {
-    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+    performFocusTick()
 }
 
 fun View.performKeyTapHaptic() {
-    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    performFocusTap()
 }
 
-private val PillTopHighlightColor = Color(0x33FFFFFF)
+private val PillTopSheenColor = Color(0x26FFFFFF)
 
 /**
  * Spring scale feedback helper tuned for crisp 120Hz button and card interactions.
@@ -76,7 +80,7 @@ fun rememberSpringPressScale(
     val scale by animateFloatAsState(
         targetValue = if (isPressed) pressedScale else 1f,
         animationSpec = spring(
-            dampingRatio = 0.85f,
+            dampingRatio = 0.82f,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "spring_press_scale"
@@ -114,9 +118,9 @@ fun FocusLockEmblem(
                 val glowBrush = if (showAmbientGlow) {
                     Brush.radialGradient(
                         colors = listOf(
-                            primaryColor.copy(alpha = 0.24f),
-                            deepColor.copy(alpha = 0.14f),
-                            glowColor.copy(alpha = 0.08f),
+                            primaryColor.copy(alpha = 0.20f),
+                            deepColor.copy(alpha = 0.10f),
+                            glowColor.copy(alpha = 0.05f),
                             Color.Transparent
                         ),
                         center = center,
@@ -129,10 +133,10 @@ fun FocusLockEmblem(
                 val ringRadius = 31f * unit
                 val ringTopLeft = Offset(center.x - ringRadius, center.y - ringRadius)
                 val ringSize = Size(ringRadius * 2f, ringRadius * 2f)
-                val ringStroke = Stroke(width = 2.4f * unit, cap = StrokeCap.Round)
+                val ringStroke = Stroke(width = 2.2f * unit, cap = StrokeCap.Round)
                 val arcAngles = floatArrayOf(-78f, 12f, 102f, 192f)
 
-                val tickStroke = 2.4f * unit
+                val tickStroke = 2.2f * unit
                 val outerTick = 36f * unit
                 val innerTick = 26.5f * unit
 
@@ -140,7 +144,7 @@ fun FocusLockEmblem(
                 val shackleCenterY = center.y - 12.5f * unit
                 val shackleTopLeft = Offset(center.x - shackleRadius, shackleCenterY - shackleRadius)
                 val shackleSize = Size(shackleRadius * 2f, shackleRadius * 2f)
-                val shackleStrokeWidth = 3.1f * unit
+                val shackleStrokeWidth = 3.0f * unit
                 val shackleStroke = Stroke(width = shackleStrokeWidth, cap = StrokeCap.Round)
                 val shackleBottomY = center.y - 5.5f * unit
 
@@ -149,15 +153,15 @@ fun FocusLockEmblem(
                 val bodyTopLeft = Offset(center.x - bodyWidth / 2f, shackleBottomY)
                 val bodySize = Size(bodyWidth, bodyHeight)
                 val bodyCorner = CornerRadius(4.2f * unit, 4.2f * unit)
-                val bodyStroke = Stroke(width = 2.7f * unit, join = StrokeJoin.Round)
+                val bodyStroke = Stroke(width = 2.5f * unit, join = StrokeJoin.Round)
 
                 val coreCenter = Offset(center.x, center.y + 4.8f * unit)
-                val coreOuterRadius = 6.8f * unit
-                val coreInnerRadius = 4.2f * unit
-                val coreHaloColor = primaryColor.copy(alpha = 0.30f)
+                val coreOuterRadius = 6.5f * unit
+                val coreInnerRadius = 4.0f * unit
+                val coreHaloColor = primaryColor.copy(alpha = 0.25f)
                 val coreKeyholeStart = Offset(center.x, coreCenter.y + 2f * unit)
                 val coreKeyholeEnd = Offset(center.x, coreCenter.y + 8.6f * unit)
-                val coreKeyholeWidth = 2.8f * unit
+                val coreKeyholeWidth = 2.6f * unit
 
                 onDrawBehind {
                     if (glowBrush != null) {
@@ -278,7 +282,8 @@ data class PillNavTab(
 )
 
 /**
- * Floating simulated-glass pill bottom bar styled dynamically by the active theme.
+ * Minimal floating glass navigation pill with continuous pager indicator tracking
+ * and horizontal thumb-scrub swipe gesture with tactile haptic detents.
  */
 @Composable
 fun FloatingPillBottomBar(
@@ -289,44 +294,40 @@ fun FloatingPillBottomBar(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalFocusTheme.current
-    val pillShape = remember { RoundedCornerShape(32.dp) }
-    val indicatorShape = remember { RoundedCornerShape(26.dp) }
-    val indicatorBrush = remember(palette.primary, palette.primaryDeep) {
-        Brush.linearGradient(
-            colors = listOf(
-                palette.primary.copy(alpha = 0.94f),
-                palette.primaryDeep.copy(alpha = 0.94f)
-            )
-        )
-    }
+    val haptics = rememberFocusHaptics()
+    val pillShape = remember { RoundedCornerShape(30.dp) }
+    val indicatorShape = remember { RoundedCornerShape(25.dp) }
     val tabCount = tabs.size.coerceAtLeast(1)
     val maxIdx = (tabCount - 1).coerceAtLeast(0).toFloat()
+    val currentSelected by rememberUpdatedState(selectedIndex)
+    val currentOnSelect by rememberUpdatedState(onSelectTab)
+    var lastScrubbedIndex by remember { mutableIntStateOf(selectedIndex) }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .widthIn(max = 420.dp)
+                .widthIn(max = 360.dp)
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(58.dp)
                 .clip(pillShape)
                 .background(palette.pillGlassFill)
                 .drawWithCache {
-                    val strokePx = 1.dp.toPx()
-                    val cornerPx = (size.height / 2f)
+                    val strokePx = 0.75.dp.toPx()
+                    val cornerPx = size.height / 2f
                     onDrawWithContent {
                         drawContent()
                         drawRoundRect(
                             brush = Brush.verticalGradient(
-                                0f to PillTopHighlightColor,
-                                0.14f to Color.Transparent,
+                                0f to PillTopSheenColor,
+                                0.25f to Color.Transparent,
                                 startY = strokePx,
-                                endY = size.height * 0.45f
+                                endY = size.height * 0.5f
                             ),
                             topLeft = Offset(strokePx, strokePx),
                             size = Size(size.width - strokePx * 2f, size.height - strokePx * 2f),
@@ -336,11 +337,35 @@ fun FloatingPillBottomBar(
                     }
                 }
                 .border(
-                    width = 1.dp,
-                    color = palette.primaryBorderTint,
+                    width = 0.75.dp,
+                    color = palette.borderHighlight.copy(alpha = 0.65f),
                     shape = pillShape
                 )
-                .padding(5.dp)
+                .pointerInput(tabCount) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            lastScrubbedIndex = currentSelected
+                            val width = size.width.toFloat().coerceAtLeast(1f)
+                            val idx = ((offset.x / width) * tabCount).toInt().coerceIn(0, tabCount - 1)
+                            if (idx != lastScrubbedIndex) {
+                                lastScrubbedIndex = idx
+                                haptics.tick()
+                                currentOnSelect(idx)
+                            }
+                        },
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
+                            val width = size.width.toFloat().coerceAtLeast(1f)
+                            val idx = ((change.position.x / width) * tabCount).toInt().coerceIn(0, tabCount - 1)
+                            if (idx != lastScrubbedIndex) {
+                                lastScrubbedIndex = idx
+                                haptics.tick()
+                                currentOnSelect(idx)
+                            }
+                        }
+                    )
+                }
+                .padding(4.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(
@@ -351,11 +376,10 @@ fun FloatingPillBottomBar(
                         }
                         .fillMaxWidth(1f / tabCount)
                         .fillMaxHeight()
-                        .padding(1.dp)
                         .clip(indicatorShape)
-                        .background(indicatorBrush)
+                        .background(palette.primary)
                         .border(
-                            width = 0.75.dp,
+                            width = 0.5.dp,
                             color = PureWhite.copy(alpha = 0.16f),
                             shape = indicatorShape
                         )
@@ -395,7 +419,7 @@ private fun PillTabItem(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.94f)
+    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.93f)
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) selectedColor else unselectedColor,
         animationSpec = spring(
@@ -425,14 +449,14 @@ private fun PillTabItem(
             imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
             contentDescription = tab.label,
             tint = contentColor,
-            modifier = Modifier.size(19.dp)
+            modifier = Modifier.size(18.dp)
         )
-        Box(modifier = Modifier.width(6.dp))
+        Box(modifier = Modifier.width(5.dp))
         Text(
             text = tab.label,
             style = MaterialTheme.typography.labelMedium,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = contentColor,
             maxLines = 1,
             softWrap = false,

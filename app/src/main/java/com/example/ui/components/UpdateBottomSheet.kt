@@ -48,12 +48,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.BuildConfig
 import com.example.data.GitHubReleaseInfo
 import com.example.data.GitHubUpdater
 import com.example.data.UpdateUiState
@@ -72,7 +70,7 @@ fun UpdateBottomSheet(
     onDismiss: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val view = LocalView.current
+    val haptics = rememberFocusHaptics()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isDownloading = updateState is UpdateUiState.Downloading
 
@@ -83,18 +81,18 @@ fun UpdateBottomSheet(
         sheetState = sheetState,
         containerColor = palette.surface,
         contentColor = palette.textPrimary,
-        scrimColor = Color.Black.copy(alpha = 0.78f),
+        scrimColor = Color.Black.copy(alpha = 0.72f),
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(top = 12.dp, bottom = 6.dp)
-                    .width(42.dp)
+                    .width(38.dp)
                     .height(4.dp)
                     .clip(CircleShape)
                     .background(palette.borderHighlight)
             )
         },
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
             modifier = Modifier
@@ -301,11 +299,11 @@ fun UpdateBottomSheet(
                 is UpdateUiState.NeedsInstallPermission -> {
                     Button(
                         onClick = {
-                            view.performKeyTapHaptic()
+                            haptics.tap()
                             onOpenInstallPermission()
                         },
                         interactionSource = ctaInteraction,
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = palette.primary,
                             contentColor = palette.onPrimary
@@ -336,11 +334,11 @@ fun UpdateBottomSheet(
                 is UpdateUiState.ReadyToInstall -> {
                     Button(
                         onClick = {
-                            view.performKeyTapHaptic()
+                            haptics.confirm()
                             onInstallDownloaded()
                         },
                         interactionSource = ctaInteraction,
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = palette.primary,
                             contentColor = palette.onPrimary
@@ -372,8 +370,8 @@ fun UpdateBottomSheet(
                     OutlinedButton(
                         onClick = {},
                         enabled = false,
-                        shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, palette.border),
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(0.75.dp, palette.border),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
@@ -389,11 +387,11 @@ fun UpdateBottomSheet(
                 else -> {
                     Button(
                         onClick = {
-                            view.performKeyTapHaptic()
+                            haptics.confirm()
                             onUpdateNow()
                         },
                         interactionSource = ctaInteraction,
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = palette.primary,
                             contentColor = palette.onPrimary
@@ -415,7 +413,7 @@ fun UpdateBottomSheet(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Update Now",
-                            fontSize = 16.sp,
+                            fontSize = 15.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -425,7 +423,7 @@ fun UpdateBottomSheet(
             if (!isDownloading) {
                 TextButton(
                     onClick = {
-                        view.performClockTickHaptic()
+                        haptics.tick()
                         onDismiss()
                     },
                     modifier = Modifier

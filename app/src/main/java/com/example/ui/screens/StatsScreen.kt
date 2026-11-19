@@ -32,18 +32,20 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,19 +58,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
 import com.example.data.FocusXpRepository
+import com.example.data.ShareRepository
+import com.example.data.StatsSyncStatus
 import com.example.data.StatsTimeframe
-import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.RankXpBottomSheet
 import com.example.ui.components.StatsDateNavigatorSection
 import com.example.ui.components.StatsSyncStatusBadge
 import com.example.ui.components.StatsTimeframeSwitcher
 import com.example.ui.components.ThemeBackdropLayer
-import com.example.ui.components.ThemedDivider
 import com.example.ui.components.TopBarRankXpPill
 import com.example.ui.components.UnifiedBentoMetricsGrid
 import com.example.ui.components.UnifiedHeroInfographicCard
-import com.example.ui.components.performKeyTapHaptic
+import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.theme.LocalFocusTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,9 +83,10 @@ fun StatsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val view = LocalView.current
+    val haptics = rememberFocusHaptics()
     val palette = LocalFocusTheme.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
 
     val statsState by FocusStatsRepository.observe(context).collectAsStateWithLifecycle()
     val xpState by FocusXpRepository.observe(context).collectAsStateWithLifecycle()
@@ -89,6 +94,7 @@ fun StatsScreen(
     var selectedTimeframe by remember { mutableStateOf(StatsTimeframe.DAY) }
     var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
     var selectedBucketIndex by remember { mutableStateOf<Int?>(null) }
+    var isManualRefreshing by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showRankXpSheet by remember { mutableStateOf(false) }
@@ -121,6 +127,8 @@ fun StatsScreen(
         )
     }
 
+    val pullToRefreshState = rememberPullToRefreshState()
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -140,50 +148,42 @@ fun StatsScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // Sleek Compact Top Header Bar with Emblem, Title, Sync Indicator, Rank/XP Pill, Share & Calendar
+            // Minimal, airy header bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+                    .padding(start = 22.dp, end = 10.dp, top = 12.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(end = 8.dp)
                 ) {
-                    FocusLockEmblem(
-                        size = 24.dp,
-                        showAmbientGlow = false
+                    Text(
+                        text = "Insights",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontFamily = palette.displayFont,
+                        fontSize = 22.sp,
+                        color = palette.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Column {
-                        Text(
-                            text = "Focus Insights",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontFamily = palette.displayFont,
-                            fontSize = 18.sp,
-                            color = palette.textPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        StatsSyncStatusBadge(
-                            syncStatus = statsState.syncStatus,
-                            pendingUploadCount = statsState.pendingUploadCount
-                        )
-                    }
+                    StatsSyncStatusBadge(
+                        syncStatus = statsState.syncStatus,
+                        pendingUploadCount = statsState.pendingUploadCount
+                    )
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     TopBarRankXpPill(
                         xpState = xpState,
                         onClick = {
-                            view.performKeyTapHaptic()
+                            haptics.tap()
                             selectedBucketIndex = null
                             showRankXpSheet = true
                         },
@@ -192,30 +192,30 @@ fun StatsScreen(
 
                     IconButton(
                         onClick = {
-                            view.performKeyTapHaptic()
+                            haptics.tap()
                             selectedBucketIndex = null
                             onOpenShare(selectedDate.timeInMillis)
                         },
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(48.dp)
                             .testTag("stats_share_button")
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Share,
                             contentDescription = "Share Stats",
-                            tint = palette.textPrimary,
+                            tint = palette.textSecondary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
 
                     IconButton(
                         onClick = {
-                            view.performKeyTapHaptic()
+                            haptics.tap()
                             selectedBucketIndex = null
                             showDatePicker = true
                         },
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(48.dp)
                             .testTag("calendar_picker_button")
                     ) {
                         Icon(
@@ -228,96 +228,112 @@ fun StatsScreen(
                 }
             }
 
-            ThemedDivider(palette = palette)
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = 12.dp,
-                    end = 16.dp,
-                    bottom = 116.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item(key = "timeframe_switcher", contentType = "switcher") {
-                    StatsTimeframeSwitcher(
-                        selectedTimeframe = selectedTimeframe,
-                        onSelectTimeframe = { newTimeframe ->
-                            selectedTimeframe = newTimeframe
-                            selectedBucketIndex = null
-                        },
-                        modifier = Modifier.widthIn(max = 600.dp)
-                    )
-                }
-
-                item(key = "date_navigator_strip", contentType = "date_nav") {
-                    StatsDateNavigatorSection(
-                        report = report,
-                        onStepBackward = {
-                            selectedBucketIndex = null
-                            selectedDate = when (selectedTimeframe) {
-                                StatsTimeframe.DAY -> (selectedDate.clone() as Calendar).apply { add(Calendar.DATE, -1) }
-                                StatsTimeframe.WEEK -> FocusStatsRepository.stepMonthClippedWeekBackward(selectedDate)
-                                StatsTimeframe.MONTH -> (selectedDate.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
-                            }
-                        },
-                        onStepForward = {
-                            if (report.canStepForward) {
-                                selectedBucketIndex = null
-                                val now = Calendar.getInstance()
-                                val candidate = when (selectedTimeframe) {
-                                    StatsTimeframe.DAY -> (selectedDate.clone() as Calendar).apply { add(Calendar.DATE, 1) }
-                                    StatsTimeframe.WEEK -> FocusStatsRepository.stepMonthClippedWeekForward(selectedDate, now)
-                                    StatsTimeframe.MONTH -> (selectedDate.clone() as Calendar).apply { add(Calendar.MONTH, 1) }
-                                }
-                                selectedDate = if (candidate.after(now)) now else candidate
-                            }
-                        },
-                        onJumpToToday = {
-                            selectedBucketIndex = null
-                            selectedDate = Calendar.getInstance()
-                        },
-                        onOpenCalendarPicker = {
-                            showDatePicker = true
-                        },
-                        onSelectStripDay = { dayMillis ->
-                            selectedBucketIndex = null
-                            selectedDate = Calendar.getInstance().apply {
-                                timeInMillis = dayMillis
-                            }
-                        },
-                        modifier = Modifier.widthIn(max = 600.dp)
-                    )
-                }
-
-                item(key = "unified_hero_infographic", contentType = "hero_infographic") {
-                    UnifiedHeroInfographicCard(
-                        report = report,
-                        dailyGoalMinutes = dailyGoalMinutes,
-                        selectedBucketIndex = selectedBucketIndex,
-                        onSelectBucket = { idx ->
-                            selectedBucketIndex = if (idx == null || selectedBucketIndex == idx) null else idx
-                        },
-                        onEditGoal = {
-                            goalInputText = dailyGoalMinutes.toString()
-                            showGoalDialog = true
-                        },
-                        modifier = Modifier.widthIn(max = 600.dp)
-                    )
-                }
-
-                item(key = "bento_metrics_grid", contentType = "bento_grid") {
-                    val selectedBucket = selectedBucketIndex?.let { idx ->
-                        report.chartBuckets.getOrNull(idx)
+            PullToRefreshBox(
+                isRefreshing = isManualRefreshing || statsState.syncStatus == StatsSyncStatus.SYNCING,
+                onRefresh = {
+                    haptics.gestureStart()
+                    isManualRefreshing = true
+                    FocusStatsRepository.refreshNow(context)
+                    coroutineScope.launch {
+                        delay(550L)
+                        isManualRefreshing = false
+                        haptics.confirm()
                     }
-                    UnifiedBentoMetricsGrid(
-                        report = report,
-                        selectedBucket = selectedBucket,
-                        modifier = Modifier.widthIn(max = 600.dp)
-                    )
+                },
+                state = pullToRefreshState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    contentPadding = PaddingValues(
+                        start = 20.dp,
+                        top = 6.dp,
+                        end = 20.dp,
+                        bottom = 116.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item(key = "timeframe_switcher", contentType = "switcher") {
+                        StatsTimeframeSwitcher(
+                            selectedTimeframe = selectedTimeframe,
+                            onSelectTimeframe = { newTimeframe ->
+                                selectedTimeframe = newTimeframe
+                                selectedBucketIndex = null
+                            },
+                            modifier = Modifier.widthIn(max = 600.dp)
+                        )
+                    }
+
+                    item(key = "date_navigator_strip", contentType = "date_nav") {
+                        StatsDateNavigatorSection(
+                            report = report,
+                            onStepBackward = {
+                                selectedBucketIndex = null
+                                selectedDate = when (selectedTimeframe) {
+                                    StatsTimeframe.DAY -> (selectedDate.clone() as Calendar).apply { add(Calendar.DATE, -1) }
+                                    StatsTimeframe.WEEK -> FocusStatsRepository.stepMonthClippedWeekBackward(selectedDate)
+                                    StatsTimeframe.MONTH -> (selectedDate.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
+                                }
+                            },
+                            onStepForward = {
+                                if (report.canStepForward) {
+                                    selectedBucketIndex = null
+                                    val now = Calendar.getInstance()
+                                    val candidate = when (selectedTimeframe) {
+                                        StatsTimeframe.DAY -> (selectedDate.clone() as Calendar).apply { add(Calendar.DATE, 1) }
+                                        StatsTimeframe.WEEK -> FocusStatsRepository.stepMonthClippedWeekForward(selectedDate, now)
+                                        StatsTimeframe.MONTH -> (selectedDate.clone() as Calendar).apply { add(Calendar.MONTH, 1) }
+                                    }
+                                    selectedDate = if (candidate.after(now)) now else candidate
+                                }
+                            },
+                            onJumpToToday = {
+                                selectedBucketIndex = null
+                                selectedDate = Calendar.getInstance()
+                            },
+                            onOpenCalendarPicker = {
+                                showDatePicker = true
+                            },
+                            onSelectStripDay = { dayMillis ->
+                                selectedBucketIndex = null
+                                selectedDate = Calendar.getInstance().apply {
+                                    timeInMillis = dayMillis
+                                }
+                            },
+                            modifier = Modifier.widthIn(max = 600.dp)
+                        )
+                    }
+
+                    item(key = "unified_hero_infographic", contentType = "hero_infographic") {
+                        UnifiedHeroInfographicCard(
+                            report = report,
+                            dailyGoalMinutes = dailyGoalMinutes,
+                            selectedBucketIndex = selectedBucketIndex,
+                            onSelectBucket = { idx ->
+                                selectedBucketIndex = if (idx == null || selectedBucketIndex == idx) null else idx
+                            },
+                            onScrubBucket = { idx ->
+                                selectedBucketIndex = idx
+                            },
+                            onEditGoal = {
+                                goalInputText = dailyGoalMinutes.toString()
+                                showGoalDialog = true
+                            },
+                            modifier = Modifier.widthIn(max = 600.dp)
+                        )
+                    }
+
+                    item(key = "bento_metrics_grid", contentType = "bento_grid") {
+                        val selectedBucket = selectedBucketIndex?.let { idx ->
+                            report.chartBuckets.getOrNull(idx)
+                        }
+                        UnifiedBentoMetricsGrid(
+                            report = report,
+                            selectedBucket = selectedBucket,
+                            modifier = Modifier.widthIn(max = 600.dp)
+                        )
+                    }
                 }
             }
         }
@@ -333,11 +349,13 @@ fun StatsScreen(
 
     if (showDatePicker) {
         SleekDatePickerDialog(
-            onDateSelected = { selectedDateMillis ->
-                if (selectedDateMillis != null) {
+            initialLocalDateMs = selectedDate.timeInMillis,
+            onDateSelected = { localStartOfDayMillis ->
+                if (localStartOfDayMillis != null) {
+                    haptics.confirm()
                     selectedBucketIndex = null
                     selectedDate = Calendar.getInstance().apply {
-                        timeInMillis = selectedDateMillis
+                        timeInMillis = localStartOfDayMillis
                     }
                 }
             },
@@ -351,11 +369,11 @@ fun StatsScreen(
             containerColor = palette.surface,
             titleContentColor = palette.textPrimary,
             textContentColor = palette.textSecondary,
-            title = { Text("Daily Focus Goal", fontWeight = FontWeight.Bold) },
+            title = { Text("Daily Focus Goal", fontWeight = FontWeight.SemiBold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Set your daily target focus duration (minutes):",
+                        text = "Target focus duration in minutes:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = palette.textSecondary
                     )
@@ -375,7 +393,7 @@ fun StatsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        view.performKeyTapHaptic()
+                        haptics.confirm()
                         val parsed = goalInputText.toLongOrNull() ?: 240L
                         if (parsed > 0) {
                             FocusSettingsRepository.setDailyGoalMinutes(context, parsed)
@@ -391,7 +409,12 @@ fun StatsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showGoalDialog = false }) {
+                TextButton(
+                    onClick = {
+                        haptics.tap()
+                        showGoalDialog = false
+                    }
+                ) {
                     Text("Cancel", color = palette.textSecondary)
                 }
             }
@@ -403,13 +426,25 @@ fun StatsScreen(
 @Composable
 fun SleekDatePickerDialog(
     onDateSelected: (Long?) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    initialLocalDateMs: Long = System.currentTimeMillis()
 ) {
     val palette = LocalFocusTheme.current
+    val todayUtcMillis = remember {
+        ShareRepository.localStartOfDayToUtcPickerMillis(
+            ShareRepository.startOfDayMs(System.currentTimeMillis())
+        )
+    }
+    val initialUtcMillis = remember(initialLocalDateMs) {
+        ShareRepository.localStartOfDayToUtcPickerMillis(
+            ShareRepository.startOfDayMs(initialLocalDateMs)
+        )
+    }
     val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialUtcMillis,
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                return utcTimeMillis <= System.currentTimeMillis()
+                return utcTimeMillis <= todayUtcMillis
             }
         }
     )
@@ -419,7 +454,9 @@ fun SleekDatePickerDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onDateSelected(datePickerState.selectedDateMillis)
+                    val selectedUtc = datePickerState.selectedDateMillis
+                    val localMs = selectedUtc?.let { ShareRepository.utcDatePickerMillisToLocalStartOfDay(it) }
+                    onDateSelected(localMs)
                     onDismiss()
                 }
             ) {

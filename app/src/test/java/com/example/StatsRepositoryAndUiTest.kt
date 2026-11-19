@@ -404,13 +404,13 @@ class StatsRepositoryAndUiTest {
             )
         )
 
-        // Bumping releaseId from 3 to 4 on same version also triggers What's New
+        // Bumping releaseId from 4 to 5 on same version also triggers What's New
         assertTrue(
             FocusWhatsNewRepository.shouldShowAutoWhatsNew(
                 context = context,
                 installedVersionName = "1.0.5",
                 installedVersionCode = 5L,
-                currentReleaseId = 4
+                currentReleaseId = 5
             )
         )
     }
@@ -436,7 +436,8 @@ class StatsRepositoryAndUiTest {
 
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertIsDisplayed()
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
-        composeRule.onNodeWithText("Day-by-Day Monthly Chart").assertIsDisplayed()
+        composeRule.onNodeWithText("Minimal Visual Redesign").assertIsDisplayed()
+        composeRule.onNodeWithText("Day-by-Day Monthly Chart").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
         composeRule.onNodeWithText("Earlier Updates").assertDoesNotExist()
 

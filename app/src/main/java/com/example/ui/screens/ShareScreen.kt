@@ -102,7 +102,10 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.ui.platform.LocalView
-import com.example.ui.components.performKeyTapHaptic
+import com.example.ui.components.performFocusConfirm
+import com.example.ui.components.performFocusReject
+import com.example.ui.components.performFocusSegment
+import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
 import kotlinx.coroutines.delay
@@ -126,6 +129,7 @@ fun ShareScreen(
 ) {
     val context = LocalContext.current
     val palette = LocalFocusTheme.current
+    val haptics = rememberFocusHaptics()
     val coroutineScope = rememberCoroutineScope()
 
     var currentStep by remember { mutableStateOf(ShareStep.CHOOSE_MODE) }
@@ -248,7 +252,10 @@ fun ShareScreen(
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = handleStepBack,
+                        onClick = {
+                            haptics.tick()
+                            handleStepBack()
+                        },
                         modifier = Modifier.testTag("share_back_button")
                     ) {
                         Icon(
@@ -261,7 +268,10 @@ fun ShareScreen(
                 actions = {
                     if (currentStep == ShareStep.YOUR_LINKS) {
                         IconButton(
-                            onClick = refreshSharedLinks,
+                            onClick = {
+                                haptics.tick()
+                                refreshSharedLinks()
+                            },
                             enabled = !isLoadingLinks,
                             modifier = Modifier.testTag("refresh_your_links_button")
                         ) {
@@ -274,6 +284,7 @@ fun ShareScreen(
                     } else {
                         TextButton(
                             onClick = {
+                                haptics.segment()
                                 errorMessage = null
                                 currentStep = ShareStep.YOUR_LINKS
                             },
@@ -339,18 +350,26 @@ fun ShareScreen(
                                 isCopied = copiedActiveBanner,
                                 isStopping = isStoppingLive,
                                 onCopy = {
+                                    haptics.confirm()
                                     copyUrlToClipboard(context, activeUrl)
                                     copiedActiveBanner = true
                                 },
-                                onOpen = { openUrlInBrowser(context, activeUrl) },
+                                onOpen = {
+                                    haptics.tap()
+                                    openUrlInBrowser(context, activeUrl)
+                                },
                                 onStop = {
+                                    haptics.tap()
                                     isStoppingLive = true
                                     errorMessage = null
                                     coroutineScope.launch {
                                         val res = ShareRepository.stopLiveShare(context)
                                         isStoppingLive = false
                                         if (res.isFailure) {
+                                            haptics.reject()
                                             errorMessage = "Could not stop live share. Check your internet connection."
+                                        } else {
+                                            haptics.confirm()
                                         }
                                     }
                                 }
@@ -381,6 +400,7 @@ fun ShareScreen(
                             iconBg = palette.success.copy(alpha = 0.12f),
                             testTag = "share_mode_live_card",
                             onClick = {
+                                haptics.segment()
                                 selectedMode = ShareMode.LIVE
                                 liveUseCustomDate = false
                                 liveStartDateMs = todayStartMs
@@ -399,6 +419,7 @@ fun ShareScreen(
                             iconBg = MaterialTheme.colorScheme.primaryContainer,
                             testTag = "share_mode_range_card",
                             onClick = {
+                                haptics.segment()
                                 selectedMode = ShareMode.RANGE
                                 if (initialDateMs != null && ShareRepository.startOfDayMs(initialDateMs) != todayStartMs) {
                                     selectedPreset = null
@@ -429,6 +450,7 @@ fun ShareScreen(
                             iconBg = MaterialTheme.colorScheme.secondaryContainer,
                             testTag = "your_links_card_button",
                             onClick = {
+                                haptics.segment()
                                 errorMessage = null
                                 currentStep = ShareStep.YOUR_LINKS
                             }
@@ -535,6 +557,7 @@ fun ShareScreen(
 
                         Button(
                             onClick = {
+                                haptics.tap()
                                 isCreatingLink = true
                                 errorMessage = null
                                 coroutineScope.launch {
@@ -556,17 +579,19 @@ fun ShareScreen(
                                     }
                                     isCreatingLink = false
                                     result.onSuccess { linkResult ->
+                                        haptics.confirm()
                                         createdResult = linkResult
                                         linkStoppedInResult = false
                                         copiedBanner = false
                                         currentStep = ShareStep.LINK_READY
                                     }.onFailure {
+                                        haptics.reject()
                                         errorMessage = "Could not create share link. Check your internet connection."
                                     }
                                 }
                             },
                             enabled = !isCreatingLink && !isLoadingSessions,
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(50),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -610,25 +635,38 @@ fun ShareScreen(
                             isStopping = isStoppingLive,
                             errorMessage = errorMessage,
                             onCopyLink = {
+                                haptics.confirm()
                                 copyUrlToClipboard(context, result.url)
                                 copiedBanner = true
                             },
-                            onOpenBrowser = { openUrlInBrowser(context, result.url) },
-                            onSystemShare = { shareUrlViaChooser(context, result.url) },
+                            onOpenBrowser = {
+                                haptics.tap()
+                                openUrlInBrowser(context, result.url)
+                            },
+                            onSystemShare = {
+                                haptics.tap()
+                                shareUrlViaChooser(context, result.url)
+                            },
                             onStopLiveSharing = {
+                                haptics.tap()
                                 isStoppingLive = true
                                 errorMessage = null
                                 coroutineScope.launch {
                                     val res = ShareRepository.stopLiveShare(context)
                                     isStoppingLive = false
                                     if (res.isSuccess) {
+                                        haptics.confirm()
                                         linkStoppedInResult = true
                                     } else {
+                                        haptics.reject()
                                         errorMessage = "Could not stop live share. Check your internet connection."
                                     }
                                 }
                             },
-                            onDone = onBack
+                            onDone = {
+                                haptics.tick()
+                                onBack()
+                            }
                         )
                     }
                 }
@@ -642,10 +680,12 @@ fun ShareScreen(
                         copiedLinkId = copiedLinkId,
                         onRetry = refreshSharedLinks,
                         onCopyLink = { item ->
+                            haptics.confirm()
                             copyUrlToClipboard(context, item.url)
                             copiedLinkId = item.shareId
                         },
                         onViewLink = { item ->
+                            haptics.tap()
                             openUrlInBrowser(context, item.url)
                         },
                         onDisableLive = { item ->
@@ -1863,7 +1903,10 @@ private fun YourLinksSection(
                         }
                         FilterChip(
                             selected = selectedFilter == filter,
-                            onClick = { selectedFilter = filter },
+                            onClick = {
+                                view.performFocusSegment()
+                                selectedFilter = filter
+                            },
                             label = {
                                 Text(
                                     text = "${filter.label} ($count)",
@@ -1887,7 +1930,7 @@ private fun YourLinksSection(
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -1908,12 +1951,12 @@ private fun YourLinksSection(
                         confirmValueChange = { value ->
                             when (value) {
                                 SwipeToDismissBoxValue.EndToStart -> {
-                                    view.performKeyTapHaptic()
+                                    view.performFocusReject()
                                     onRequestDelete(item)
                                     false
                                 }
                                 SwipeToDismissBoxValue.StartToEnd -> {
-                                    view.performKeyTapHaptic()
+                                    view.performFocusConfirm()
                                     onCopyLink(item)
                                     false
                                 }

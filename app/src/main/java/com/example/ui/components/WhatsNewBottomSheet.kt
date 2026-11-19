@@ -58,7 +58,7 @@ fun WhatsNewBottomSheet(
     onDismiss: () -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val view = LocalView.current
+    val haptics = rememberFocusHaptics()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val latestRelease = releases.firstOrNull()
 
@@ -67,18 +67,18 @@ fun WhatsNewBottomSheet(
         sheetState = sheetState,
         containerColor = palette.surface,
         contentColor = palette.textPrimary,
-        scrimColor = Color.Black.copy(alpha = 0.78f),
+        scrimColor = Color.Black.copy(alpha = 0.72f),
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(top = 12.dp, bottom = 6.dp)
-                    .width(42.dp)
+                    .width(38.dp)
                     .height(4.dp)
                     .clip(CircleShape)
                     .background(palette.borderHighlight)
             )
         },
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
             modifier = Modifier
@@ -175,18 +175,18 @@ fun WhatsNewBottomSheet(
             val btnScale = rememberSpringPressScale(btnInteraction)
             Button(
                 onClick = {
-                    view.performKeyTapHaptic()
+                    haptics.confirm()
                     onDismiss()
                 },
                 interactionSource = btnInteraction,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = palette.primary,
                     contentColor = palette.onPrimary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(52.dp)
                     .graphicsLayer {
                         scaleX = btnScale
                         scaleY = btnScale
@@ -195,8 +195,8 @@ fun WhatsNewBottomSheet(
             ) {
                 Text(
                     text = "Got It",
-                    fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -208,7 +208,7 @@ private fun ReleaseHighlightCard(
     release: WhatsNewRelease
 ) {
     val palette = LocalFocusTheme.current
-    val cardShape = remember { RoundedCornerShape(16.dp) }
+    val cardShape = remember { RoundedCornerShape(20.dp) }
 
     Column(
         modifier = Modifier
@@ -219,11 +219,11 @@ private fun ReleaseHighlightCard(
                 shape = cardShape
             )
             .border(
-                width = 1.dp,
-                color = palette.primaryBorderTint,
+                width = 0.75.dp,
+                color = palette.border.copy(alpha = 0.7f),
                 shape = cardShape
             )
-            .padding(14.dp),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(

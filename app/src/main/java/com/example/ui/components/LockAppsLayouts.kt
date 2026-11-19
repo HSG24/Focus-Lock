@@ -178,6 +178,8 @@ fun LockAllowedAppsSection(
 ) {
     if (apps.isEmpty()) return
     val activeTheme = LocalFocusTheme.current.theme
+    val haptics = rememberFocusHaptics()
+    val softBorder = palette.border.copy(alpha = 0.7f)
 
     when (layout) {
         LockAppLayout.PILL_ROW -> {
@@ -212,8 +214,11 @@ fun LockAllowedAppsSection(
                             .height(pillHeight)
                             .clip(pillShape)
                             .background(palette.surface, pillShape)
-                            .border(1.dp, palette.border, pillShape)
-                            .clickable(enabled = !isPreview) { onAppClick(app) }
+                            .border(0.75.dp, softBorder, pillShape)
+                            .clickable(enabled = !isPreview) {
+                                haptics.tap()
+                                onAppClick(app)
+                            }
                             .padding(start = startPad, end = endPad)
                             .testTag(testTagForApp(app))
                     ) {
@@ -246,7 +251,7 @@ fun LockAllowedAppsSection(
                 modifier = modifier
                     .clip(dockShape)
                     .background(palette.surface, dockShape)
-                    .border(1.dp, palette.border, dockShape)
+                    .border(0.75.dp, softBorder, dockShape)
                     .horizontalScroll(rememberScrollState())
                     .padding(
                         horizontal = if (isPreview) 10.dp else 14.dp,
@@ -261,7 +266,10 @@ fun LockAllowedAppsSection(
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable(enabled = !isPreview) { onAppClick(app) }
+                            .clickable(enabled = !isPreview) {
+                                haptics.tap()
+                                onAppClick(app)
+                            }
                             .padding(horizontal = 4.dp, vertical = 2.dp)
                             .testTag(testTagForApp(app))
                     ) {
@@ -297,13 +305,16 @@ fun LockAllowedAppsSection(
                     .fillMaxWidth()
                     .clip(cardShape)
                     .background(palette.surface, cardShape)
-                    .border(1.dp, palette.border, cardShape)
+                    .border(0.75.dp, softBorder, cardShape)
             ) {
                 visibleApps.forEachIndexed { index, app ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !isPreview) { onAppClick(app) }
+                            .clickable(enabled = !isPreview) {
+                                haptics.tap()
+                                onAppClick(app)
+                            }
                             .height(if (isPreview) 36.dp else 48.dp)
                             .padding(horizontal = 12.dp)
                             .testTag(testTagForApp(app)),
@@ -367,8 +378,11 @@ fun LockAllowedAppsSection(
                                     .height(if (isPreview) 36.dp else 48.dp)
                                     .clip(chipShape)
                                     .background(palette.surfaceElevated, chipShape)
-                                    .border(1.dp, palette.border, chipShape)
-                                    .clickable(enabled = !isPreview) { onAppClick(app) }
+                                    .border(0.75.dp, softBorder, chipShape)
+                                    .clickable(enabled = !isPreview) {
+                                        haptics.tap()
+                                        onAppClick(app)
+                                    }
                                     .padding(horizontal = 10.dp)
                                     .testTag(testTagForApp(app))
                             ) {
