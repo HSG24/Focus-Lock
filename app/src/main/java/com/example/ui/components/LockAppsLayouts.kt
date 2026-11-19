@@ -37,7 +37,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -105,23 +107,21 @@ fun AllowedAppIconBadge(
     preloadedIcon: ImageBitmap? = null,
     loadIfMissing: Boolean = false
 ) {
-    val activeTheme = LocalFocusTheme.current.theme
-    val iconKey = FocusSettingsRepository.iconCacheKey(app.packageName, activeTheme)
     val resolvedIcon: ImageBitmap? = if (loadIfMissing) {
         val context = LocalContext.current
-        val initial = preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName, activeTheme)
+        val initial = preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
         val asyncLoaded by produceState<ImageBitmap?>(
             initialValue = initial,
-            key1 = iconKey,
+            key1 = app.packageName,
             key2 = preloadedIcon
         ) {
             if (value == null && !app.packageName.startsWith("__builtin_")) {
-                value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName, activeTheme)
+                value = FocusSettingsRepository.loadAppIconBitmapAsync(context, app.packageName)
             }
         }
         asyncLoaded
     } else {
-        preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName, activeTheme)
+        preloadedIcon ?: FocusSettingsRepository.getCachedAppIconBitmap(app.packageName)
     }
 
     Box(
@@ -136,6 +136,7 @@ fun AllowedAppIconBadge(
                 bitmap = resolvedIcon,
                 contentDescription = app.label,
                 contentScale = ContentScale.Fit,
+                colorFilter = ColorFilter.tint(tint, BlendMode.SrcIn),
                 modifier = Modifier.size(iconSize * 1.12f)
             )
         } else {

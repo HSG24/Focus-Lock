@@ -381,8 +381,12 @@ object FocusSettingsRepository {
             .sortedBy { it.label.lowercase() }
     }
 
-    fun iconCacheKey(packageName: String, theme: AppVisualTheme): String =
-        "${packageName}__${theme.id}"
+    /**
+     * Theme-independent cache key so monochrome icon alpha masks are decoded once per package
+     * and tinted instantaneously on the GPU whenever the active theme changes.
+     */
+    fun iconCacheKey(packageName: String, @Suppress("UNUSED_PARAMETER") theme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON): String =
+        packageName
 
     fun getCachedAppIconBitmap(
         packageName: String,
@@ -406,8 +410,7 @@ object FocusSettingsRepository {
             val appCtx = context.applicationContext
             val targetPx = (48f * appCtx.resources.displayMetrics.density).roundToInt().coerceIn(64, 192)
             val drawable = appCtx.packageManager.getApplicationIcon(packageName)
-            val accentColorArgb = FocusThemePalette.from(theme).primary.toArgb()
-            val imageBitmap = toMonochromeTintedBitmap(drawable, targetPx, accentColorArgb).asImageBitmap()
+            val imageBitmap = toMonochromeTintedBitmap(drawable, targetPx, android.graphics.Color.WHITE).asImageBitmap()
             appIconMap.putIfAbsent(key, imageBitmap)
             val cached = appIconMap[key] ?: imageBitmap
             _appIconsState.value = HashMap(appIconMap)
@@ -441,7 +444,6 @@ object FocusSettingsRepository {
         val appContext = context.applicationContext
         val targetPx = (48f * appContext.resources.displayMetrics.density).roundToInt().coerceIn(64, 192)
         val pm = appContext.packageManager
-        val accentColorArgb = FocusThemePalette.from(theme).primary.toArgb()
         var addedAny = false
         for (app in apps) {
             val pkg = app.packageName
@@ -452,7 +454,7 @@ object FocusSettingsRepository {
             ) {
                 try {
                     val drawable = pm.getApplicationIcon(pkg)
-                    val imageBitmap = toMonochromeTintedBitmap(drawable, targetPx, accentColorArgb).asImageBitmap()
+                    val imageBitmap = toMonochromeTintedBitmap(drawable, targetPx, android.graphics.Color.WHITE).asImageBitmap()
                     if (appIconMap.putIfAbsent(key, imageBitmap) == null) {
                         addedAny = true
                     }

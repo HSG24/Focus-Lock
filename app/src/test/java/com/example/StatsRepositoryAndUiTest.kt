@@ -467,6 +467,8 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithText("Borderless Pill Redesign").assertExists()
         composeRule.onNodeWithTag("whats_new_section_fixes").assertExists()
         composeRule.onNodeWithText("FIXES").assertExists()
+        composeRule.onNodeWithText("Smoother Navigation Bar Morph").assertExists()
+        composeRule.onNodeWithText("Instant Theme Sync for Allowed Apps").assertExists()
         composeRule.onNodeWithText("Unmistakable Selected Stats Bars").assertExists()
         composeRule.onNodeWithText("Static Dark Glass & Classic Focus Slider").assertExists()
         composeRule.onNodeWithText("Universal Contrast & Visibility").assertExists()

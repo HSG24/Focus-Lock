@@ -21,6 +21,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -297,9 +298,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Pre-decode theme-tinted monochrome allowed app icons on Dispatchers.IO
-            LaunchedEffect(settingsState.allowedApps, settingsState.appTheme) {
-                FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps, settingsState.appTheme)
+            // Pre-decode theme-independent monochrome app icon masks once on Dispatchers.IO
+            LaunchedEffect(settingsState.allowedApps) {
+                FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
             }
 
             // Resume APK download automatically after granting unknown-sources permission
@@ -401,18 +402,38 @@ class MainActivity : ComponentActivity() {
             val pagerPositionProvider = remember(pagerState) {
                 { pagerState.currentPage + pagerState.currentPageOffsetFraction }
             }
+            val isUserDraggingPager by pagerState.interactionSource.collectIsDraggedAsState()
+            var tapTargetPage by remember { mutableStateOf<Int?>(null) }
+
+            LaunchedEffect(isUserDraggingPager) {
+                if (isUserDraggingPager) {
+                    tapTargetPage = null
+                }
+            }
+
+            val effectiveSelectedTab = tapTargetPage ?: pagerState.currentPage
+            val isLivePagerMotion = tapTargetPage == null && pagerState.isScrollInProgress
+
             val onSelectTab = remember(pagerState, view, coroutineScope) {
                 { targetIndex: Int ->
-                    if (targetIndex != pagerState.currentPage) {
+                    val currentEffective = tapTargetPage ?: pagerState.currentPage
+                    if (targetIndex != currentEffective) {
                         view.performClockTickHaptic()
+                        tapTargetPage = targetIndex
                         coroutineScope.launch {
-                            pagerState.animateScrollToPage(
-                                page = targetIndex,
-                                animationSpec = spring(
-                                    dampingRatio = 0.85f,
-                                    stiffness = Spring.StiffnessMediumLow
+                            try {
+                                pagerState.animateScrollToPage(
+                                    page = targetIndex,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.86f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
                                 )
-                            )
+                            } finally {
+                                if (tapTargetPage == targetIndex) {
+                                    tapTargetPage = null
+                                }
+                            }
                         }
                     }
                 }
@@ -459,9 +480,10 @@ class MainActivity : ComponentActivity() {
 
                         FloatingPillBottomBar(
                             tabs = navTabs,
-                            selectedIndex = pagerState.currentPage,
+                            selectedIndex = effectiveSelectedTab,
                             pagerPositionProvider = pagerPositionProvider,
                             onSelectTab = onSelectTab,
+                            isPagerDragged = isLivePagerMotion,
                             modifier = Modifier.align(Alignment.BottomCenter)
                         )
                     }

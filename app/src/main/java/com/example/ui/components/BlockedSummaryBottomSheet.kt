@@ -50,7 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -260,12 +262,11 @@ private fun BlockedAppGroupCard(
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
 
     val iconBitmap by produceState<ImageBitmap?>(
-        initialValue = FocusSettingsRepository.getCachedAppIconBitmap(group.packageName, palette.theme),
-        key1 = group.packageName,
-        key2 = palette.theme
+        initialValue = FocusSettingsRepository.getCachedAppIconBitmap(group.packageName),
+        key1 = group.packageName
     ) {
         if (value == null) {
-            value = FocusSettingsRepository.loadAppIconBitmapAsync(context, group.packageName, palette.theme)
+            value = FocusSettingsRepository.loadAppIconBitmapAsync(context, group.packageName)
         }
     }
 
@@ -305,6 +306,7 @@ private fun BlockedAppGroupCard(
                             bitmap = iconBitmap!!,
                             contentDescription = group.appLabel,
                             contentScale = ContentScale.Crop,
+                            colorFilter = ColorFilter.tint(palette.primary, BlendMode.SrcIn),
                             modifier = Modifier.size(22.dp).clip(CircleShape)
                         )
                     } else {

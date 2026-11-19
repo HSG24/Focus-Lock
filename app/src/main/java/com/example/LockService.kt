@@ -959,8 +959,8 @@ fun LockScreen(
     val shakeOffset = remember { Animatable(0f) }
     var pinDragAccumulated by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(allowedApps, themePalette.theme) {
-        FocusSettingsRepository.preloadAppIcons(context, allowedApps, themePalette.theme)
+    LaunchedEffect(allowedApps) {
+        FocusSettingsRepository.preloadAppIcons(context, allowedApps)
     }
 
     LaunchedEffect(wrongPinError, autoClearWrongPin) {

@@ -36,14 +36,14 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 9
+    const val CURRENT_RELEASE_ID = 10
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 9,
+            releaseId = 10,
             versionLabel = "Latest Update",
             headline = "Minimal Stats, Share & Fluid Pill Motion",
-            summary = "Completely redesigned Fitbit-inspired Stats & Share screens, unmistakable selected-bar spotlights, iOS-style elastic pill animations across every theme, static dark glass, and the classic black Focus slider.",
+            summary = "Completely redesigned Fitbit-inspired Stats & Share screens, unmistakable selected-bar spotlights, smoother zero-bounce navigation bar morphing, instant theme sync for allowed apps, static dark glass, and the classic black Focus slider.",
             items = listOf(
                 WhatsNewItem(
                     title = "Minimal Pill Stats Redesign",
@@ -89,6 +89,16 @@ object FocusWhatsNewCatalog {
                     title = "Refined Tactile Haptics",
                     description = "Added crisp haptic feedback across buttons, switches, sliders, swipes, link actions, and PIN entry, plus a subtle shake when an incorrect PIN is entered.",
                     category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Smoother Navigation Bar Morph",
+                    description = "Fixed the floating navigation bar pill briefly jumping back to the previous tab while switching screens; tab taps and swipes now glide forward in one continuous elastic motion.",
+                    category = WhatsNewCategory.FIX
+                ),
+                WhatsNewItem(
+                    title = "Instant Theme Sync for Allowed Apps",
+                    description = "System and installed app icons in Settings Allowed Apps now recolor immediately on the same frame when switching themes instead of waiting for background icon reloads.",
+                    category = WhatsNewCategory.FIX
                 ),
                 WhatsNewItem(
                     title = "Unmistakable Selected Stats Bars",

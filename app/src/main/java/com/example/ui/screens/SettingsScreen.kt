@@ -177,8 +177,8 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(settingsState.allowedApps, settingsState.appTheme) {
-        FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps, settingsState.appTheme)
+    LaunchedEffect(settingsState.allowedApps) {
+        FocusSettingsRepository.preloadAppIcons(context, settingsState.allowedApps)
     }
 
     val onSelectTheme = remember(context, view) {

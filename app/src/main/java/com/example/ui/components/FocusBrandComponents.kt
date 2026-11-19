@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import android.view.View
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -28,11 +29,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -292,7 +295,8 @@ fun FloatingPillBottomBar(
     selectedIndex: Int,
     pagerPositionProvider: () -> Float,
     onSelectTab: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPagerDragged: Boolean = false
 ) {
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
@@ -304,31 +308,63 @@ fun FloatingPillBottomBar(
     val currentOnSelect by rememberUpdatedState(onSelectTab)
     var lastScrubbedIndex by remember { mutableIntStateOf(selectedIndex) }
 
-    // Asymmetric leading/trailing edge springs for crisp iOS-style rubber-band pill morph on tap
-    val leftEdge = remember { androidx.compose.animation.core.Animatable(selectedIndex.toFloat()) }
-    val rightEdge = remember { androidx.compose.animation.core.Animatable((selectedIndex + 1).toFloat()) }
-    var previousTabIndex by remember { mutableIntStateOf(selectedIndex) }
+    // Asymmetric leading/trailing edge springs for crisp iOS-style rubber-band pill morph
+    val leftEdge = remember { Animatable(selectedIndex.toFloat()) }
+    val rightEdge = remember { Animatable((selectedIndex + 1).toFloat()) }
 
-    androidx.compose.runtime.LaunchedEffect(selectedIndex) {
-        val prev = previousTabIndex
-        previousTabIndex = selectedIndex
-        val leadSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 560f)
-        val trailSpring = spring<Float>(dampingRatio = 0.80f, stiffness = 250f)
-        if (selectedIndex > prev) {
-            // Moving right: right edge surges ahead first, left edge stretches smoothly behind
-            coroutineScope {
-                launch { rightEdge.animateTo((selectedIndex + 1).toFloat(), leadSpring) }
-                launch { leftEdge.animateTo(selectedIndex.toFloat(), trailSpring) }
-            }
-        } else if (selectedIndex < prev) {
-            // Moving left: left edge surges ahead first, right edge stretches smoothly behind
-            coroutineScope {
-                launch { leftEdge.animateTo(selectedIndex.toFloat(), leadSpring) }
-                launch { rightEdge.animateTo((selectedIndex + 1).toFloat(), trailSpring) }
+    fun computeLiveDragSpan(pagerPos: Float): Pair<Float, Float> {
+        val clamped = pagerPos.coerceIn(0f, maxIdx)
+        val frac = clamped - kotlin.math.floor(clamped)
+        val swipeStretch = kotlin.math.sin(frac * Math.PI).toFloat() * 0.30f
+        val halfStretch = swipeStretch * 0.5f
+        val l = (clamped - halfStretch).coerceIn(0f, maxIdx)
+        val r = (clamped + 1f + halfStretch).coerceIn(l + 0.85f, tabCount.toFloat())
+        return l to r
+    }
+
+    LaunchedEffect(selectedIndex, isPagerDragged) {
+        if (isPagerDragged) {
+            // While the user's finger is actively dragging the pager, keep leftEdge/rightEdge
+            // snapped to the live drag position so releasing smoothly morphs forward with zero jump-back.
+            snapshotFlow { pagerPositionProvider().coerceIn(0f, maxIdx) }.collect { pos ->
+                val (l, r) = computeLiveDragSpan(pos)
+                leftEdge.snapTo(l)
+                rightEdge.snapTo(r)
             }
         } else {
-            leftEdge.snapTo(selectedIndex.toFloat())
-            rightEdge.snapTo((selectedIndex + 1).toFloat())
+            val targetLeft = selectedIndex.toFloat()
+            val targetRight = (selectedIndex + 1).toFloat()
+            val leadSpring = spring<Float>(dampingRatio = 0.80f, stiffness = 540f)
+            val trailSpring = spring<Float>(dampingRatio = 0.86f, stiffness = 250f)
+
+            val movingRight = targetRight > rightEdge.value + 0.01f ||
+                (targetLeft > leftEdge.value + 0.01f && targetRight >= rightEdge.value - 0.01f)
+            val movingLeft = targetLeft < leftEdge.value - 0.01f ||
+                (targetRight < rightEdge.value - 0.01f && targetLeft <= leftEdge.value + 0.01f)
+
+            when {
+                movingRight && !movingLeft -> {
+                    // Moving right: right edge surges ahead first, left edge stretches smoothly behind
+                    coroutineScope {
+                        launch { rightEdge.animateTo(targetRight, leadSpring) }
+                        launch { leftEdge.animateTo(targetLeft, trailSpring) }
+                    }
+                }
+                movingLeft && !movingRight -> {
+                    // Moving left: left edge surges ahead first, right edge stretches smoothly behind
+                    coroutineScope {
+                        launch { leftEdge.animateTo(targetLeft, leadSpring) }
+                        launch { rightEdge.animateTo(targetRight, trailSpring) }
+                    }
+                }
+                else -> {
+                    // Settling cleanly into the target slot (e.g., after a cancelled drag)
+                    coroutineScope {
+                        launch { leftEdge.animateTo(targetLeft, leadSpring) }
+                        launch { rightEdge.animateTo(targetRight, leadSpring) }
+                    }
+                }
+            }
         }
     }
 
@@ -384,21 +420,9 @@ fun FloatingPillBottomBar(
                 }
                 .padding(4.dp)
         ) {
-            // Helper to blend live pager swipe position + asymmetric spring morph into [left, right] in slot units
             fun computePillSpan(): Pair<Float, Float> {
-                val pagerPos = pagerPositionProvider().coerceIn(0f, maxIdx)
-                val springSpan = (rightEdge.value - leftEdge.value).coerceAtLeast(1f)
-                val springStretch = (springSpan - 1f).coerceAtLeast(0f)
-                val pagerFrac = pagerPos - kotlin.math.floor(pagerPos)
-                val isSwipingPager = pagerFrac > 0.005f && pagerFrac < 0.995f
-
-                return if (isSwipingPager && springStretch < 0.06f) {
-                    // During live HorizontalPager swipe: stretch leading/trailing edges organically
-                    val swipeStretch = kotlin.math.sin(pagerFrac * Math.PI).toFloat() * 0.34f
-                    val halfStretch = swipeStretch * 0.5f
-                    val l = (pagerPos - halfStretch).coerceIn(0f, maxIdx)
-                    val r = (pagerPos + 1f + halfStretch).coerceIn(l + 0.85f, tabCount.toFloat())
-                    l to r
+                return if (isPagerDragged) {
+                    computeLiveDragSpan(pagerPositionProvider())
                 } else {
                     val l = leftEdge.value.coerceIn(0f, maxIdx)
                     val r = rightEdge.value.coerceIn(l + 0.85f, tabCount.toFloat())
