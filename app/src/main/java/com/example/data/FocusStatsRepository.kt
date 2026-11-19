@@ -132,6 +132,36 @@ data class MonthClippedWeek(
     val dayCount: Int
 )
 
+@Immutable
+data class HeatmapDayCell(
+    val calendarMillis: Long,
+    val dateLabel: String,
+    val dayOfMonth: Int,
+    val durationMs: Long,
+    val sessionCount: Int,
+    val intensityLevel: Int,
+    val isToday: Boolean,
+    val isFuture: Boolean,
+    val isGoalMet: Boolean
+)
+
+@Immutable
+data class HeatmapWeekColumn(
+    val monthLabel: String?,
+    val days: List<HeatmapDayCell>
+)
+
+@Immutable
+data class FocusHeatmapData(
+    val weeks: List<HeatmapWeekColumn>,
+    val activeDaysCount: Int,
+    val goalMetDaysCount: Int,
+    val totalFocusMs: Long,
+    val currentStreak: Int,
+    val maxStreak: Int,
+    val windowWeeks: Int
+)
+
 object FocusStatsRepository {
     const val RTDB_BASE_URL =
         "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app"
@@ -1239,5 +1269,126 @@ object FocusStatsRepository {
             totalMinutes > 0 -> "${totalMinutes}m"
             else -> "${(ms / 1000L).coerceAtLeast(1L)}s"
         }
+    }
+
+    /**
+     * Builds a Monday-aligned rolling [weeksCount]-week focus consistency heatmap ending
+     * on the current week, scaling each day's intensity (0..4) against [dailyGoalMinutes].
+     */
+    fun buildHeatmapData(
+        sessions: List<Session>,
+        dailyGoalMinutes: Long,
+        weeksCount: Int = 14,
+        nowCal: Calendar = Calendar.getInstance()
+    ): FocusHeatmapData {
+        val safeWeeks = weeksCount.coerceIn(4, 26)
+        val dailyTargetMs = dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
+        val todayStart = startOfDayCalendar(nowCal)
+        val currentWeekMonday = startOfMondayWeekCalendar(todayStart)
+        val startMonday = (currentWeekMonday.clone() as Calendar).apply {
+            add(Calendar.DATE, -((safeWeeks - 1) * 7))
+        }
+
+        val dayTotals = HashMap<String, Long>()
+        val dayCounts = HashMap<String, Int>()
+        val keyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dateLabelFmt = SimpleDateFormat("EEE, MMM d", Locale.US)
+        val monthFmt = SimpleDateFormat("MMM", Locale.US)
+
+        for (session in sessions) {
+            if (session.startTime <= 0L || session.duration <= 0L) continue
+            val key = keyFmt.format(Date(session.startTime))
+            dayTotals[key] = (dayTotals[key] ?: 0L) + session.duration
+            dayCounts[key] = (dayCounts[key] ?: 0) + 1
+        }
+
+        val weeks = ArrayList<HeatmapWeekColumn>(safeWeeks)
+        var activeDays = 0
+        var goalMetDays = 0
+        var totalWindowMs = 0L
+        var lastLabeledMonth = -1
+
+        for (weekIdx in 0 until safeWeeks) {
+            val weekStart = (startMonday.clone() as Calendar).apply {
+                add(Calendar.DATE, weekIdx * 7)
+            }
+            var monthLabel: String? = null
+            val days = ArrayList<HeatmapDayCell>(7)
+
+            for (dayOffset in 0 until 7) {
+                val dayCal = (weekStart.clone() as Calendar).apply {
+                    add(Calendar.DATE, dayOffset)
+                }
+                val dayMonth = dayCal.get(Calendar.MONTH)
+                val dayOfMonth = dayCal.get(Calendar.DAY_OF_MONTH)
+                if (monthLabel == null) {
+                    if (weekIdx == 0 && dayOffset == 0) {
+                        monthLabel = monthFmt.format(dayCal.time)
+                        lastLabeledMonth = dayMonth
+                    } else if (dayOfMonth == 1 && dayMonth != lastLabeledMonth) {
+                        monthLabel = monthFmt.format(dayCal.time)
+                        lastLabeledMonth = dayMonth
+                    }
+                }
+
+                val isToday = isSameDayCalendar(dayCal, todayStart)
+                val isFuture = dayCal.after(todayStart) && !isToday
+                val key = keyFmt.format(dayCal.time)
+                val durationMs = if (isFuture) 0L else (dayTotals[key] ?: 0L)
+                val count = if (isFuture) 0 else (dayCounts[key] ?: 0)
+                val ratio = if (durationMs > 0L) {
+                    durationMs.toFloat() / dailyTargetMs.toFloat()
+                } else {
+                    0f
+                }
+                val isGoalMet = !isFuture && durationMs >= dailyTargetMs
+                val level = when {
+                    isFuture || durationMs <= 0L -> 0
+                    isGoalMet -> 4
+                    ratio >= 0.70f -> 3
+                    ratio >= 0.35f -> 2
+                    else -> 1
+                }
+
+                if (!isFuture && durationMs > 0L) {
+                    activeDays++
+                    totalWindowMs += durationMs
+                }
+                if (isGoalMet) {
+                    goalMetDays++
+                }
+
+                days.add(
+                    HeatmapDayCell(
+                        calendarMillis = dayCal.timeInMillis,
+                        dateLabel = dateLabelFmt.format(dayCal.time),
+                        dayOfMonth = dayOfMonth,
+                        durationMs = durationMs,
+                        sessionCount = count,
+                        intensityLevel = level,
+                        isToday = isToday,
+                        isFuture = isFuture,
+                        isGoalMet = isGoalMet
+                    )
+                )
+            }
+
+            weeks.add(
+                HeatmapWeekColumn(
+                    monthLabel = monthLabel,
+                    days = days
+                )
+            )
+        }
+
+        return FocusHeatmapData(
+            weeks = weeks,
+            activeDaysCount = activeDays,
+            goalMetDaysCount = goalMetDays,
+            totalFocusMs = totalWindowMs,
+            currentStreak = calculateStreak(sessions),
+            maxStreak = calculateMaxStreak(sessions),
+            windowWeeks = safeWeeks
+        )
     }
 }

@@ -36,94 +36,24 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 10
+    const val CURRENT_RELEASE_ID = 11
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 10,
+            releaseId = 11,
             versionLabel = "Latest Update",
-            headline = "Minimal Stats, Share & Fluid Pill Motion",
-            summary = "Completely redesigned Fitbit-inspired Stats & Share screens, unmistakable selected-bar spotlights, smoother zero-bounce navigation bar morphing, instant theme sync for allowed apps, static dark glass, and the classic black Focus slider.",
+            headline = "Focus Heatmap & Liquid Glass Default",
+            summary = "A new minimal 14-week Focus Consistency Heatmap in Stats and Dark Liquid Glass set as the default look.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Minimal Pill Stats Redesign",
-                    description = "Rebuilt Stats from scratch with a calm, uncluttered health-app layout: single-row floating date pill, horizontal full-pill goal progress bar, capsule bar chart with spring entrance, and four airy metric capsules.",
+                    title = "Focus Heatmap & Streak Calendar",
+                    description = "Added a minimal, borderless 14-week consistency grid to Stats with rounded squircle tiles, theme-matched intensity shades, active-day tap inspection, and one-tap Jump to Day.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "Fluid Elastic Pill Animations",
-                    description = "Added iOS-style rubber-band morphing pills and directional label/icon glide across the navigation bar, Stats tabs, Share selectors, and Settings controls in every theme—triggered only by your touch and swipes.",
+                    title = "Liquid Glass as Default Theme",
+                    description = "Set Dark Liquid Glass as the default visual theme across the app for a sleek, modern first impression right out of the box.",
                     category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Minimal Share Screen Redesign",
-                    description = "Streamlined Share into borderless circular-icon cards, elastic segmented controls for Live, Range, and Your Links, rolling preview totals, and directional step transitions.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Dark Liquid Glass & Nordic Sage",
-                    description = "Rebuilt Liquid Glass into a deep obsidian dark-glass finish with subtle specular highlights and touch refraction—replacing light frosted panels—alongside calm basalt Nordic Sage.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Borderless Pill Redesign",
-                    description = "Every card, panel, chip, button, badge, and dialog across all four themes now uses softer circular and shorter pill-like proportions with zero harsh outlines.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Categorized What's New",
-                    description = "Release notes are now cleanly organized into dedicated New and Fixes sections so updates are effortless to scan.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Minimal Visual Redesign",
-                    description = "Decluttered Home, Stats, Settings, and Lock screens with a centered daily-goal ring, softer tonal surfaces, compact theme swatches, and a collapsible Widget Studio.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Fluid Swipe Gestures",
-                    description = "Slide or tap the Focus pill to start locking, swipe across the bottom capsule to scrub tabs, drag across Stats charts to inspect bars, pull to refresh Stats, and swipe left on PIN dots to delete.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Refined Tactile Haptics",
-                    description = "Added crisp haptic feedback across buttons, switches, sliders, swipes, link actions, and PIN entry, plus a subtle shake when an incorrect PIN is entered.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Smoother Navigation Bar Morph",
-                    description = "Fixed the floating navigation bar pill briefly jumping back to the previous tab while switching screens; tab taps and swipes now glide forward in one continuous elastic motion.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Instant Theme Sync for Allowed Apps",
-                    description = "System and installed app icons in Settings Allowed Apps now recolor immediately on the same frame when switching themes instead of waiting for background icon reloads.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Unmistakable Selected Stats Bars",
-                    description = "Selected bars in Stats now pop slightly wider with a theme-matched luminous gradient, soft vertical column spotlight, floating top indicator dot, and a filled date pill underneath across all four themes.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Static Dark Glass & Classic Focus Slider",
-                    description = "Removed all continuous live idle animations from Liquid Glass and restored the classic black Focus slider track with theme-colored circular lock thumb on Crimson, Solar Amber, and Nordic Sage.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Universal Contrast & Visibility",
-                    description = "Tuned text, pill fills, dialogs, and elevated surfaces across Crimson, Dark Glass, Solar Amber, and Nordic Sage for crisp legibility everywhere.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Smarter Stats Bar Interaction",
-                    description = "Empty (0s) bars in Stats are no longer clickable; tapping or swiping above no-data bars now passes straight through for smooth scrolling and tab switching while bars with data stay interactive.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Reliability & Accuracy Fixes",
-                    description = "Fixed Stats calendar date shifts, offline streak calculations, sub-hour goal labels, widget preview values, and lock session persistence across background restarts.",
-                    category = WhatsNewCategory.FIX
                 )
             )
         )

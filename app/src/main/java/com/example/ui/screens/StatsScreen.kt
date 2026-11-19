@@ -67,6 +67,7 @@ import com.example.data.FocusXpRepository
 import com.example.data.ShareRepository
 import com.example.data.StatsSyncStatus
 import com.example.data.StatsTimeframe
+import com.example.ui.components.FocusHeatmapCard
 import com.example.ui.components.RankXpBottomSheet
 import com.example.ui.components.StatsDateNavigatorSection
 import com.example.ui.components.StatsSyncStatusBadge
@@ -132,6 +133,17 @@ fun StatsScreen(
             timeframe = selectedTimeframe,
             selectedDate = selectedDate,
             dailyGoalMinutes = dailyGoalMinutes
+        )
+    }
+
+    val heatmapData = remember(
+        statsState.sessions,
+        dailyGoalMinutes
+    ) {
+        FocusStatsRepository.buildHeatmapData(
+            sessions = statsState.sessions,
+            dailyGoalMinutes = dailyGoalMinutes,
+            weeksCount = 14
         )
     }
 
@@ -325,6 +337,20 @@ fun StatsScreen(
                         UnifiedBentoMetricsGrid(
                             report = report,
                             selectedBucket = selectedBucket,
+                            modifier = Modifier.widthIn(max = 600.dp)
+                        )
+                    }
+
+                    item(key = "focus_heatmap_card", contentType = "heatmap") {
+                        FocusHeatmapCard(
+                            heatmap = heatmapData,
+                            onJumpToDay = { dayMillis ->
+                                selectedBucketIndex = null
+                                selectedTimeframe = StatsTimeframe.DAY
+                                selectedDate = Calendar.getInstance().apply {
+                                    timeInMillis = dayMillis
+                                }
+                            },
                             modifier = Modifier.widthIn(max = 600.dp)
                         )
                     }

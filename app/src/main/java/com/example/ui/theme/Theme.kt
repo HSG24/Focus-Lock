@@ -8,7 +8,7 @@ import androidx.compose.runtime.remember
 
 @Composable
 fun MyApplicationTheme(
-    appTheme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON,
+    appTheme: AppVisualTheme = AppVisualTheme.LIQUID_GLASS,
     content: @Composable () -> Unit
 ) {
     val palette = remember(appTheme) { FocusThemePalette.from(appTheme) }

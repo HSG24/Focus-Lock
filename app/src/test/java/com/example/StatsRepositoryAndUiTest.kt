@@ -460,27 +460,53 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
         composeRule.onNodeWithTag("whats_new_section_new").assertIsDisplayed()
         composeRule.onNodeWithText("NEW").assertIsDisplayed()
-        composeRule.onNodeWithText("Minimal Pill Stats Redesign").assertIsDisplayed()
-        composeRule.onNodeWithText("Fluid Elastic Pill Animations").assertIsDisplayed()
-        composeRule.onNodeWithText("Minimal Share Screen Redesign").assertExists()
-        composeRule.onNodeWithText("Dark Liquid Glass & Nordic Sage").assertExists()
-        composeRule.onNodeWithText("Borderless Pill Redesign").assertExists()
-        composeRule.onNodeWithTag("whats_new_section_fixes").assertExists()
-        composeRule.onNodeWithText("FIXES").assertExists()
-        composeRule.onNodeWithText("Smoother Navigation Bar Morph").assertExists()
-        composeRule.onNodeWithText("Instant Theme Sync for Allowed Apps").assertExists()
-        composeRule.onNodeWithText("Unmistakable Selected Stats Bars").assertExists()
-        composeRule.onNodeWithText("Static Dark Glass & Classic Focus Slider").assertExists()
-        composeRule.onNodeWithText("Universal Contrast & Visibility").assertExists()
-        composeRule.onNodeWithText("Smarter Stats Bar Interaction").assertExists()
-        composeRule.onNodeWithText("Minimal Visual Redesign").assertExists()
-        composeRule.onNodeWithText("Day-by-Day Monthly Chart").assertDoesNotExist()
+        composeRule.onNodeWithText("Focus Heatmap & Streak Calendar").assertIsDisplayed()
+        composeRule.onNodeWithText("Liquid Glass as Default Theme").assertIsDisplayed()
+        // Previous entries were cleared as requested
+        composeRule.onNodeWithText("Minimal Pill Stats Redesign").assertDoesNotExist()
+        composeRule.onNodeWithText("Fluid Elastic Pill Animations").assertDoesNotExist()
+        composeRule.onNodeWithText("Smoother Navigation Bar Morph").assertDoesNotExist()
+        composeRule.onNodeWithTag("whats_new_section_fixes").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
-        composeRule.onNodeWithText("Earlier Updates").assertDoesNotExist()
 
         composeRule.onNodeWithTag("whats_new_got_it_button").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("whats_new_bottom_sheet").assertDoesNotExist()
+    }
+
+    @Test
+    fun focusHeatmapBuilder_computesIntensityLevelsAndActiveCountsAccurately() {
+        val now = Calendar.getInstance().apply {
+            set(2026, Calendar.NOVEMBER, 19, 14, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val todayMs = now.timeInMillis
+        val yesterdayMs = (now.clone() as Calendar).apply { add(Calendar.DATE, -1) }.timeInMillis
+        val twoDaysAgoMs = (now.clone() as Calendar).apply { add(Calendar.DATE, -2) }.timeInMillis
+
+        val sessions = listOf(
+            Session(startTime = todayMs, duration = 60L * 60_000L),        // 100% of 60m goal -> level 4
+            Session(startTime = yesterdayMs, duration = 45L * 60_000L),    // 75% -> level 3
+            Session(startTime = twoDaysAgoMs, duration = 15L * 60_000L)    // 25% -> level 1
+        )
+
+        val heatmap = FocusStatsRepository.buildHeatmapData(
+            sessions = sessions,
+            dailyGoalMinutes = 60L,
+            weeksCount = 14,
+            nowCal = now
+        )
+
+        assertEquals(14, heatmap.weeks.size)
+        assertTrue(heatmap.weeks.all { it.days.size == 7 })
+        assertEquals(3, heatmap.activeDaysCount)
+        assertEquals(1, heatmap.goalMetDaysCount)
+
+        val allCells = heatmap.weeks.flatMap { it.days }
+        val todayCell = allCells.first { it.isToday }
+        assertEquals(4, todayCell.intensityLevel)
+        assertTrue(todayCell.isGoalMet)
+        assertEquals(1, todayCell.sessionCount)
     }
 
     @Test

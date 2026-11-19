@@ -11,17 +11,17 @@ enum class AppVisualTheme(
     val subtitle: String,
     val badgeTag: String
 ) {
-    NOTHING_CRIMSON(
-        id = "nothing_crimson",
-        displayName = "Nothing Crimson",
-        subtitle = "Dot-matrix pitch black & Nothing red",
-        badgeTag = "DOT MATRIX"
-    ),
     LIQUID_GLASS(
         id = "liquid_glass",
         displayName = "Liquid Glass",
         subtitle = "Deep obsidian dark glass with subtle specular depth",
         badgeTag = "GLASS"
+    ),
+    NOTHING_CRIMSON(
+        id = "nothing_crimson",
+        displayName = "Nothing Crimson",
+        subtitle = "Dot-matrix pitch black & Nothing red",
+        badgeTag = "DOT MATRIX"
     ),
     SOLAR_AMBER(
         id = "solar_amber",
@@ -38,10 +38,10 @@ enum class AppVisualTheme(
 
     companion object {
         fun fromIdOrName(raw: String?): AppVisualTheme {
-            if (raw.isNullOrBlank()) return NOTHING_CRIMSON
+            if (raw.isNullOrBlank()) return LIQUID_GLASS
             return entries.firstOrNull {
                 it.name.equals(raw, ignoreCase = true) || it.id.equals(raw, ignoreCase = true)
-            } ?: NOTHING_CRIMSON
+            } ?: LIQUID_GLASS
         }
     }
 }
@@ -184,4 +184,4 @@ data class FocusThemePalette(
     }
 }
 
-val LocalFocusTheme = staticCompositionLocalOf { FocusThemePalette.NothingCrimson }
+val LocalFocusTheme = staticCompositionLocalOf { FocusThemePalette.LiquidGlass }

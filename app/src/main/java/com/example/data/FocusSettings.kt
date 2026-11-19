@@ -59,7 +59,7 @@ data class InstalledAppInfo(
 
 @Immutable
 data class FocusSettingsState(
-    val appTheme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON,
+    val appTheme: AppVisualTheme = AppVisualTheme.LIQUID_GLASS,
     val lockAppLayout: LockAppLayout = LockAppLayout.PILL_ROW,
     val minimalPillButtonSizeDp: Int = FocusSettingsRepository.DEFAULT_PILL_BUTTON_SIZE_DP,
     val allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
@@ -172,7 +172,7 @@ object FocusSettingsRepository {
     }
 
     private fun readState(prefs: SharedPreferences): FocusSettingsState {
-        val themeRaw = prefs.getString(KEY_APP_THEME, AppVisualTheme.NOTHING_CRIMSON.name)
+        val themeRaw = prefs.getString(KEY_APP_THEME, AppVisualTheme.LIQUID_GLASS.name)
         val appTheme = AppVisualTheme.fromIdOrName(themeRaw)
 
         val layoutName = prefs.getString(KEY_LOCK_LAYOUT, LockAppLayout.PILL_ROW.name)
@@ -385,12 +385,12 @@ object FocusSettingsRepository {
      * Theme-independent cache key so monochrome icon alpha masks are decoded once per package
      * and tinted instantaneously on the GPU whenever the active theme changes.
      */
-    fun iconCacheKey(packageName: String, @Suppress("UNUSED_PARAMETER") theme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON): String =
+    fun iconCacheKey(packageName: String, @Suppress("UNUSED_PARAMETER") theme: AppVisualTheme = AppVisualTheme.LIQUID_GLASS): String =
         packageName
 
     fun getCachedAppIconBitmap(
         packageName: String,
-        theme: AppVisualTheme = AppVisualTheme.NOTHING_CRIMSON
+        theme: AppVisualTheme = AppVisualTheme.LIQUID_GLASS
     ): ImageBitmap? {
         if (packageName.startsWith("__builtin_")) return null
         return appIconMap[iconCacheKey(packageName, theme)]

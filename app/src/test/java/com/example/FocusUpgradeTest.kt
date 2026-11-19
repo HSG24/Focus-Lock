@@ -367,15 +367,15 @@ class FocusUpgradeTest {
             assertTrue("Expected bright textPrimary for $theme", p.textPrimary.red > 0.85f && p.textPrimary.green > 0.85f)
             assertTrue("Expected dark background for $theme", p.background.red < 0.10f && p.background.green < 0.10f && p.background.blue < 0.10f)
         }
-        // Removed legacy themes cleanly fall back to Nothing Crimson
-        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("emerald_terminal"))
-        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("EMERALD_TERMINAL"))
-        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("cyber_ice"))
-        assertEquals(AppVisualTheme.NOTHING_CRIMSON, AppVisualTheme.fromIdOrName("ultraviolet_pulse"))
+        // Removed legacy themes cleanly fall back to Liquid Glass (default theme)
+        assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("emerald_terminal"))
+        assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("EMERALD_TERMINAL"))
+        assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("cyber_ice"))
+        assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("ultraviolet_pulse"))
 
         val settings = FocusSettingsRepository.getCurrent(context)
         assertEquals(240L, settings.dailyGoalMinutes)
-        assertEquals(AppVisualTheme.NOTHING_CRIMSON, settings.appTheme)
+        assertEquals(AppVisualTheme.LIQUID_GLASS, settings.appTheme)
         assertTrue(settings.widgetShowDottedRing)
         assertTrue(settings.blockPowerMenuDuringLock)
     }
