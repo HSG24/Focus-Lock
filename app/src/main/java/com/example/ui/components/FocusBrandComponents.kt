@@ -372,7 +372,7 @@ fun FloatingPillBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 28.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         val pillBgModifier = if (palette.isLiquidGlass) {
@@ -390,7 +390,7 @@ fun FloatingPillBottomBar(
 
         Box(
             modifier = Modifier
-                .widthIn(max = 336.dp)
+                .widthIn(max = 396.dp)
                 .fillMaxWidth()
                 .height(52.dp)
                 .then(pillBgModifier)
@@ -552,13 +552,13 @@ private fun PillTabItem(
             imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
             contentDescription = tab.label,
             tint = contentColor,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(16.dp)
         )
-        Box(modifier = Modifier.width(5.dp))
+        Box(modifier = Modifier.width(4.dp))
         Text(
             text = tab.label,
             style = MaterialTheme.typography.labelMedium,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = contentColor,
             maxLines = 1,

@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <queries>
@@ -130,6 +132,21 @@
                 android:resource="@xml/accessibility_power_blocker_config" />
         </service>
 
+        <service
+            android:name=".service.DynamicIslandOverlayService"
+            android:exported="false" />
+
+        <receiver
+            android:name=".service.ScheduleAlarmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".widget.NothingFocusWidgetReceiver"
             android:exported="true">
@@ -139,6 +156,66 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/nothing_focus_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NothingClockWidgetReceiver"
+            android:label="Focus Clock (2×2)"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nothing_clock_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NothingHeatmapWidgetReceiver"
+            android:label="Consistency Matrix (4×2)"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nothing_heatmap_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NothingScheduleWidgetReceiver"
+            android:label="Next Schedule (4×2)"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nothing_schedule_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NothingGoalBarWidgetReceiver"
+            android:label="Daily Goal Bar (4×1)"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nothing_goal_bar_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NothingStreakRankWidgetReceiver"
+            android:label="Streak &amp; Rank (2×2)"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nothing_streak_rank_widget_info" />
         </receiver>
 
         <provider

@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +52,9 @@ import com.example.data.FocusSettingsRepository
 import com.example.data.FocusSettingsState
 import com.example.data.FocusXpRepository
 import com.example.data.FocusXpState
+import com.example.data.NothingWidgetKind
+import com.example.data.SingleWidgetConfig
+import com.example.data.WidgetStudioRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -70,9 +74,13 @@ object NothingFocusWidgetUpdater {
     }
 
     suspend fun updateAllWidgets(context: Context) {
-        runCatching {
-            NothingFocusWidget().updateAll(context.applicationContext)
-        }
+        val appCtx = context.applicationContext
+        runCatching { NothingFocusWidget().updateAll(appCtx) }
+        runCatching { NothingClockWidget().updateAll(appCtx) }
+        runCatching { NothingHeatmapWidget().updateAll(appCtx) }
+        runCatching { NothingScheduleWidget().updateAll(appCtx) }
+        runCatching { NothingGoalBarWidget().updateAll(appCtx) }
+        runCatching { NothingStreakRankWidget().updateAll(appCtx) }
     }
 }
 
@@ -85,6 +93,8 @@ class NothingFocusWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val settings = FocusSettingsRepository.getCurrent(context)
         val xpState = FocusXpRepository.getCurrent(context)
+        val widgetConfig = WidgetStudioRepository.getConfig(context, NothingWidgetKind.GOAL_RING)
+        val widgetPalette = resolveWidgetPalette(widgetConfig, settings.appTheme)
         val isLocked = LockService.currentSessionStartTimeMs > 0L
 
         val goalMs = settings.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
@@ -101,7 +111,11 @@ class NothingFocusWidget : GlanceAppWidget() {
                 studyHoursText = formatWidgetHours(xpState.todayFocusMs, isLocked),
                 percentText = if (settings.widgetShowGoalPercent) "${progressPercent}%" else null,
                 showStudyHours = settings.widgetShowStudyHours,
-                canvasSizePx = canvasSizePx
+                canvasSizePx = canvasSizePx,
+                accentColorArgb = widgetPalette.accent.toArgb(),
+                completedColorArgb = widgetPalette.activeDot.toArgb(),
+                inactiveColorArgb = widgetPalette.inactiveDot.toArgb(),
+                textColorArgb = widgetPalette.textPrimary.toArgb()
             )
         } else {
             null
@@ -111,13 +125,19 @@ class NothingFocusWidget : GlanceAppWidget() {
             context = context,
             label = "FOCUS LOCK",
             isLocked = isLocked,
-            density = density
+            density = density,
+            dotColorArgb = if (widgetConfig.showHeaderDots) {
+                (if (isLocked) widgetPalette.success else widgetPalette.accent).toArgb()
+            } else null,
+            textColorArgb = widgetPalette.textPrimary.toArgb()
         )
 
         provideContent {
             NothingWidgetContent(
                 settings = settings,
                 xpState = xpState,
+                widgetConfig = widgetConfig,
+                widgetPalette = widgetPalette,
                 progressPercent = progressPercent,
                 isLocked = isLocked,
                 headerBitmap = headerBitmap,
@@ -142,6 +162,8 @@ class NothingFocusWidget : GlanceAppWidget() {
     private fun NothingWidgetContent(
         settings: FocusSettingsState,
         xpState: FocusXpState,
+        widgetConfig: SingleWidgetConfig,
+        widgetPalette: WidgetVisualPalette,
         progressPercent: Int,
         isLocked: Boolean,
         headerBitmap: Bitmap,
@@ -151,19 +173,23 @@ class NothingFocusWidget : GlanceAppWidget() {
         val ringDisplaySize = minOf(widgetSize.height * 0.64f, widgetSize.width * 0.72f)
             .coerceIn(76.dp, 176.dp)
 
-        val cardBg = Color(0xFF1B1B1D)
-        val chipBg = Color(0xFF232327)
-        val chipBorder = Color(0xFF3A3A40)
-        val nothingRed = Color(0xFFD71921)
-        val white = Color(0xFFFFFFFF)
-        val footerMuted = Color(0xFFA0A0A8)
+        val cardBg = widgetPalette.cardBg
+        val chipBg = widgetPalette.chipBg
+        val accent = widgetPalette.accent
+        val white = widgetPalette.textPrimary
+        val footerMuted = widgetPalette.textSecondary
+        val tapAction = if (widgetConfig.enableQuickLockTap) {
+            actionStartActivity<QuickLockActivity>()
+        } else {
+            actionStartActivity<MainActivity>()
+        }
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .cornerRadius(26.dp)
+                .cornerRadius(widgetConfig.cornerStyle.radiusDp.dp)
                 .background(ColorProvider(cardBg))
-                .clickable(actionStartActivity<MainActivity>()),
+                .clickable(tapAction),
             contentAlignment = Alignment.Center
         ) {
             // Center: Enlarged Dotted Circular Progress Gauge (62%-66% height) or Compact Readout
@@ -198,7 +224,7 @@ class NothingFocusWidget : GlanceAppWidget() {
                             Text(
                                 text = "${progressPercent}%",
                                 style = TextStyle(
-                                    color = ColorProvider(nothingRed),
+                                    color = ColorProvider(accent),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
@@ -229,31 +255,22 @@ class NothingFocusWidget : GlanceAppWidget() {
                     )
                     if (settings.widgetShowStreakBadge) {
                         Spacer(modifier = GlanceModifier.width(6.dp))
-                        // Bordered streak pill (1dp border + dark interior)
                         Box(
                             modifier = GlanceModifier
-                                .cornerRadius(10.dp)
-                                .background(ColorProvider(chipBorder))
-                                .padding(1.dp),
+                                .cornerRadius(50.dp)
+                                .background(ColorProvider(chipBg))
+                                .padding(horizontal = 7.dp, vertical = 2.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = GlanceModifier
-                                    .cornerRadius(9.dp)
-                                    .background(ColorProvider(chipBg))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${xpState.currentStreak}D",
-                                    style = TextStyle(
-                                        color = ColorProvider(white),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    maxLines = 1
-                                )
-                            }
+                            Text(
+                                text = "${xpState.currentStreak}D",
+                                style = TextStyle(
+                                    color = ColorProvider(white),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                maxLines = 1
+                            )
                         }
                     }
                 }
@@ -329,7 +346,9 @@ class NothingFocusWidget : GlanceAppWidget() {
             context: Context,
             label: String,
             isLocked: Boolean,
-            density: Float = 3f
+            density: Float = 3f,
+            dotColorArgb: Int? = android.graphics.Color.parseColor(if (isLocked) "#10B981" else "#D71921"),
+            textColorArgb: Int = android.graphics.Color.WHITE
         ): Bitmap {
             val scale = density.coerceAtLeast(3f)
             val widthPx = (140f * scale).roundToInt().coerceAtLeast(420)
@@ -337,22 +356,26 @@ class NothingFocusWidget : GlanceAppWidget() {
             val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
-            val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                color = android.graphics.Color.parseColor(if (isLocked) "#10B981" else "#D71921")
-                style = Paint.Style.FILL
+            var textStartX = 1f * scale
+            if (dotColorArgb != null) {
+                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    color = dotColorArgb
+                    style = Paint.Style.FILL
+                }
+                val dotRadius = 3.2f * scale
+                canvas.drawCircle(dotRadius + 1f * scale, heightPx / 2f, dotRadius, dotPaint)
+                textStartX = dotRadius * 2f + 7f * scale
             }
-            val dotRadius = 3.2f * scale
-            canvas.drawCircle(dotRadius + 1f * scale, heightPx / 2f, dotRadius, dotPaint)
 
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                color = android.graphics.Color.WHITE
+                color = textColorArgb
                 textSize = 11.5f * scale
                 typeface = loadDotTypeface(context)
                 isFakeBoldText = true
                 letterSpacing = 0.08f
             }
             val textY = heightPx / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(label, dotRadius * 2f + 7f * scale, textY, textPaint)
+            canvas.drawText(label, textStartX, textY, textPaint)
 
             return bitmap
         }
@@ -363,7 +386,11 @@ class NothingFocusWidget : GlanceAppWidget() {
             studyHoursText: String,
             percentText: String?,
             showStudyHours: Boolean,
-            canvasSizePx: Int = 720
+            canvasSizePx: Int = 720,
+            accentColorArgb: Int = android.graphics.Color.parseColor("#D71921"),
+            completedColorArgb: Int = android.graphics.Color.WHITE,
+            inactiveColorArgb: Int = android.graphics.Color.parseColor("#3A3A40"),
+            textColorArgb: Int = android.graphics.Color.WHITE
         ): Bitmap {
             val sizePx = canvasSizePx.coerceAtLeast(640)
             val scale = sizePx / 720f
@@ -383,19 +410,18 @@ class NothingFocusWidget : GlanceAppWidget() {
             val headIndex = (activeDots - 1).coerceAtLeast(0)
 
             val inactivePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                color = android.graphics.Color.parseColor("#3A3A40")
+                color = inactiveColorArgb
                 style = Paint.Style.FILL
             }
             val completedPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                color = android.graphics.Color.WHITE
+                color = completedColorArgb
                 style = Paint.Style.FILL
             }
             val headPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                color = android.graphics.Color.parseColor("#D71921")
+                color = accentColorArgb
                 style = Paint.Style.FILL
             }
 
-            // ~3.5dp visual diameter at 116dp ring -> 11px radius on 720px canvas
             val inactiveDotRadius = 10.8f * scale
             val completedDotRadius = 11.4f * scale
             val headDotRadius = 15.2f * scale
@@ -405,15 +431,14 @@ class NothingFocusWidget : GlanceAppWidget() {
                 val dx = cx + (radius * cos(angleRad)).toFloat()
                 val dy = cy + (radius * sin(angleRad)).toFloat()
                 when {
-                    i == headIndex -> canvas.drawCircle(dx, dy, headDotRadius, headPaint)
+                    i == headIndex && activeDots > 0 -> canvas.drawCircle(dx, dy, headDotRadius, headPaint)
                     i < activeDots -> canvas.drawCircle(dx, dy, completedDotRadius, completedPaint)
                     else -> canvas.drawCircle(dx, dy, inactiveDotRadius, inactivePaint)
                 }
             }
 
-            // 4 subtle cardinal accent ticks (12, 3, 6, 9 o'clock) just inside the dotted ring
             val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                color = android.graphics.Color.parseColor("#5A5A64")
+                color = inactiveColorArgb
                 style = Paint.Style.STROKE
                 strokeWidth = 5.5f * scale
                 strokeCap = Paint.Cap.ROUND
@@ -437,8 +462,8 @@ class NothingFocusWidget : GlanceAppWidget() {
 
             if (showStudyHours) {
                 val mainPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 122f * scale // ~20sp crisp dot-matrix numerals
+                    color = textColorArgb
+                    textSize = 122f * scale
                     typeface = dotFace
                     isFakeBoldText = true
                     textAlign = Paint.Align.CENTER
@@ -459,8 +484,8 @@ class NothingFocusWidget : GlanceAppWidget() {
 
             if (percentText != null) {
                 val subPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                    color = android.graphics.Color.parseColor("#D71921")
-                    textSize = 76f * scale // ~12sp bold crimson percentage
+                    color = accentColorArgb
+                    textSize = 76f * scale
                     typeface = dotFace
                     isFakeBoldText = true
                     textAlign = Paint.Align.CENTER

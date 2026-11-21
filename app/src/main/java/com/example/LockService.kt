@@ -94,6 +94,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.data.AllowedApp
+import com.example.data.DynamicIslandRepository
+import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
 import com.example.data.FocusXpRepository
@@ -103,6 +105,7 @@ import com.example.data.ShareRepository
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
+import com.example.ui.components.ScheduledLockScreen
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemedTimerRing
 import com.example.ui.components.focusGlassPanel
@@ -134,12 +137,26 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val KEY_BUBBLE_Y = "floating_bubble_y"
         private const val KEY_ACTIVE_SESSION_START = "active_session_start_ms"
         private const val KEY_ACTIVE_SESSION_PIN = "active_session_pin"
+        private const val KEY_ACTIVE_IS_SCHEDULED = "active_is_scheduled"
+        private const val KEY_ACTIVE_SCHEDULE_ID = "active_schedule_id"
+        private const val KEY_ACTIVE_SCHEDULE_NAME = "active_schedule_name"
+        private const val KEY_ACTIVE_SCHEDULE_RANGE = "active_schedule_range"
+        private const val KEY_ACTIVE_SCHEDULE_END_MS = "active_schedule_end_ms"
+
+        const val EXTRA_IS_SCHEDULED = "extra_is_scheduled"
+        const val EXTRA_SCHEDULE_ID = "extra_schedule_id"
+        const val EXTRA_SCHEDULE_NAME = "extra_schedule_name"
+        const val EXTRA_SCHEDULE_TIME_RANGE = "extra_schedule_time_range"
+        const val EXTRA_SCHEDULE_END_TIME_MS = "extra_schedule_end_time_ms"
 
         @Volatile
         var currentSessionStartTimeMs: Long = 0L
 
         @Volatile
         var isRunning: Boolean = false
+
+        @Volatile
+        var isScheduledSession: Boolean = false
 
         fun clampBubblePosition(
             x: Int,
@@ -176,6 +193,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var bubbleY: Int = -1
     private var targetPin: String = ""
     private var startTime: Long = 0
+    private var activeScheduleId: String? = null
+    private var activeScheduleName: String = "Scheduled Focus"
+    private var activeScheduleTimeRange: String = ""
+    private var activeScheduleEndTimeMs: Long = 0L
 
     @Volatile
     private var minimizeTimestamp: Long = 0L
@@ -185,6 +206,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private val isStoppingLock = AtomicBoolean(false)
     private var isMinimizedState = mutableStateOf(false)
+    private var isScheduledUiState = mutableStateOf(false)
     private var monitorJob: Job? = null
     private val serviceJob = SupervisorJob()
     private val scope = CoroutineScope(serviceJob + Dispatchers.IO)
@@ -194,11 +216,24 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         isMinimizedState.value = minimized
     }
 
-    private fun persistActiveSession(startMs: Long, pin: String) {
+    private fun persistActiveSession(
+        startMs: Long,
+        pin: String,
+        scheduled: Boolean = isScheduledSession,
+        scheduleId: String? = activeScheduleId,
+        scheduleName: String = activeScheduleName,
+        scheduleRange: String = activeScheduleTimeRange,
+        scheduleEndMs: Long = activeScheduleEndTimeMs
+    ) {
         getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putLong(KEY_ACTIVE_SESSION_START, startMs)
             .putString(KEY_ACTIVE_SESSION_PIN, pin)
+            .putBoolean(KEY_ACTIVE_IS_SCHEDULED, scheduled)
+            .putString(KEY_ACTIVE_SCHEDULE_ID, scheduleId)
+            .putString(KEY_ACTIVE_SCHEDULE_NAME, scheduleName)
+            .putString(KEY_ACTIVE_SCHEDULE_RANGE, scheduleRange)
+            .putLong(KEY_ACTIVE_SCHEDULE_END_MS, scheduleEndMs)
             .apply()
     }
 
@@ -207,6 +242,11 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             .edit()
             .remove(KEY_ACTIVE_SESSION_START)
             .remove(KEY_ACTIVE_SESSION_PIN)
+            .remove(KEY_ACTIVE_IS_SCHEDULED)
+            .remove(KEY_ACTIVE_SCHEDULE_ID)
+            .remove(KEY_ACTIVE_SCHEDULE_NAME)
+            .remove(KEY_ACTIVE_SCHEDULE_RANGE)
+            .remove(KEY_ACTIVE_SCHEDULE_END_MS)
             .apply()
     }
 
@@ -421,6 +461,39 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         val prefs = getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
+        val incomingScheduled = intent?.getBooleanExtra(EXTRA_IS_SCHEDULED, false) == true
+        val incomingScheduleId = intent?.getStringExtra(EXTRA_SCHEDULE_ID)
+
+        // Conflict Rule: If a manual OTP session is already active, cancel this scheduled lock for today!
+        if (incomingScheduled && isRunning && !isScheduledSession) {
+            if (!incomingScheduleId.isNullOrBlank()) {
+                FocusScheduleRepository.markSkippedForToday(applicationContext, incomingScheduleId)
+            }
+            return START_STICKY
+        }
+
+        if (incomingScheduled) {
+            isScheduledSession = true
+            isScheduledUiState.value = true
+            activeScheduleId = incomingScheduleId
+            activeScheduleName = intent?.getStringExtra(EXTRA_SCHEDULE_NAME) ?: "Scheduled Focus"
+            activeScheduleTimeRange = intent?.getStringExtra(EXTRA_SCHEDULE_TIME_RANGE) ?: ""
+            activeScheduleEndTimeMs = intent?.getLongExtra(EXTRA_SCHEDULE_END_TIME_MS, 0L) ?: 0L
+            // Dismiss any upcoming-schedule warning island once the scheduled lock engages
+            DynamicIslandRepository.dismissActive(applicationContext)
+        } else if (intent == null && prefs.getBoolean(KEY_ACTIVE_IS_SCHEDULED, false)) {
+            isScheduledSession = true
+            isScheduledUiState.value = true
+            activeScheduleId = prefs.getString(KEY_ACTIVE_SCHEDULE_ID, null)
+            activeScheduleName = prefs.getString(KEY_ACTIVE_SCHEDULE_NAME, null) ?: "Scheduled Focus"
+            activeScheduleTimeRange = prefs.getString(KEY_ACTIVE_SCHEDULE_RANGE, null) ?: ""
+            activeScheduleEndTimeMs = prefs.getLong(KEY_ACTIVE_SCHEDULE_END_MS, 0L)
+        } else if (intent != null && !incomingScheduled) {
+            isScheduledSession = false
+            isScheduledUiState.value = false
+            activeScheduleId = null
+        }
+
         val incomingPin = intent?.getStringExtra("TARGET_PIN") ?: intent?.getStringExtra("PIN")
         if (incomingPin != null) {
             targetPin = incomingPin
@@ -442,14 +515,17 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     ShareRepository.syncLiveShareOnSessionStart(applicationContext, startTime)
                 }
             }
-        } else if (incomingPin != null) {
+        } else if (incomingPin != null || incomingScheduled) {
             persistActiveSession(startTime, targetPin)
         }
 
         createNotificationChannel()
         val notification = Notification.Builder(this, "lock_channel")
-            .setContentTitle("Focus Lock Active")
-            .setContentText("Your phone is currently locked for studying.")
+            .setContentTitle(if (isScheduledSession) "Scheduled Focus Active" else "Focus Lock Active")
+            .setContentText(
+                if (isScheduledSession) "$activeScheduleName · Unlocks automatically when timer finishes."
+                else "Your phone is currently locked for studying."
+            )
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .build()
 
@@ -640,14 +716,45 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
             setContent {
                 val settingsState by FocusSettingsRepository.observe(this@LockService).collectAsState()
+                val scheduleState by FocusScheduleRepository.observe(this@LockService).collectAsState()
+                val xpState by FocusXpRepository.observe(this@LockService).collectAsState()
+                val iconCache by FocusSettingsRepository.appIconsState.collectAsState()
                 MyApplicationTheme(appTheme = settingsState.appTheme) {
                     val minimized by isMinimizedState
+                    val scheduledMode by isScheduledUiState
 
                     if (minimized) {
                         FloatingBubble(
                             onResumeLock = {
                                 setMinimized(false)
                                 updateOverlayState(false)
+                            }
+                        )
+                    } else if (scheduledMode) {
+                        val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
+                        val dailyPct = ((xpState.todayFocusMs.toFloat() / goalMs.toFloat()) * 100f).toInt().coerceIn(0, 999)
+                        LaunchedEffect(settingsState.allowedApps) {
+                            FocusSettingsRepository.preloadAppIcons(this@LockService, settingsState.allowedApps)
+                        }
+                        ScheduledLockScreen(
+                            scheduleName = activeScheduleName,
+                            timeRangeLabel = activeScheduleTimeRange,
+                            startTimeMs = startTime,
+                            endTimeMs = activeScheduleEndTimeMs,
+                            layoutConfig = scheduleState.layoutConfig,
+                            dailyGoalPercent = dailyPct,
+                            currentStreak = xpState.currentStreak,
+                            allowedApps = settingsState.allowedApps,
+                            appLayout = settingsState.lockAppLayout,
+                            pillButtonSizeDp = settingsState.minimalPillButtonSizeDp,
+                            iconCache = iconCache,
+                            isPreview = false,
+                            onLaunchApp = { app -> launchAllowedApp(app) },
+                            onTimerFinished = {
+                                activeScheduleId?.let { id ->
+                                    FocusScheduleRepository.markOneTimeCompleted(applicationContext, id)
+                                }
+                                stopLock()
                             }
                         )
                     } else {
@@ -852,6 +959,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         snapAnimator?.cancel()
         isRunning = false
+        isScheduledSession = false
+        isScheduledUiState.value = false
+        activeScheduleId = null
         clearActiveSession()
 
         if (overlayContainer != null) {
@@ -868,20 +978,33 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val appCtx = applicationContext
 
         val hasBlockedNotifications = NotificationBlockerRepository.finalizeSessionOnUnlock(appCtx)
+        val islandConfig = DynamicIslandRepository.getConfig(appCtx)
 
         if (duration > 0) {
             val settings = FocusSettingsRepository.getCurrent(appCtx)
+            val prevXp = FocusXpRepository.getCurrent(appCtx)
             FocusXpRepository.recordCompletedSession(
                 context = appCtx,
                 sessionStartTimeMs = capturedStart,
                 durationMs = duration,
                 dailyGoalMinutes = settings.dailyGoalMinutes
             )
+            val nextXp = FocusXpRepository.getCurrent(appCtx)
             FocusStatsRepository.recordCompletedSession(
                 context = appCtx,
                 startTimeMs = capturedStart,
                 durationMs = duration
             )
+
+            // Trigger Goal & Streak Milestone Dynamic Island if no notification summary is taking priority
+            if (!hasBlockedNotifications || !(islandConfig.enabled && islandConfig.enableNotificationSummary)) {
+                DynamicIslandRepository.evaluatePostSessionMilestones(
+                    context = appCtx,
+                    previousXpState = prevXp,
+                    updatedXpState = nextXp,
+                    dailyGoalMinutes = settings.dailyGoalMinutes
+                )
+            }
 
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 runCatching { ShareRepository.syncLiveShareOnSessionEnd(appCtx) }
@@ -892,12 +1015,19 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         if (hasBlockedNotifications) {
-            runCatching {
-                val launchIntent = Intent(appCtx, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(MainActivity.EXTRA_SHOW_UNLOCK_SUMMARY, true)
+            if (islandConfig.enabled && islandConfig.enableNotificationSummary) {
+                DynamicIslandRepository.showNotificationSummary(
+                    context = appCtx,
+                    blockerState = NotificationBlockerRepository.getCurrent(appCtx)
+                )
+            } else {
+                runCatching {
+                    val launchIntent = Intent(appCtx, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra(MainActivity.EXTRA_SHOW_UNLOCK_SUMMARY, true)
+                    }
+                    startActivity(launchIntent)
                 }
-                startActivity(launchIntent)
             }
         }
 
@@ -908,6 +1038,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         super.onDestroy()
         snapAnimator?.cancel()
         isRunning = false
+        isScheduledSession = false
         currentSessionStartTimeMs = 0L
         NothingFocusWidgetUpdater.scheduleUpdateAll(applicationContext)
         stopMonitoringForegroundApp()

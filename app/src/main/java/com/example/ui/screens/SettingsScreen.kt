@@ -87,6 +87,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.AllowedApp
+import com.example.data.DynamicIslandRepository
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusSettingsState
 import com.example.data.FocusXpRepository
@@ -99,6 +100,7 @@ import com.example.service.FocusPowerBlockerAccessibilityService
 import com.example.ui.components.AllowedAppIconBadge
 import com.example.ui.components.AppearanceAndThemesSection
 import com.example.ui.components.DailyStudyGoalSection
+import com.example.ui.components.DynamicIslandStudioSection
 import com.example.ui.components.ElasticMorphingSegmentedPill
 import com.example.ui.components.ElasticPillSegment
 import com.example.ui.components.FocusLockEmblem
@@ -372,6 +374,8 @@ fun SettingsScreen(
                     }
                 )
 
+                DynamicIslandStudioSection()
+
                 DailyStudyGoalSection(
                     dailyGoalMinutes = settingsState.dailyGoalMinutes,
                     onSelectGoalMinutes = { mins ->
@@ -394,7 +398,15 @@ fun SettingsScreen(
                     onOpenNotificationAccessSettings = onOpenNotificationListenerSettings,
                     onOpenLastUnlockSummary = {
                         view.performKeyTapHaptic()
-                        NotificationBlockerRepository.openLastSummarySheet(context)
+                        val islandCfg = DynamicIslandRepository.getConfig(context)
+                        if (islandCfg.enabled && islandCfg.enableNotificationSummary) {
+                            DynamicIslandRepository.showNotificationSummary(
+                                context = context,
+                                blockerState = NotificationBlockerRepository.getCurrent(context)
+                            )
+                        } else {
+                            NotificationBlockerRepository.openLastSummarySheet(context)
+                        }
                     },
                     onToggleBlockPowerMenu = { enabled ->
                         view.performClockTickHaptic()

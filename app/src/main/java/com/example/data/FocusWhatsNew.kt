@@ -36,23 +36,33 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 11
+    const val CURRENT_RELEASE_ID = 12
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 11,
+            releaseId = 12,
             versionLabel = "Latest Update",
-            headline = "Focus Heatmap & Liquid Glass Default",
-            summary = "A new minimal 14-week Focus Consistency Heatmap in Stats and Dark Liquid Glass set as the default look.",
+            headline = "Schedules, Nothing Widgets & Dynamic Island",
+            summary = "Automated timer-only Focus Schedules with live Lock Studio & bottom console, 5 new Nothing-inspired widgets, a customizable Dynamic Island system, and shareable image recap cards.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Focus Heatmap & Streak Calendar",
-                    description = "Added a minimal, borderless 14-week consistency grid to Stats with rounded squircle tiles, theme-matched intensity shades, active-day tap inspection, and one-tap Jump to Day.",
+                    title = "Schedule Tab & Custom Lock Studio",
+                    description = "Added a dedicated Schedule tab for multiple daily, weekday, weekend, custom-day, or one-time focus schedules. Scheduled locks run in strict timer-only mode with a live dot-matrix Session Timeline, a customizable bottom focus dock (silenced counter, stay-locked check-in & unlock ETA), and a real-time Lock Studio.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "Liquid Glass as Default Theme",
-                    description = "Set Dark Liquid Glass as the default visual theme across the app for a sleek, modern first impression right out of the box.",
+                    title = "5 New Nothing-Inspired Home Widgets",
+                    description = "Added Dot-Matrix Focus Clock, Consistency Matrix Heatmap, Next Schedule Countdown, Daily Goal Capsule Bar, and Streak & Rank Badge widgets. Every widget supports an independent Nothing Mono vs App Theme toggle, surface/corner styles, and live previews in Widget Studio.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Nothing Dynamic Island & Minimal Studio",
+                    description = "Added a dot-matrix Dynamic Island for Unlock Notification Summaries (with real full-color app icons on expand), Upcoming Schedule Alerts (with Skip Today inside the expanded card), and Goal & Streak Milestones — configured in a compact 3-tab studio that pops a live preview whenever you adjust size or look.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Shareable Image Recap Cards",
+                    description = "Added a Recap Image Card studio inside Share with Today, 7 Days, 30 Days, and Custom Date selection, customizable themes, Streak & Best Session cards, goal progress, and mini heatmap, exporting crisp PNG cards to any app.",
                     category = WhatsNewCategory.NEW
                 )
             )

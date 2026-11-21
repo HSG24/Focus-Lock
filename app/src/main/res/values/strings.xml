@@ -1,6 +1,11 @@
 <resources>
     <string name="app_name">Focus Lock</string>
     <string name="widget_description">Nothing-inspired 2x2 Focus Lock widget with dotted progress ring, study hours, XP rank, and one-tap lock.</string>
+    <string name="widget_clock_description">Nothing-inspired 2x2 Dot-Matrix Focus Clock with one-tap Quick Lock.</string>
+    <string name="widget_heatmap_description">Nothing-inspired 4x2 Consistency Matrix showing your focus dot heatmap and streak.</string>
+    <string name="widget_schedule_description">Nothing-inspired 4x2 Next Schedule Countdown showing upcoming scheduled focus locks.</string>
+    <string name="widget_goal_bar_description">Nothing-inspired 4x1 Daily Goal Capsule Bar with dotted progress and quick lock button.</string>
+    <string name="widget_streak_rank_description">Nothing-inspired 2x2 Streak &amp; Rank Badge with circular dot halo and Focus XP tier.</string>
     <string name="accessibility_power_blocker_desc">Blocks the system power and restart menu while a Focus Lock session is active so timers cannot be bypassed.</string>
     <string name="accessibility_power_blocker_label">Focus Lock Power Guard</string>
     <string name="notification_blocker_label">Focus Lock Notification Shield</string>

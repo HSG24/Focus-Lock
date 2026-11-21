@@ -460,12 +460,12 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
         composeRule.onNodeWithTag("whats_new_section_new").assertIsDisplayed()
         composeRule.onNodeWithText("NEW").assertIsDisplayed()
-        composeRule.onNodeWithText("Focus Heatmap & Streak Calendar").assertIsDisplayed()
-        composeRule.onNodeWithText("Liquid Glass as Default Theme").assertIsDisplayed()
+        composeRule.onNodeWithText("Schedule Tab & Custom Lock Studio").assertIsDisplayed()
+        composeRule.onNodeWithText("5 New Nothing-Inspired Home Widgets").assertIsDisplayed()
+        composeRule.onNodeWithText("Nothing Dynamic Island & Minimal Studio").assertIsDisplayed()
         // Previous entries were cleared as requested
-        composeRule.onNodeWithText("Minimal Pill Stats Redesign").assertDoesNotExist()
-        composeRule.onNodeWithText("Fluid Elastic Pill Animations").assertDoesNotExist()
-        composeRule.onNodeWithText("Smoother Navigation Bar Morph").assertDoesNotExist()
+        composeRule.onNodeWithText("Focus Heatmap & Streak Calendar").assertDoesNotExist()
+        composeRule.onNodeWithText("Liquid Glass as Default Theme").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_section_fixes").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
 

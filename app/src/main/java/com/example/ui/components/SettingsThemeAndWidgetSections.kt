@@ -56,22 +56,27 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsState
 import com.example.data.FocusXpState
+import com.example.data.NothingWidgetKind
+import com.example.data.WidgetCornerStyle
+import com.example.data.WidgetStudioRepository
+import com.example.data.WidgetSurfaceStyle
 import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.DotGothic16
 import com.example.ui.theme.FocusThemePalette
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
 
 @Composable
 fun ThemedSettingsSectionCard(
@@ -307,7 +312,7 @@ fun AppearanceAndThemesSection(
 }
 
 /**
- * Collapsible Home Widget studio so Settings stays uncluttered until customized.
+ * Collapsible 6-widget Nothing Home Widget Studio with live previews and per-widget theming.
  */
 @Composable
 fun HomeScreenWidgetSection(
@@ -319,16 +324,23 @@ fun HomeScreenWidgetSection(
     onToggleStreakBadge: (Boolean) -> Unit,
     onToggleRankXpTag: (Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
+    val studioState by WidgetStudioRepository.observe(context).collectAsStateWithLifecycle()
+    val scheduleState by FocusScheduleRepository.observe(context).collectAsStateWithLifecycle()
+
     var expanded by remember { mutableStateOf(false) }
+    var selectedKind by remember { mutableStateOf(NothingWidgetKind.GOAL_RING) }
+    val activeConfig = studioState.configFor(selectedKind)
+
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
         label = "widget_chevron_rotation"
     )
 
-    ThemedSettingsSectionCard(title = "HOME WIDGET") {
+    ThemedSettingsSectionCard(title = "HOME WIDGETS (6)") {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -363,14 +375,18 @@ fun HomeScreenWidgetSection(
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = "2×2 Widget Studio",
+                            text = "Nothing Widget Studio",
                             style = MaterialTheme.typography.titleMedium,
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = palette.textPrimary
                         )
                         Text(
-                            text = if (expanded) "Live preview & visibility toggles" else "Tap to customize ring, hours & rank",
+                            text = if (expanded) {
+                                "Per-widget App Theme or Nothing Mono styling"
+                            } else {
+                                "6 Nothing-inspired widgets · live previews & options"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             fontSize = 12.sp,
                             color = palette.textSecondary
@@ -400,260 +416,284 @@ fun HomeScreenWidgetSection(
                 ) {
                     ThemedDivider(palette = palette)
 
+                    // Horizontal widget selector pills
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        NothingWidgetKind.entries.forEach { kind ->
+                            val isSelected = kind == selectedKind
+                            val chipBg by animateColorAsState(
+                                targetValue = when {
+                                    isSelected && palette.isLiquidGlass -> Color(0xFF262E3E)
+                                    isSelected -> palette.primary
+                                    else -> palette.surfaceElevated
+                                },
+                                label = "widget_kind_bg_${kind.id}"
+                            )
+                            val chipFg by animateColorAsState(
+                                targetValue = when {
+                                    isSelected && palette.isLiquidGlass -> palette.textPrimary
+                                    isSelected -> palette.onPrimary
+                                    else -> palette.textSecondary
+                                },
+                                label = "widget_kind_fg_${kind.id}"
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(chipBg)
+                                    .clickable {
+                                        haptics.segment()
+                                        selectedKind = kind
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                                    .testTag("widget_kind_chip_${kind.id}"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Text(
+                                    text = kind.shortTitle,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = chipFg
+                                )
+                                Text(
+                                    text = kind.sizeBadge,
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.5.sp,
+                                    color = chipFg.copy(alpha = 0.72f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Active widget title + subtitle
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "${selectedKind.title} (${selectedKind.sizeBadge})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.textPrimary
+                        )
+                        Text(
+                            text = selectedKind.subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 11.5.sp,
+                            color = palette.textSecondary
+                        )
+                    }
+
+                    // Live preview stage
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(palette.background.copy(alpha = 0.7f))
+                            .padding(vertical = 18.dp, horizontal = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        NothingWidgetLivePreview(
+                        NothingWidgetStudioLivePreview(
+                            kind = selectedKind,
+                            config = activeConfig,
                             settingsState = settingsState,
-                            xpState = xpState
+                            xpState = xpState,
+                            schedules = scheduleState.schedules
+                        )
+                    }
+
+                    // Per-widget theme mode: Nothing Mono vs App Theme
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "WIDGET THEME",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.1.sp,
+                            color = palette.textSecondary
+                        )
+                        ElasticMorphingSegmentedPill(
+                            segments = remember {
+                                listOf(
+                                    ElasticPillSegment("Nothing Mono"),
+                                    ElasticPillSegment("App Theme")
+                                )
+                            },
+                            selectedIndex = if (activeConfig.useNothingMono) 0 else 1,
+                            onSelectIndex = { idx ->
+                                haptics.segment()
+                                WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                    it.copy(useNothingMono = idx == 0)
+                                }
+                            },
+                            height = 40.dp,
+                            fontSize = 12.sp,
+                            useElevatedContainer = true
+                        )
+                    }
+
+                    // Surface & Corner style row
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "SURFACE STYLE",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.1.sp,
+                            color = palette.textSecondary
+                        )
+                        ElasticMorphingSegmentedPill(
+                            segments = remember {
+                                WidgetSurfaceStyle.entries.map { ElasticPillSegment(it.label) }
+                            },
+                            selectedIndex = WidgetSurfaceStyle.entries.indexOf(activeConfig.surfaceStyle).coerceAtLeast(0),
+                            onSelectIndex = { idx ->
+                                haptics.tick()
+                                val next = WidgetSurfaceStyle.entries.getOrNull(idx) ?: WidgetSurfaceStyle.SOLID
+                                WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                    it.copy(surfaceStyle = next)
+                                }
+                            },
+                            height = 38.dp,
+                            fontSize = 11.5.sp,
+                            useElevatedContainer = true
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "CORNER CURVE",
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.1.sp,
+                            color = palette.textSecondary
+                        )
+                        ElasticMorphingSegmentedPill(
+                            segments = remember {
+                                WidgetCornerStyle.entries.map { ElasticPillSegment(it.label) }
+                            },
+                            selectedIndex = WidgetCornerStyle.entries.indexOf(activeConfig.cornerStyle).coerceAtLeast(0),
+                            onSelectIndex = { idx ->
+                                haptics.tick()
+                                val next = WidgetCornerStyle.entries.getOrNull(idx) ?: WidgetCornerStyle.PILL
+                                WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                    it.copy(cornerStyle = next)
+                                }
+                            },
+                            height = 38.dp,
+                            fontSize = 11.5.sp,
+                            useElevatedContainer = true
                         )
                     }
 
                     ThemedDivider(palette = palette)
 
                     ThemedSettingsSwitchRow(
-                        title = "Dotted Progress Ring",
-                        subtitle = "Circular dot-matrix daily goal ring",
-                        checked = settingsState.widgetShowDottedRing,
-                        onCheckedChange = onToggleDottedRing,
-                        testTag = "switch_widget_dotted_ring"
+                        title = "Nothing Status Dot",
+                        subtitle = "Accent indicator dot beside widget label",
+                        checked = activeConfig.showHeaderDots,
+                        onCheckedChange = { checked ->
+                            WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                it.copy(showHeaderDots = checked)
+                            }
+                        },
+                        testTag = "switch_widget_header_dots"
                     )
-                    ThemedDivider(palette = palette)
 
                     ThemedSettingsSwitchRow(
-                        title = "Today's Study Hours",
-                        subtitle = "Display focused hours & minutes",
-                        checked = settingsState.widgetShowStudyHours,
-                        onCheckedChange = onToggleStudyHours,
-                        testTag = "switch_widget_study_hours"
+                        title = "Secondary Metric",
+                        subtitle = "Show extra pill (date, streak, best, repeat or %)",
+                        checked = activeConfig.showSecondaryMetric,
+                        onCheckedChange = { checked ->
+                            WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                it.copy(showSecondaryMetric = checked)
+                            }
+                        },
+                        testTag = "switch_widget_secondary_metric"
                     )
-                    ThemedDivider(palette = palette)
 
-                    ThemedSettingsSwitchRow(
-                        title = "Daily Goal Progress %",
-                        subtitle = "Percentage toward daily target",
-                        checked = settingsState.widgetShowGoalPercent,
-                        onCheckedChange = onToggleGoalPercent,
-                        testTag = "switch_widget_goal_percent"
-                    )
-                    ThemedDivider(palette = palette)
-
-                    ThemedSettingsSwitchRow(
-                        title = "Current Streak Badge",
-                        subtitle = "Consecutive study days pill",
-                        checked = settingsState.widgetShowStreakBadge,
-                        onCheckedChange = onToggleStreakBadge,
-                        testTag = "switch_widget_streak_badge"
-                    )
-                    ThemedDivider(palette = palette)
-
-                    ThemedSettingsSwitchRow(
-                        title = "Rank & Focus XP Tag",
-                        subtitle = "Progression tier and XP counter",
-                        checked = settingsState.widgetShowRankXpTag,
-                        onCheckedChange = onToggleRankXpTag,
-                        testTag = "switch_widget_rank_xp"
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NothingWidgetLivePreview(
-    settingsState: FocusSettingsState,
-    xpState: FocusXpState
-) {
-    val widgetCardBg = Color(0xFF16161A)
-    val widgetChipBg = Color(0xFF202026)
-    val widgetChipBorder = Color(0xFF33333C)
-    val nothingRed = Color(0xFFFF242E)
-    val widgetBorder = Color(0xFF282830)
-
-    val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
-    val sampleMs = xpState.todayFocusMs
-    val fraction = (sampleMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
-    val pct = (fraction * 100f).toInt().coerceIn(0, 999)
-    val hours = sampleMs / 3_600_000L
-    val mins = (sampleMs % 3_600_000L) / 60_000L
-    val timeLabel = String.format(Locale.US, "%02dH %02dM", hours, mins)
-
-    val cardSize = 186.dp
-    val ringSize = cardSize * 0.64f
-
-    Box(
-        modifier = Modifier
-            .size(cardSize)
-            .clip(RoundedCornerShape(32.dp))
-            .background(widgetCardBg)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(top = 13.dp, start = 13.dp, end = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(nothingRed)
-                )
-                Text(
-                    text = "FOCUS LOCK",
-                    fontFamily = DotGothic16,
-                    fontSize = 9.5.sp,
-                    color = Color.White,
-                    letterSpacing = 0.9.sp
-                )
-            }
-
-            if (settingsState.widgetShowStreakBadge) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(widgetChipBg)
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "${xpState.currentStreak}D",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-            }
-        }
-
-        Box(
-            modifier = Modifier.align(Alignment.Center),
-            contentAlignment = Alignment.Center
-        ) {
-            if (settingsState.widgetShowDottedRing) {
-                Box(
-                    modifier = Modifier.size(ringSize),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.matchParentSize()) {
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
-                        val radius = size.minDimension * 0.44f
-                        val dots = 40
-                        val activeCount = if (fraction > 0f) {
-                            (dots * fraction).toInt().coerceIn(1, dots)
-                        } else {
-                            0
-                        }
-                        val headIndex = if (activeCount > 0) activeCount - 1 else -1
-
-                        for (i in 0 until dots) {
-                            val angle = Math.toRadians(-90.0 + (360.0 / dots) * i)
-                            val dx = cx + (radius * cos(angle)).toFloat()
-                            val dy = cy + (radius * sin(angle)).toFloat()
-                            val isHead = i == headIndex
-                            val isCompleted = i < activeCount && !isHead
-                            drawCircle(
-                                color = when {
-                                    isHead -> nothingRed
-                                    isCompleted -> Color.White
-                                    else -> Color(0xFF34343C)
-                                },
-                                radius = when {
-                                    isHead -> 2.3.dp.toPx()
-                                    isCompleted -> 1.7.dp.toPx()
-                                    else -> 1.5.dp.toPx()
-                                },
-                                center = Offset(dx, dy)
-                            )
-                        }
-                    }
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    if (selectedKind == NothingWidgetKind.GOAL_RING ||
+                        selectedKind == NothingWidgetKind.DOT_CLOCK ||
+                        selectedKind == NothingWidgetKind.GOAL_BAR
                     ) {
-                        if (settingsState.widgetShowStudyHours) {
-                            Text(
-                                text = timeLabel,
-                                fontFamily = DotGothic16,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                        if (settingsState.widgetShowGoalPercent) {
-                            Text(
-                                text = "$pct%",
-                                fontFamily = DotGothic16,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = nothingRed
-                            )
-                        }
-                    }
-                }
-            } else {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (settingsState.widgetShowStudyHours) {
-                        Text(
-                            text = timeLabel,
-                            fontFamily = DotGothic16,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                        ThemedSettingsSwitchRow(
+                            title = "One-Tap Quick Lock",
+                            subtitle = "Tapping the widget starts Focus Lock immediately",
+                            checked = activeConfig.enableQuickLockTap,
+                            onCheckedChange = { checked ->
+                                WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                    it.copy(enableQuickLockTap = checked)
+                                }
+                            },
+                            testTag = "switch_widget_quick_lock"
                         )
                     }
-                    if (settingsState.widgetShowGoalPercent) {
-                        Text(
-                            text = "$pct%",
-                            fontFamily = DotGothic16,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = nothingRed
-                        )
-                    }
-                }
-            }
-        }
 
-        if (settingsState.widgetShowRankXpTag) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 13.dp, start = 12.dp, end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = xpState.rank.title.uppercase(Locale.US),
-                    fontFamily = JetBrainsMono,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1
-                )
-                Text(
-                    text = " · ${xpState.totalXp} XP",
-                    fontFamily = JetBrainsMono,
-                    fontSize = 10.sp,
-                    color = Color(0xFFA0A0A8),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    if (selectedKind == NothingWidgetKind.DOT_CLOCK ||
+                        selectedKind == NothingWidgetKind.NEXT_SCHEDULE
+                    ) {
+                        ThemedSettingsSwitchRow(
+                            title = "24-Hour Clock",
+                            subtitle = "Display times in 24-hour format",
+                            checked = activeConfig.use24HourClock,
+                            onCheckedChange = { checked ->
+                                WidgetStudioRepository.updateWidgetConfig(context, selectedKind) {
+                                    it.copy(use24HourClock = checked)
+                                }
+                            },
+                            testTag = "switch_widget_24h_clock"
+                        )
+                    }
+
+                    if (selectedKind == NothingWidgetKind.GOAL_RING) {
+                        ThemedDivider(palette = palette)
+
+                        ThemedSettingsSwitchRow(
+                            title = "Dotted Progress Ring",
+                            subtitle = "Circular dot-matrix daily goal ring",
+                            checked = settingsState.widgetShowDottedRing,
+                            onCheckedChange = onToggleDottedRing,
+                            testTag = "switch_widget_dotted_ring"
+                        )
+                        ThemedDivider(palette = palette)
+
+                        ThemedSettingsSwitchRow(
+                            title = "Today's Study Hours",
+                            subtitle = "Display focused hours & minutes",
+                            checked = settingsState.widgetShowStudyHours,
+                            onCheckedChange = onToggleStudyHours,
+                            testTag = "switch_widget_study_hours"
+                        )
+                        ThemedDivider(palette = palette)
+
+                        ThemedSettingsSwitchRow(
+                            title = "Daily Goal Progress %",
+                            subtitle = "Percentage toward daily target",
+                            checked = settingsState.widgetShowGoalPercent,
+                            onCheckedChange = onToggleGoalPercent,
+                            testTag = "switch_widget_goal_percent"
+                        )
+                        ThemedDivider(palette = palette)
+
+                        ThemedSettingsSwitchRow(
+                            title = "Current Streak Badge",
+                            subtitle = "Consecutive study days pill",
+                            checked = settingsState.widgetShowStreakBadge,
+                            onCheckedChange = onToggleStreakBadge,
+                            testTag = "switch_widget_streak_badge"
+                        )
+                        ThemedDivider(palette = palette)
+
+                        ThemedSettingsSwitchRow(
+                            title = "Rank & Focus XP Tag",
+                            subtitle = "Progression tier and XP counter",
+                            checked = settingsState.widgetShowRankXpTag,
+                            onCheckedChange = onToggleRankXpTag,
+                            testTag = "switch_widget_rank_xp"
+                        )
+                    }
+                }
             }
         }
     }

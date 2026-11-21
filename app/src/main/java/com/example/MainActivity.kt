@@ -30,9 +30,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -51,6 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.DynamicIslandRepository
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
 import com.example.data.FocusWhatsNewRepository
@@ -60,13 +63,17 @@ import com.example.data.GitHubUpdater
 import com.example.data.NotificationBlockerRepository
 import com.example.data.UpdateCheckResult
 import com.example.data.UpdateUiState
+import com.example.service.DynamicIslandOverlayService
+import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.BlockedSummaryBottomSheet
+import com.example.ui.components.DynamicIslandOverlayHost
 import com.example.ui.components.FloatingPillBottomBar
 import com.example.ui.components.PillNavTab
 import com.example.ui.components.UpdateBottomSheet
 import com.example.ui.components.WhatsNewBottomSheet
 import com.example.ui.components.performClockTickHaptic
 import com.example.ui.screens.FocusHomeScreen
+import com.example.ui.screens.ScheduleScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.ShareScreen
 import com.example.ui.screens.StatsScreen
@@ -162,12 +169,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun presentUnlockSummary() {
+        val islandCfg = DynamicIslandRepository.getConfig(this)
+        if (islandCfg.enabled && islandCfg.enableNotificationSummary) {
+            DynamicIslandRepository.showNotificationSummary(
+                context = this,
+                blockerState = NotificationBlockerRepository.getCurrent(this)
+            )
+        } else {
+            NotificationBlockerRepository.openLastSummarySheet(this)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_SHOW_UNLOCK_SUMMARY, false)) {
             intent.removeExtra(EXTRA_SHOW_UNLOCK_SUMMARY)
-            NotificationBlockerRepository.openLastSummarySheet(this)
+            presentUnlockSummary()
         }
     }
 
@@ -180,9 +199,10 @@ class MainActivity : ComponentActivity() {
         configureHighRefreshRate()
 
         DailyXpPenaltyWorker.scheduleMidnightCheck(this)
+        ScheduleAlarmScheduler.syncAllAlarms(this)
         if (intent?.getBooleanExtra(EXTRA_SHOW_UNLOCK_SUMMARY, false) == true) {
             intent?.removeExtra(EXTRA_SHOW_UNLOCK_SUMMARY)
-            NotificationBlockerRepository.openLastSummarySheet(this)
+            presentUnlockSummary()
         }
 
         setContent {
@@ -193,6 +213,7 @@ class MainActivity : ComponentActivity() {
 
             val settingsState by FocusSettingsRepository.observe(this).collectAsStateWithLifecycle()
             val blockerState by NotificationBlockerRepository.observe(this).collectAsStateWithLifecycle()
+            val islandState by DynamicIslandRepository.observe(this).collectAsStateWithLifecycle()
             var showShare by remember { mutableStateOf(false) }
             var shareInitialDateMs by remember { mutableStateOf<Long?>(null) }
 
@@ -308,6 +329,7 @@ class MainActivity : ComponentActivity() {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
                         configureHighRefreshRate()
+                        ScheduleAlarmScheduler.syncAllAlarms(context)
                         val resumedVersion = GitHubUpdater.getInstalledVersion(context)
                         installedVersion = resumedVersion
                         if (FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, resumedVersion)) {
@@ -333,6 +355,12 @@ class MainActivity : ComponentActivity() {
                         selectedIcon = Icons.Filled.Lock,
                         unselectedIcon = Icons.Outlined.Lock,
                         testTag = "nav_home"
+                    ),
+                    PillNavTab(
+                        label = "Schedule",
+                        selectedIcon = Icons.Filled.Schedule,
+                        unselectedIcon = Icons.Outlined.Schedule,
+                        testTag = "nav_schedule"
                     ),
                     PillNavTab(
                         label = "Stats",
@@ -463,7 +491,10 @@ class MainActivity : ComponentActivity() {
                                 0 -> FocusHomeScreen(
                                     onOpenShare = onOpenShareHome
                                 )
-                                1 -> StatsScreen(
+                                1 -> ScheduleScreen(
+                                    settingsState = settingsState
+                                )
+                                2 -> StatsScreen(
                                     dailyGoalMinutes = settingsState.dailyGoalMinutes,
                                     onOpenShare = onOpenShareStats
                                 )
@@ -583,6 +614,15 @@ class MainActivity : ComponentActivity() {
                                     installedVersionName = installedVersion
                                 )
                             }
+                        )
+                    }
+
+                    // In-app Dynamic Island fallback when system overlay is not active
+                    if (islandState.activeEvent != null && !DynamicIslandOverlayService.isOverlayVisible) {
+                        DynamicIslandOverlayHost(
+                            state = islandState,
+                            isSystemOverlay = false,
+                            modifier = Modifier.align(Alignment.TopCenter)
                         )
                     }
                 }

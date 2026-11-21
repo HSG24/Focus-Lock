@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Sensors
@@ -97,6 +98,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.Session
 import com.example.data.FocusSettingsState
 import com.example.data.FocusXpRepository
@@ -110,6 +112,7 @@ import com.example.fetchAllSessions
 import com.example.ui.components.ElasticMorphingSegmentedPill
 import com.example.ui.components.ElasticPillSegment
 import com.example.ui.components.RollingMetricText
+import com.example.ui.components.ShareRecapCardStudio
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.performFocusConfirm
@@ -126,7 +129,8 @@ private enum class ShareStep(val depth: Int) {
     CHOOSE_MODE(0),
     CONFIGURE(1),
     LINK_READY(2),
-    YOUR_LINKS(1)
+    YOUR_LINKS(1),
+    RECAP_CARD(1)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -225,6 +229,8 @@ fun ShareScreen(
         }
     }
 
+    val xpState by FocusXpRepository.observe(context).collectAsStateWithLifecycle()
+
     val handleStepBack = {
         errorMessage = null
         when (currentStep) {
@@ -232,6 +238,7 @@ fun ShareScreen(
             ShareStep.CONFIGURE -> currentStep = ShareStep.CHOOSE_MODE
             ShareStep.LINK_READY -> onBack()
             ShareStep.YOUR_LINKS -> currentStep = ShareStep.CHOOSE_MODE
+            ShareStep.RECAP_CARD -> currentStep = ShareStep.CHOOSE_MODE
         }
     }
 
@@ -256,6 +263,7 @@ fun ShareScreen(
                                 ShareStep.CONFIGURE -> if (selectedMode == ShareMode.LIVE) "Live Share" else "Range Share"
                                 ShareStep.LINK_READY -> "Link Ready"
                                 ShareStep.YOUR_LINKS -> "Your Links"
+                                ShareStep.RECAP_CARD -> "Recap Card"
                             },
                             fontFamily = palette.displayFont,
                             fontSize = 22.sp,
@@ -444,6 +452,22 @@ fun ShareScreen(
                                     }
                                     errorMessage = null
                                     currentStep = ShareStep.CONFIGURE
+                                }
+                            )
+
+                            ShareModePillCard(
+                                title = "Recap Image Card",
+                                subtitle = "Export themed Nothing/Glass PNG card",
+                                badgeText = "IMAGE",
+                                badgeColor = palette.primary,
+                                icon = Icons.Outlined.Image,
+                                iconTint = palette.primary,
+                                iconBg = palette.primaryContainer,
+                                testTag = "share_mode_recap_card",
+                                onClick = {
+                                    haptics.segment()
+                                    errorMessage = null
+                                    currentStep = ShareStep.RECAP_CARD
                                 }
                             )
 
@@ -707,6 +731,14 @@ fun ShareScreen(
                                 }
                             },
                             onRequestDelete = { item -> linkPendingDelete = item }
+                        )
+                    }
+
+                    ShareStep.RECAP_CARD -> {
+                        ShareRecapCardStudio(
+                            allSessions = allSessions,
+                            xpState = xpState,
+                            dailyGoalMinutes = settingsState.dailyGoalMinutes
                         )
                     }
                 }
