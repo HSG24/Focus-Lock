@@ -169,9 +169,7 @@ data class ScheduledLockLayoutConfig(
             ScheduledLockModuleConfig(ScheduledLockModuleType.SCHEDULE_BADGE, enabled = true, size = LockModuleSize.MEDIUM),
             ScheduledLockModuleConfig(ScheduledLockModuleType.COUNTDOWN_TIMER, enabled = true, size = LockModuleSize.LARGE),
             ScheduledLockModuleConfig(ScheduledLockModuleType.ALLOWED_APPS, enabled = true, size = LockModuleSize.MEDIUM),
-            ScheduledLockModuleConfig(ScheduledLockModuleType.SESSION_TIMELINE, enabled = true, size = LockModuleSize.MEDIUM),
-            ScheduledLockModuleConfig(ScheduledLockModuleType.FOCUS_MANTRA, enabled = true, size = LockModuleSize.MEDIUM),
-            ScheduledLockModuleConfig(ScheduledLockModuleType.DAILY_PROGRESS, enabled = true, size = LockModuleSize.SMALL)
+            ScheduledLockModuleConfig(ScheduledLockModuleType.DAILY_PROGRESS, enabled = true, size = LockModuleSize.MEDIUM)
         )
     }
 }

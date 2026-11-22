@@ -11,6 +11,7 @@ import com.example.data.FocusSchedule
 import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsState
 import com.example.data.FocusXpState
+import com.example.data.LockModuleSize
 import com.example.data.LockSpacingDensity
 import com.example.data.NothingWidgetKind
 import com.example.data.ScheduleRepeatMode
@@ -100,24 +101,23 @@ class ScheduleIslandWidgetRecapTest {
         val nextDayCal = Calendar.getInstance().apply { timeInMillis = nextWindow!!.startTimeMs }
         assertEquals(21, nextDayCal.get(Calendar.DAY_OF_MONTH))
 
-        // Verify exact fixed scheduled lock design (Lock Studio removed)
+        // Verify exact fixed scheduled lock design (Focus Mantra & Session Timeline removed, Goal & Streak Medium)
         val layout = FocusScheduleRepository.getCurrent(context).layoutConfig
         assertEquals(ScheduledTimerStyle.DOT_RING, layout.timerStyle)
         assertEquals(LockSpacingDensity.BALANCED, layout.spacingDensity)
         assertEquals(ScheduledBottomDockMode.COMPACT, layout.bottomDockMode)
-        assertEquals("Stay present. Protect your focus.", layout.customMantra)
         assertEquals(
             listOf(
                 ScheduledLockModuleType.CLOCK_DATE,
                 ScheduledLockModuleType.SCHEDULE_BADGE,
                 ScheduledLockModuleType.COUNTDOWN_TIMER,
                 ScheduledLockModuleType.ALLOWED_APPS,
-                ScheduledLockModuleType.SESSION_TIMELINE,
-                ScheduledLockModuleType.FOCUS_MANTRA,
                 ScheduledLockModuleType.DAILY_PROGRESS
             ),
             layout.modules.map { it.type }
         )
+        val goalModule = layout.modules.first { it.type == ScheduledLockModuleType.DAILY_PROGRESS }
+        assertEquals(LockModuleSize.MEDIUM, goalModule.size)
     }
 
     @Test

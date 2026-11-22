@@ -460,14 +460,13 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
         composeRule.onNodeWithTag("whats_new_section_new").assertIsDisplayed()
         composeRule.onNodeWithText("NEW").assertIsDisplayed()
+        composeRule.onNodeWithText("3-Second Scheduled Completion Screen").assertIsDisplayed()
+        composeRule.onNodeWithText("Cleaner Scheduled Lock & Medium Goal Pill").assertIsDisplayed()
         composeRule.onNodeWithText("1-Minute Schedule Time Picker").assertIsDisplayed()
         composeRule.onNodeWithText("Streamlined Scheduled Lock Screen").assertIsDisplayed()
         composeRule.onNodeWithTag("whats_new_section_fixes").assertIsDisplayed()
         composeRule.onNodeWithText("Reliable Scheduled Focus Triggers").assertIsDisplayed()
         composeRule.onNodeWithText("Removed Nothing Island").assertIsDisplayed()
-        // Previous release entries were removed as requested
-        composeRule.onNodeWithText("Schedule Tab & Custom Lock Studio").assertDoesNotExist()
-        composeRule.onNodeWithText("5 New Nothing-Inspired Home Widgets").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
 
         composeRule.onNodeWithTag("whats_new_got_it_button").performClick()

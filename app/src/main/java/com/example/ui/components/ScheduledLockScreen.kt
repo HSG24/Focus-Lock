@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.LockClock
@@ -883,44 +884,237 @@ private fun ScheduledProgressPillModule(
     val pillShape = remember { RoundedCornerShape(50) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy((10f * scale).coerceAtLeast(5f).dp),
+        horizontalArrangement = Arrangement.spacedBy((12f * scale).coerceAtLeast(6f).dp),
         modifier = Modifier
-            .clip(pillShape)
-            .background(palette.surfaceElevated.copy(alpha = 0.78f), pillShape)
+            .focusGlassPanel(shape = pillShape, palette = palette, elevated = true)
             .padding(
-                horizontal = (14f * scale).coerceAtLeast(8f).dp,
-                vertical = (7f * scale).coerceAtLeast(4f).dp
+                horizontal = (18f * scale).coerceAtLeast(10f).dp,
+                vertical = (10f * scale).coerceAtLeast(5.5f).dp
             )
+            .testTag("scheduled_goal_streak_pill")
     ) {
         Text(
             text = "GOAL $dailyGoalPercent%",
             fontFamily = DotGothic16,
-            fontSize = (11.5f * scale).coerceAtLeast(7.5f).sp,
+            fontSize = (13f * scale).coerceAtLeast(8.5f).sp,
+            fontWeight = FontWeight.Bold,
             color = palette.primary
         )
         Box(
             modifier = Modifier
-                .size((3.5f * scale).coerceAtLeast(2.5f).dp)
+                .size((4f * scale).coerceAtLeast(2.5f).dp)
                 .clip(CircleShape)
                 .background(palette.textSecondary.copy(alpha = 0.45f))
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy((4f * scale).coerceAtLeast(2.5f).dp)
         ) {
             Icon(
                 imageVector = Icons.Outlined.LocalFireDepartment,
                 contentDescription = null,
                 tint = palette.warning,
-                modifier = Modifier.size((13f * scale).coerceAtLeast(8.5f).dp)
+                modifier = Modifier.size((15.5f * scale).coerceAtLeast(9.5f).dp)
             )
             Text(
                 text = "${currentStreak}d streak",
                 fontFamily = JetBrainsMono,
-                fontSize = (11f * scale).coerceAtLeast(7.5f).sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = (12.5f * scale).coerceAtLeast(8f).sp,
+                fontWeight = FontWeight.SemiBold,
                 color = palette.textPrimary
             )
         }
     }
 }
+
+/**
+ * Celebratory 3-second completion screen shown when a scheduled focus timer finishes.
+ * If the phone was locked when the timer finished, LockService defers displaying this
+ * overlay until immediately after the user unlocks their device.
+ */
+@Composable
+fun ScheduledSuccessScreen(
+    scheduleName: String,
+    durationMs: Long,
+    encouragementMessage: String = "Well done — you stayed locked in and finished your focus block.",
+    displayDurationMs: Long = 3_000L,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalFocusTheme.current
+    val pillShape = remember { RoundedCornerShape(50) }
+    val cardShape = remember { RoundedCornerShape(32.dp) }
+    val totalSteps = (displayDurationMs / 1_000L).toInt().coerceAtLeast(1)
+    var remainingSeconds by remember(displayDurationMs) { mutableIntStateOf(totalSteps) }
+
+    LaunchedEffect(displayDurationMs) {
+        var secs = totalSteps
+        while (secs > 1) {
+            delay(1_000L)
+            secs -= 1
+            remainingSeconds = secs
+        }
+    }
+
+    val durationLabel = remember(durationMs) {
+        val totalSeconds = (durationMs / 1000L).coerceAtLeast(1L)
+        val totalMinutes = totalSeconds / 60L
+        val hours = totalMinutes / 60L
+        val mins = totalMinutes % 60L
+        when {
+            hours > 0L && mins > 0L -> "${hours}h ${mins}m focused"
+            hours > 0L -> "${hours}h focused"
+            totalMinutes > 0L -> "${totalMinutes}m focused"
+            else -> "${totalSeconds}s focused"
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(palette.background)
+            .testTag("scheduled_success_screen")
+    ) {
+        ThemeBackdropLayer(palette = palette)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 26.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 390.dp)
+                    .focusGlassPanel(shape = cardShape, palette = palette, elevated = true)
+                    .padding(horizontal = 26.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                // Celebratory circular badge
+                Box(
+                    modifier = Modifier
+                        .size(86.dp)
+                        .clip(CircleShape)
+                        .background(palette.success.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(62.dp)
+                            .clip(CircleShape)
+                            .background(palette.success),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Session complete",
+                            tint = palette.background,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "SESSION COMPLETE",
+                        fontFamily = DotGothic16,
+                        fontSize = 23.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.6.sp,
+                        color = palette.textPrimary,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = encouragementMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = palette.textSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.testTag("scheduled_success_message")
+                    )
+                }
+
+                // Schedule name + focused duration pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .clip(pillShape)
+                        .background(palette.surfaceElevated.copy(alpha = 0.9f), pillShape)
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(palette.success)
+                    )
+                    Text(
+                        text = scheduleName.ifBlank { "Scheduled Focus" },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(3.5.dp)
+                            .clip(CircleShape)
+                            .background(palette.textSecondary.copy(alpha = 0.45f))
+                    )
+                    Text(
+                        text = durationLabel,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = palette.primary,
+                        maxLines = 1
+                    )
+                }
+
+                // 3-second dot-matrix unlock countdown pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .clip(pillShape)
+                        .background(palette.primaryContainer.copy(alpha = 0.7f), pillShape)
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                        .testTag("scheduled_success_countdown")
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (dot in 1..totalSteps) {
+                            val active = dot <= remainingSeconds
+                            Box(
+                                modifier = Modifier
+                                    .size(if (active) 7.dp else 5.5.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (active) palette.primary
+                                        else palette.textSecondary.copy(alpha = 0.28f)
+                                    )
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Unlocking in ${remainingSeconds}s",
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = palette.primary
+                    )
+                }
+            }
+        }
+    }
+}
+

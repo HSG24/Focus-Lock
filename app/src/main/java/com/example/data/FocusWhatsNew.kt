@@ -36,15 +36,25 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 13
+    const val CURRENT_RELEASE_ID = 14
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 13,
+            releaseId = 14,
             versionLabel = "Latest Update",
-            headline = "Reliable Schedules & Streamlined Lock Screen",
-            summary = "Fixed scheduled locks to fire reliably on time without root, added 1-minute schedule precision, streamlined the scheduled lock screen to a clean fixed layout, and removed Nothing Island.",
+            headline = "Completion Success Screen & Cleaner Scheduled Lock",
+            summary = "Added a 3-second scheduled session success screen that waits for phone unlock when finished while locked, simplified the scheduled lock screen with a medium Goal & Streak pill, and kept all previous schedule reliability upgrades.",
             items = listOf(
+                WhatsNewItem(
+                    title = "3-Second Scheduled Completion Screen",
+                    description = "When a scheduled focus timer ends, a celebratory completion screen with your focused time and encouragement message stays for 3 seconds. If the timer finishes while your phone is locked, it waits and appears for 3 full seconds right after you unlock.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Cleaner Scheduled Lock & Medium Goal Pill",
+                    description = "Removed Focus Mantra and Session Timeline from the scheduled lock screen for a cleaner layout, and upgraded the Goal & Streak bar to medium size for better readability.",
+                    category = WhatsNewCategory.NEW
+                ),
                 WhatsNewItem(
                     title = "1-Minute Schedule Time Picker",
                     description = "Schedule start and stop minute buttons now adjust by 1 minute per tap (00 to 59) instead of 5-minute jumps, and new schedules default close to the current time.",
@@ -52,7 +62,7 @@ object FocusWhatsNewCatalog {
                 ),
                 WhatsNewItem(
                     title = "Streamlined Scheduled Lock Screen",
-                    description = "Removed Lock Studio and locked in a clean Dot Ring layout with balanced spacing, default mantra, exact module order (Time & Date, Schedule Pill, Countdown Timer, Essential Apps, Session Timeline, Focus Mantra, Goal & Streak Pill), and the Compact Bottom Dock directly below.",
+                    description = "Removed Lock Studio and locked in a clean Dot Ring layout with balanced spacing and the Compact Bottom Dock directly below your modules.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(

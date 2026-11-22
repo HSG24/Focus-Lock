@@ -1,19 +1,24 @@
 package com.example
 
 import android.animation.ValueAnimator
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.Display
 import android.view.Gravity
@@ -23,6 +28,7 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -106,6 +112,7 @@ import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
 import com.example.ui.components.ScheduledLockScreen
+import com.example.ui.components.ScheduledSuccessScreen
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemedTimerRing
 import com.example.ui.components.focusGlassPanel
@@ -148,6 +155,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val EXTRA_SCHEDULE_NAME = "extra_schedule_name"
         const val EXTRA_SCHEDULE_TIME_RANGE = "extra_schedule_time_range"
         const val EXTRA_SCHEDULE_END_TIME_MS = "extra_schedule_end_time_ms"
+        private const val SCHEDULED_SUCCESS_DURATION_MS = 3_000L
 
         @Volatile
         var currentSessionStartTimeMs: Long = 0L
@@ -204,10 +212,24 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     @Volatile
     private var isMinimizedVolatile: Boolean = false
 
+    private data class ScheduledSuccessPayload(
+        val scheduleName: String,
+        val durationMs: Long,
+        val encouragementMessage: String
+    )
+
     private val isStoppingLock = AtomicBoolean(false)
+    private val isHandlingScheduledCompletion = AtomicBoolean(false)
+    private val sessionRecorded = AtomicBoolean(false)
+    private var pendingHasBlockedNotifications: Boolean = false
+    private var waitingForUnlockToShowSuccess: Boolean = false
     private var isMinimizedState = mutableStateOf(false)
     private var isScheduledUiState = mutableStateOf(false)
+    private var scheduledSuccessUiState = mutableStateOf<ScheduledSuccessPayload?>(null)
     private var monitorJob: Job? = null
+    private var scheduleEndWatchJob: Job? = null
+    private var successDismissJob: Job? = null
+    private var userPresentReceiver: BroadcastReceiver? = null
     private val serviceJob = SupervisorJob()
     private val scope = CoroutineScope(serviceJob + Dispatchers.IO)
 
@@ -440,6 +462,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == "MAXIMIZE" || action == "MINIMIZE") {
+            if (waitingForUnlockToShowSuccess || scheduledSuccessUiState.value != null) {
+                return START_STICKY
+            }
             if (overlayContainer == null) {
                 if (!isRunning) {
                     stopSelf()
@@ -458,6 +483,15 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
             }
             return START_STICKY
+        }
+
+        // If a new lock session starts while waiting for unlock or showing a previous completion screen,
+        // cancel the pending completion flow cleanly and start the new session.
+        if (waitingForUnlockToShowSuccess || scheduledSuccessUiState.value != null) {
+            cancelPendingSuccessFlow()
+        }
+        if (monitorJob?.isActive != true) {
+            startMonitoringForegroundApp()
         }
 
         val prefs = getSharedPreferences(OVERLAY_PREFS, Context.MODE_PRIVATE)
@@ -505,6 +539,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             currentSessionStartTimeMs = startTime
             isRunning = true
             isStoppingLock.set(false)
+            isHandlingScheduledCompletion.set(false)
+            sessionRecorded.set(false)
+            pendingHasBlockedNotifications = false
             persistActiveSession(startTime, targetPin)
             if (restoredStart == 0L) {
                 NotificationBlockerRepository.startFreshSession(applicationContext)
@@ -517,15 +554,22 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             persistActiveSession(startTime, targetPin)
         }
 
+        if (isScheduledSession && activeScheduleEndTimeMs > 0L) {
+            startScheduledEndWatcher()
+        } else {
+            scheduleEndWatchJob?.cancel()
+            scheduleEndWatchJob = null
+        }
+
         createNotificationChannel()
-        val notification = Notification.Builder(this, "lock_channel")
-            .setContentTitle(if (isScheduledSession) "Scheduled Focus Active" else "Focus Lock Active")
-            .setContentText(
-                if (isScheduledSession) "$activeScheduleName · Unlocks automatically when timer finishes."
-                else "Your phone is currently locked for studying."
-            )
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .build()
+        val notification = buildServiceNotification(
+            title = if (isScheduledSession) "Scheduled Focus Active" else "Focus Lock Active",
+            text = if (isScheduledSession) {
+                "$activeScheduleName · Unlocks automatically when timer finishes."
+            } else {
+                "Your phone is currently locked for studying."
+            }
+        )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -720,8 +764,16 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 MyApplicationTheme(appTheme = settingsState.appTheme) {
                     val minimized by isMinimizedState
                     val scheduledMode by isScheduledUiState
+                    val successPayload by scheduledSuccessUiState
 
-                    if (minimized) {
+                    if (successPayload != null) {
+                        ScheduledSuccessScreen(
+                            scheduleName = successPayload!!.scheduleName,
+                            durationMs = successPayload!!.durationMs,
+                            encouragementMessage = successPayload!!.encouragementMessage,
+                            displayDurationMs = SCHEDULED_SUCCESS_DURATION_MS
+                        )
+                    } else if (minimized) {
                         FloatingBubble(
                             onResumeLock = {
                                 setMinimized(false)
@@ -748,12 +800,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             iconCache = iconCache,
                             isPreview = false,
                             onLaunchApp = { app -> launchAllowedApp(app) },
-                            onTimerFinished = {
-                                activeScheduleId?.let { id ->
-                                    FocusScheduleRepository.markOneTimeCompleted(applicationContext, id)
-                                }
-                                stopLock()
-                            }
+                            onTimerFinished = { handleScheduledTimerFinished() }
                         )
                     } else {
                         LockScreen(
@@ -840,7 +887,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
             )
 
-        windowManager?.addView(container, layoutParams)
+        if (Settings.canDrawOverlays(this)) {
+            runCatching { windowManager?.addView(container, layoutParams) }
+        }
     }
 
     private inner class DraggableOverlayContainer(context: Context) : FrameLayout(context) {
@@ -952,32 +1001,210 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    private fun stopLock() {
-        if (!isStoppingLock.compareAndSet(false, true)) return
+    private fun isKeyguardLocked(): Boolean {
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        return km?.isKeyguardLocked == true
+    }
 
-        snapAnimator?.cancel()
+    private fun isDeviceLockedOrScreenOff(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val screenOff = pm?.isInteractive == false
+        return isKeyguardLocked() || screenOff
+    }
+
+    private fun removeOverlayView() {
+        if (overlayContainer != null) {
+            runCatching { windowManager?.removeView(overlayContainer) }
+            overlayContainer = null
+            composeView = null
+        }
+    }
+
+    private fun unregisterUnlockReceiver() {
+        val receiver = userPresentReceiver ?: return
+        userPresentReceiver = null
+        runCatching { unregisterReceiver(receiver) }
+    }
+
+    private fun cancelPendingSuccessFlow() {
+        unregisterUnlockReceiver()
+        successDismissJob?.cancel()
+        successDismissJob = null
+        waitingForUnlockToShowSuccess = false
+        scheduledSuccessUiState.value = null
+        isHandlingScheduledCompletion.set(false)
+        sessionRecorded.set(false)
+        isStoppingLock.set(false)
+        pendingHasBlockedNotifications = false
+    }
+
+    private fun startScheduledEndWatcher() {
+        scheduleEndWatchJob?.cancel()
+        val endMs = activeScheduleEndTimeMs
+        if (endMs <= 0L) return
+        scheduleEndWatchJob = scope.launch {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                if (now >= endMs) {
+                    launch(Dispatchers.Main) {
+                        handleScheduledTimerFinished()
+                    }
+                    break
+                }
+                delay((endMs - now).coerceIn(250L, 1_000L))
+            }
+        }
+    }
+
+    private fun handleScheduledTimerFinished() {
+        if (!isHandlingScheduledCompletion.compareAndSet(false, true)) return
+
+        scheduleEndWatchJob?.cancel()
+        scheduleEndWatchJob = null
+        stopMonitoringForegroundApp()
+
+        val completionTimeMs = System.currentTimeMillis()
+        val effectiveEndMs = if (activeScheduleEndTimeMs > startTime && startTime > 0L) {
+            minOf(completionTimeMs, activeScheduleEndTimeMs)
+        } else {
+            completionTimeMs
+        }
+        val finishedScheduleId = activeScheduleId
+        val finishedScheduleName = activeScheduleName.ifBlank { "Scheduled Focus" }
+        val focusedDurationMs = if (startTime > 0L) {
+            (effectiveEndMs - startTime).coerceAtLeast(1_000L)
+        } else {
+            60_000L
+        }
+
+        finishedScheduleId?.let { id ->
+            FocusScheduleRepository.markOneTimeCompleted(applicationContext, id)
+        }
+
+        // Persist focus duration, XP, streak, widgets & next alarm immediately at timer completion
+        // (not after a potentially long screen-locked wait).
+        finalizeSessionDataOnce(effectiveEndMs)
+
+        val payload = ScheduledSuccessPayload(
+            scheduleName = finishedScheduleName,
+            durationMs = focusedDurationMs,
+            encouragementMessage = pickScheduledSuccessMessage(focusedDurationMs)
+        )
+
+        if (isDeviceLockedOrScreenOff()) {
+            // Remove the strict lock overlay so the user can unlock their phone unimpeded,
+            // then show the 3-second success screen immediately after unlock.
+            removeOverlayView()
+            runCatching {
+                val nm = getSystemService(NotificationManager::class.java)
+                nm?.notify(
+                    1,
+                    buildServiceNotification(
+                        title = "Scheduled Focus Complete",
+                        text = "$finishedScheduleName finished · Unlock your phone to view your completion message."
+                    )
+                )
+            }
+            registerUnlockReceiverForSuccess(payload)
+        } else {
+            presentSuccessOverlayAndFinish(payload)
+        }
+    }
+
+    private fun pickScheduledSuccessMessage(durationMs: Long): String {
+        val mins = durationMs / 60_000L
+        return when {
+            mins >= 90L -> "Incredible deep work. You stayed completely locked in for the full block."
+            mins >= 45L -> "Strong focus session. You stayed disciplined from start to finish."
+            else -> "Well done — you stayed locked in and completed your scheduled focus block."
+        }
+    }
+
+    private fun registerUnlockReceiverForSuccess(payload: ScheduledSuccessPayload) {
+        unregisterUnlockReceiver()
+        waitingForUnlockToShowSuccess = true
+        val unlockTriggered = AtomicBoolean(false)
+
+        fun onDeviceUnlocked() {
+            if (!unlockTriggered.compareAndSet(false, true)) return
+            unregisterUnlockReceiver()
+            waitingForUnlockToShowSuccess = false
+            successDismissJob?.cancel()
+            successDismissJob = scope.launch(Dispatchers.Main) {
+                // Brief settle so the Android keyguard transition clears before showing the 3s overlay
+                delay(180L)
+                presentSuccessOverlayAndFinish(payload)
+            }
+        }
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    Intent.ACTION_USER_PRESENT -> onDeviceUnlocked()
+                    Intent.ACTION_SCREEN_ON -> {
+                        if (!isKeyguardLocked()) {
+                            onDeviceUnlocked()
+                        }
+                    }
+                }
+            }
+        }
+        userPresentReceiver = receiver
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+
+        // Guard against the race where the user unlocked right between our check and receiver registration
+        if (!isDeviceLockedOrScreenOff()) {
+            onDeviceUnlocked()
+        }
+    }
+
+    private fun presentSuccessOverlayAndFinish(payload: ScheduledSuccessPayload) {
+        scheduledSuccessUiState.value = payload
+        setMinimized(false)
+
+        if (overlayContainer == null) {
+            if (lifecycleRegistry.currentState == Lifecycle.State.CREATED) {
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+            }
+            showOverlay()
+        } else {
+            updateOverlayState(false)
+        }
+
+        successDismissJob?.cancel()
+        successDismissJob = scope.launch(Dispatchers.Main) {
+            delay(SCHEDULED_SUCCESS_DURATION_MS)
+            stopLock()
+        }
+    }
+
+    private fun finalizeSessionDataOnce(endTimeMs: Long): Boolean {
+        if (!sessionRecorded.compareAndSet(false, true)) {
+            return pendingHasBlockedNotifications
+        }
+
         isRunning = false
         isScheduledSession = false
         isScheduledUiState.value = false
         activeScheduleId = null
         clearActiveSession()
 
-        if (overlayContainer != null) {
-            runCatching { windowManager?.removeView(overlayContainer) }
-            overlayContainer = null
-            composeView = null
-        }
-
         val capturedStart = startTime
-        val endTime = System.currentTimeMillis()
-        val duration = if (capturedStart > 0L) endTime - capturedStart else 0L
+        val duration = if (capturedStart > 0L) (endTimeMs - capturedStart).coerceAtLeast(0L) else 0L
         startTime = 0L
         currentSessionStartTimeMs = 0L
         val appCtx = applicationContext
 
         val hasBlockedNotifications = NotificationBlockerRepository.finalizeSessionOnUnlock(appCtx)
+        pendingHasBlockedNotifications = hasBlockedNotifications
 
-        if (duration > 0) {
+        if (duration > 0L) {
             val settings = FocusSettingsRepository.getCurrent(appCtx)
             FocusXpRepository.recordCompletedSession(
                 context = appCtx,
@@ -999,12 +1226,32 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             NothingFocusWidgetUpdater.scheduleUpdateAll(appCtx)
         }
 
-        // Re-arm next upcoming focus schedule cleanly after unlock
+        // Re-arm next upcoming focus schedule cleanly after completion/unlock
         ScheduleAlarmScheduler.syncAllAlarms(
             context = appCtx,
             nowMs = System.currentTimeMillis() + 2_000L,
             triggerIfActiveNow = false
         )
+
+        return hasBlockedNotifications
+    }
+
+    private fun stopLock() {
+        if (!isStoppingLock.compareAndSet(false, true)) return
+
+        scheduleEndWatchJob?.cancel()
+        scheduleEndWatchJob = null
+        successDismissJob?.cancel()
+        successDismissJob = null
+        unregisterUnlockReceiver()
+        waitingForUnlockToShowSuccess = false
+        scheduledSuccessUiState.value = null
+        snapAnimator?.cancel()
+        removeOverlayView()
+
+        val appCtx = applicationContext
+        val hasBlockedNotifications = finalizeSessionDataOnce(System.currentTimeMillis())
+        pendingHasBlockedNotifications = false
 
         if (hasBlockedNotifications) {
             runCatching {
@@ -1021,6 +1268,11 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onDestroy() {
         super.onDestroy()
+        scheduleEndWatchJob?.cancel()
+        successDismissJob?.cancel()
+        unregisterUnlockReceiver()
+        waitingForUnlockToShowSuccess = false
+        scheduledSuccessUiState.value = null
         snapAnimator?.cancel()
         isRunning = false
         isScheduledSession = false
@@ -1029,14 +1281,18 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stopMonitoringForegroundApp()
         scope.cancel()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
-        if (overlayContainer != null) {
-            runCatching { windowManager?.removeView(overlayContainer) }
-            overlayContainer = null
-            composeView = null
-        }
+        removeOverlayView()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun buildServiceNotification(title: String, text: String): Notification {
+        return Notification.Builder(this, "lock_channel")
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .build()
+    }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
