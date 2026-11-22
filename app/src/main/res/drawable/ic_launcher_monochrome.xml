@@ -4,15 +4,24 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Precision Aperture Iris monochrome themed icon (6-blade optical shutter + focal core) -->
+
+    <!-- Solar Eclipse Precision Ring monochrome themed icon -->
+    <!-- Outer broken focus ring with right-side notch -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="butt"
+        android:pathData="M81.0,45.8 A28.2,28.2 0 1,0 81.0,62.2" />
+
+    <!-- Floating focal dot nestled in the right-side notch -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M54,22 A32,32 0 1,0 54,86 A32,32 0 1,0 54,22 Z M54,39 A15,15 0 1,1 54,69 A15,15 0 1,1 54,39 Z" />
-    <path
-        android:strokeColor="#FF000000"
-        android:strokeWidth="3.2"
-        android:pathData="M54,21 L67,44 M82,38 L61,51 M82,70 L54,68 M54,87 L41,64 M26,70 L47,57 M26,38 L54,40" />
+        android:pathData="M82.2,49.4 A4.6,4.6 0 1,0 82.2,58.6 A4.6,4.6 0 1,0 82.2,49.4 Z" />
+
+    <!-- Inner eclipse crescent -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M54,48.5 A5.5,5.5 0 1,0 54,59.5 A5.5,5.5 0 1,0 54,48.5 Z" />
+        android:fillAlpha="0.68"
+        android:pathData="M69.2,41.6 A20.5,20.5 0 1,0 69.2,66.4 A16.4,16.4 0 1,1 69.2,41.6 Z" />
 </vector>

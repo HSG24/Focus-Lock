@@ -368,7 +368,7 @@ private fun ManualLockedOverview(
                 }
 
                 Text(
-                    text = "Focus Sanctuary",
+                    text = "Focus Mode",
                     fontFamily = palette.displayFont,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
@@ -640,10 +640,12 @@ private fun ManualUnlockQuizStage(
     ) {
         Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .widthIn(max = 420.dp),
+                .widthIn(max = 420.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Top Bar: Return to Lock pill + Step Counter
             Row(
@@ -892,11 +894,13 @@ private fun ManualUnlockApertureStage(
 ) {
     val haptics = rememberFocusHaptics()
     var triggered by remember { mutableStateOf(false) }
+    var secondsRemaining by remember { mutableIntStateOf(5) }
+    val countdownProgress = remember { Animatable(1f) }
 
     val openProgress by animateFloatAsState(
         targetValue = if (triggered) 1f else 0f,
-        animationSpec = tween(durationMillis = 780, easing = FastOutSlowInEasing),
-        label = "aperture_open_progress"
+        animationSpec = tween(durationMillis = 820, easing = FastOutSlowInEasing),
+        label = "unlock_emblem_open_progress"
     )
     val cardScale by animateFloatAsState(
         targetValue = if (triggered) 1f else 0.90f,
@@ -913,7 +917,16 @@ private fun ManualUnlockApertureStage(
         haptics.confirm()
         delay(80L)
         triggered = true
-        delay(1220L)
+        launch {
+            countdownProgress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 4920, easing = androidx.compose.animation.core.LinearEasing)
+            )
+        }
+        for (sec in 5 downTo 1) {
+            secondsRemaining = sec
+            delay(if (sec == 5) 920L else 1000L)
+        }
         onAnimationFinished()
     }
 
@@ -962,7 +975,7 @@ private fun ManualUnlockApertureStage(
                     color = palette.success
                 )
                 Text(
-                    text = "Aperture Open",
+                    text = "You're All Set",
                     fontFamily = palette.displayFont,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
@@ -973,6 +986,38 @@ private fun ManualUnlockApertureStage(
                     fontFamily = JetBrainsMono,
                     fontSize = 12.5.sp,
                     color = palette.textSecondary
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { alpha = textAlpha }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.68f)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(palette.borderHighlight.copy(alpha = 0.35f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(countdownProgress.value.coerceIn(0f, 1f))
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(palette.success)
+                    )
+                }
+                Text(
+                    text = "Closing in ${secondsRemaining}s",
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.8.sp,
+                    color = palette.textSecondary.copy(alpha = 0.72f),
+                    modifier = Modifier.testTag("manual_unlock_countdown_text")
                 )
             }
         }

@@ -441,7 +441,7 @@ private fun SetupWelcomeStep() {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "SANCTUARY FOR DEEP WORK",
+            text = "BUILT FOR DEEP FOCUS",
             fontFamily = JetBrainsMono,
             fontSize = 10.5.sp,
             fontWeight = FontWeight.SemiBold,

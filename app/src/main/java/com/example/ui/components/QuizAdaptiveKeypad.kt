@@ -268,25 +268,28 @@ private fun AlphaQuizPad(
     val row1 = remember { listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P") }
     val row2 = remember { listOf("A", "S", "D", "F", "G", "H", "J", "K", "L") }
     val row3 = remember { listOf("Z", "X", "C", "V", "B", "N", "M") }
+    val alphaKeyHeight = 64.dp
+    val alphaCornerRadius = 14.dp
+    val alphaFontSizeSp = 18.5f
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("quiz_alpha_pad"),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+        verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         // Row 1: 10 keys
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             row1.forEach { key ->
                 KeypadTile(
                     label = key,
                     palette = palette,
-                    height = 48.dp,
-                    cornerRadius = 12.dp,
-                    fontSizeSp = 15.5f,
+                    height = alphaKeyHeight,
+                    cornerRadius = alphaCornerRadius,
+                    fontSizeSp = alphaFontSizeSp,
                     useNumeralFont = false,
                     onClick = { onLetter(key) },
                     modifier = Modifier
@@ -296,20 +299,20 @@ private fun AlphaQuizPad(
             }
         }
 
-        // Row 2: 9 keys centered with half-key margins
+        // Row 2: 9 keys centered with subtle half-key margins
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             row2.forEach { key ->
                 KeypadTile(
                     label = key,
                     palette = palette,
-                    height = 48.dp,
-                    cornerRadius = 12.dp,
-                    fontSizeSp = 15.5f,
+                    height = alphaKeyHeight,
+                    cornerRadius = alphaCornerRadius,
+                    fontSizeSp = alphaFontSizeSp,
                     useNumeralFont = false,
                     onClick = { onLetter(key) },
                     modifier = Modifier
@@ -322,15 +325,15 @@ private fun AlphaQuizPad(
         // Row 3: Clear + 7 keys + Backspace
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             KeypadActionTile(
                 icon = Icons.Outlined.Clear,
                 contentDescription = "Clear answer",
                 label = null,
                 palette = palette,
-                height = 48.dp,
-                cornerRadius = 12.dp,
+                height = alphaKeyHeight,
+                cornerRadius = alphaCornerRadius,
                 onClick = onClear,
                 modifier = Modifier
                     .weight(1.4f)
@@ -340,9 +343,9 @@ private fun AlphaQuizPad(
                 KeypadTile(
                     label = key,
                     palette = palette,
-                    height = 48.dp,
-                    cornerRadius = 12.dp,
-                    fontSizeSp = 15.5f,
+                    height = alphaKeyHeight,
+                    cornerRadius = alphaCornerRadius,
+                    fontSizeSp = alphaFontSizeSp,
                     useNumeralFont = false,
                     onClick = { onLetter(key) },
                     modifier = Modifier
@@ -355,8 +358,8 @@ private fun AlphaQuizPad(
                 contentDescription = "Backspace",
                 label = null,
                 palette = palette,
-                height = 48.dp,
-                cornerRadius = 12.dp,
+                height = alphaKeyHeight,
+                cornerRadius = alphaCornerRadius,
                 onClick = onBackspace,
                 modifier = Modifier
                     .weight(1.4f)

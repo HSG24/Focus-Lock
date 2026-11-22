@@ -42,22 +42,22 @@ object FocusWhatsNewCatalog {
         WhatsNewRelease(
             releaseId = 16,
             versionLabel = "Final Release",
-            headline = "Mindful Quiz Unlock, Precision Iris Identity & 100% On-Device Control",
-            summary = "Completely rebuilt manual locks with an infinite 10-question quiz, adaptive built-in keypad, and aperture unlock animation, moved all stats on-device, added JSON backup & restore, a fresh-install setup flow, exact 1:1 pill previews, and a brand-new Precision Aperture Iris identity.",
+            headline = "Mindful Quiz Unlock, Sleek New Identity & 100% On-Device Control",
+            summary = "Completely rebuilt manual locks with an infinite 10-question quiz, adaptive built-in keypad, and 5-second unlock celebration, moved all stats on-device, added JSON backup & restore, a fresh-install setup flow, exact 1:1 pill previews, and a new Solar Eclipse Focus Ring logo.",
             items = listOf(
                 WhatsNewItem(
                     title = "Redesigned Manual Lock & 10-Question Infinite Quiz",
-                    description = "Replaced the 6-digit password with a serene monolith manual lock screen and an Unlock Session button that launches a 10-question procedural quiz directly inside the overlay — featuring Odd One Out, Number Reflex, Quick X, Number Flow, Emoji Algebra, Symbol Swap, Solo Hunter, and Easy Unscramble with permanent no-repeat memory.",
+                    description = "Replaced the 6-digit password with a clean, unified manual lock screen and an Unlock Session button that launches a 10-question procedural quiz directly inside the overlay — featuring Odd One Out, Number Reflex, Quick X, Number Flow, Emoji Algebra, Symbol Swap, Solo Hunter, and Easy Unscramble with permanent no-repeat memory.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "Adaptive Built-In Keypad & Aperture Unlock Animation",
-                    description = "The quiz automatically switches between a sleek numeric pad and a minimalist QWERTY A–Z keypad right inside the lock overlay, finishing with a fluid Precision Aperture Iris unlock animation after your 10th correct answer.",
+                    title = "Adaptive Built-In Keypad & Unlock Celebration",
+                    description = "The quiz automatically switches between a sleek numeric pad and a spacious, tall QWERTY A–Z keypad right inside the lock overlay, finishing with a smooth 5-second unlock animation after your 10th correct answer.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "New Precision Aperture Iris Logo & Identity",
-                    description = "Reimagined FocusLock's launcher icon and in-app emblem from scratch as a six-blade optical aperture focusing on a calm luminous core — minimal, distinctive, and theme-adaptive.",
+                    title = "Solar Eclipse Focus Ring Logo & Identity",
+                    description = "Reimagined FocusLock's launcher icon and in-app emblem with a notched warm-ivory precision ring, floating focal dot, and glowing ember-amber eclipse crescent on matte carbon black.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
@@ -72,7 +72,7 @@ object FocusWhatsNewCatalog {
                 ),
                 WhatsNewItem(
                     title = "First-Install Welcome Setup",
-                    description = "Added a refined four-step Sanctuary Setup experience exclusively for brand-new installations, covering theme selection, daily goal calibration, essential permissions, and optional backup restore.",
+                    description = "Added a refined four-step welcome setup experience exclusively for brand-new installations, covering theme selection, daily goal calibration, essential permissions, and optional backup restore.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(

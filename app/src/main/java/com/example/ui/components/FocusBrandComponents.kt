@@ -97,11 +97,11 @@ fun rememberSpringPressScale(
 }
 
 /**
- * Original Precision Aperture Iris emblem for FocusLock.
+ * Solar Eclipse Precision Ring emblem for FocusLock, matching the launcher icon.
  *
- * Six interlocking optical shutter blades frame a calm, luminous focal core.
- * Dynamically adapts to the active [LocalFocusTheme] palette and supports
- * real-time iris expansion via [openProgress] (0f = locked focus, 1f = unlocked).
+ * A crisp notched outer ring frames a floating focal dot and a luminous inner
+ * eclipse crescent. Adapts cleanly across themes with zero blue cast, and opens
+ * smoothly via [openProgress] (0f = locked focus, 1f = unlocked).
  */
 @Composable
 fun FocusLockEmblem(
@@ -112,11 +112,17 @@ fun FocusLockEmblem(
     accentOverride: Color? = null
 ) {
     val palette = LocalFocusTheme.current
-    val primaryColor = accentOverride ?: palette.primary
-    val deepColor = accentOverride?.copy(alpha = 0.72f) ?: palette.primaryDeep
-    val glowColor = accentOverride?.copy(alpha = 0.55f) ?: palette.primaryGlow
-    val surfaceColor = palette.surfaceElevated
-    val strokePrimary = palette.textPrimary
+    val crescentLight = when {
+        accentOverride != null -> accentOverride
+        palette.isLiquidGlass -> Color(0xFFF5A623)
+        else -> palette.primary
+    }
+    val crescentDeep = when {
+        accentOverride != null -> accentOverride.copy(alpha = 0.72f)
+        palette.isLiquidGlass -> Color(0xFFE05316)
+        else -> palette.primaryDeep
+    }
+    val ringColor = palette.textPrimary
     val clampedOpen = openProgress.coerceIn(0f, 1f)
 
     Box(
@@ -128,13 +134,12 @@ fun FocusLockEmblem(
                 val center = Offset(w / 2f, h / 2f)
                 val unit = minOf(w, h) / 108f
 
-                val glowRadius = 54f * unit
+                val glowRadius = 52f * unit
                 val glowBrush = if (showAmbientGlow) {
                     Brush.radialGradient(
                         colors = listOf(
-                            primaryColor.copy(alpha = 0.24f),
-                            deepColor.copy(alpha = 0.11f),
-                            glowColor.copy(alpha = 0.04f),
+                            crescentLight.copy(alpha = 0.22f),
+                            crescentDeep.copy(alpha = 0.10f),
                             Color.Transparent
                         ),
                         center = center,
@@ -144,104 +149,106 @@ fun FocusLockEmblem(
                     null
                 }
 
-                val bladePath = Path()
-                val ringRadius = 38.5f * unit
+                val crescentPath = Path()
+                val ringRadius = 32.5f * unit
                 val ringTopLeft = Offset(center.x - ringRadius, center.y - ringRadius)
                 val ringSize = Size(ringRadius * 2f, ringRadius * 2f)
-                val ringStroke = Stroke(width = 1.6f * unit, cap = StrokeCap.Round)
-                val bladeStroke = Stroke(
-                    width = 1.5f * unit,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
+                val ringStroke = Stroke(width = 4.6f * unit, cap = StrokeCap.Butt)
+
+                fun buildEclipseCrescent(
+                    path: Path,
+                    outerR: Float,
+                    innerR: Float,
+                    innerOffsetX: Float,
+                    rotationDeg: Float,
+                    steps: Int = 44
+                ) {
+                    path.reset()
+                    // Crescent spans symmetrically around 180 deg (left side), tapering to crisp tips
+                    val halfSpanDeg = 132f
+                    val centerDeg = 180f + rotationDeg
+                    val startDeg = centerDeg - halfSpanDeg
+                    val endDeg = centerDeg + halfSpanDeg
+
+                    // Outer arc from top tip around left side to bottom tip
+                    for (s in 0..steps) {
+                        val t = s.toFloat() / steps.toFloat()
+                        val deg = startDeg + (endDeg - startDeg) * t
+                        val rad = deg * PI / 180.0
+                        val x = center.x + (outerR * cos(rad)).toFloat()
+                        val y = center.y + (outerR * sin(rad)).toFloat()
+                        if (s == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    // Inner offset arc curving back from bottom tip to top tip
+                    for (s in steps downTo 0) {
+                        val t = s.toFloat() / steps.toFloat()
+                        val deg = startDeg + (endDeg - startDeg) * t
+                        val rad = deg * PI / 180.0
+                        val taper = sin(t * PI).toFloat()
+                        val r = innerR + (outerR - innerR) * (1f - taper)
+                        val shiftX = innerOffsetX * taper
+                        val x = center.x + shiftX + (r * cos(rad)).toFloat()
+                        val y = center.y + (r * sin(rad)).toFloat()
+                        path.lineTo(x, y)
+                    }
+                    path.close()
+                }
 
                 onDrawBehind {
                     if (glowBrush != null) {
                         drawCircle(
                             brush = glowBrush,
-                            radius = glowRadius * (1f + clampedOpen * 0.18f),
+                            radius = glowRadius * (1f + clampedOpen * 0.22f),
                             center = center
                         )
                     }
 
-                    // 1. Subtle outer precision aperture housing (6 segmented arcs)
-                    val housingRotation = clampedOpen * 32f
-                    for (i in 0 until 6) {
-                        val startDeg = -76f + i * 60f + housingRotation
-                        drawArc(
-                            color = strokePrimary.copy(alpha = 0.34f - clampedOpen * 0.12f),
-                            startAngle = startDeg,
-                            sweepAngle = 40f,
-                            useCenter = false,
-                            topLeft = ringTopLeft,
-                            size = ringSize,
-                            style = ringStroke
+                    // 1. Crisp outer precision ring with right-side notch (widens smoothly on unlock)
+                    val notchHalfAngle = 18f + clampedOpen * 22f
+                    drawArc(
+                        color = ringColor.copy(alpha = 0.96f),
+                        startAngle = notchHalfAngle,
+                        sweepAngle = 360f - notchHalfAngle * 2f,
+                        useCenter = false,
+                        topLeft = ringTopLeft,
+                        size = ringSize,
+                        style = ringStroke
+                    )
+
+                    // 2. Luminous inner solar eclipse crescent
+                    val outerCrescentR = (23.2f + clampedOpen * 2.0f) * unit
+                    val innerCrescentR = (14.4f + clampedOpen * 2.5f) * unit
+                    val crescentRotation = clampedOpen * 24f
+
+                    buildEclipseCrescent(
+                        path = crescentPath,
+                        outerR = outerCrescentR,
+                        innerR = innerCrescentR,
+                        innerOffsetX = 2.8f * unit,
+                        rotationDeg = crescentRotation
+                    )
+
+                    val crescentBrush = Brush.linearGradient(
+                        colors = listOf(crescentLight, crescentDeep),
+                        start = Offset(center.x, center.y - outerCrescentR),
+                        end = Offset(center.x - outerCrescentR * 0.4f, center.y + outerCrescentR)
+                    )
+                    drawPath(path = crescentPath, brush = crescentBrush)
+
+                    // 3. Precision focal dot nestled in the right notch (glides gently outward on unlock)
+                    val dotCenterX = center.x + ringRadius + clampedOpen * 5.0f * unit
+                    val dotRadius = (5.0f + clampedOpen * 0.9f) * unit
+                    if (clampedOpen > 0.01f) {
+                        drawCircle(
+                            color = crescentLight.copy(alpha = 0.28f * clampedOpen),
+                            radius = dotRadius * 1.9f,
+                            center = Offset(dotCenterX, center.y)
                         )
                     }
-
-                    // 2. Six geometric optical aperture blades rotating open with openProgress
-                    val innerR = (10.5f + clampedOpen * 17.5f) * unit
-                    val midR = (23.5f + clampedOpen * 7.5f) * unit
-                    val outerR = (33.5f + clampedOpen * 3.5f) * unit
-                    val twistDeg = clampedOpen * 42f
-                    val bladeAlpha = (1f - clampedOpen * 0.32f).coerceIn(0.35f, 1f)
-
-                    for (i in 0 until 6) {
-                        val baseDeg = i * 60.0 - 90.0 + twistDeg
-                        val a0 = baseDeg * PI / 180.0
-                        val a1 = (baseDeg + 26.0) * PI / 180.0
-                        val a2 = (baseDeg + 51.0) * PI / 180.0
-                        val a3 = (baseDeg + 34.0) * PI / 180.0
-
-                        val p0 = Offset(center.x + (innerR * cos(a0)).toFloat(), center.y + (innerR * sin(a0)).toFloat())
-                        val p1 = Offset(center.x + (outerR * cos(a1)).toFloat(), center.y + (outerR * sin(a1)).toFloat())
-                        val p2 = Offset(center.x + (midR * cos(a2)).toFloat(), center.y + (midR * sin(a2)).toFloat())
-                        val p3 = Offset(center.x + (innerR * cos(a3)).toFloat(), center.y + (innerR * sin(a3)).toFloat())
-
-                        bladePath.reset()
-                        bladePath.moveTo(p0.x, p0.y)
-                        bladePath.lineTo(p1.x, p1.y)
-                        bladePath.lineTo(p2.x, p2.y)
-                        bladePath.lineTo(p3.x, p3.y)
-                        bladePath.close()
-
-                        val isAccentBlade = i % 2 == 0
-                        drawPath(
-                            path = bladePath,
-                            color = if (isAccentBlade) {
-                                surfaceColor.copy(alpha = 0.94f * bladeAlpha)
-                            } else {
-                                strokePrimary.copy(alpha = 0.11f * bladeAlpha)
-                            }
-                        )
-                        drawPath(
-                            path = bladePath,
-                            color = if (isAccentBlade) {
-                                strokePrimary.copy(alpha = 0.88f * bladeAlpha)
-                            } else {
-                                primaryColor.copy(alpha = 0.72f * bladeAlpha)
-                            },
-                            style = bladeStroke
-                        )
-                    }
-
-                    // 3. Crisp inner iris ring + luminous focal core
-                    val coreHaloR = (8.8f + clampedOpen * 6.5f) * unit
-                    val coreR = (4.6f + clampedOpen * 2.2f) * unit
                     drawCircle(
-                        color = primaryColor.copy(alpha = 0.22f + clampedOpen * 0.16f),
-                        radius = coreHaloR,
-                        center = center
-                    )
-                    drawCircle(
-                        color = primaryColor,
-                        radius = coreR,
-                        center = center
-                    )
-                    drawCircle(
-                        color = PureWhite.copy(alpha = 0.85f),
-                        radius = (1.6f + clampedOpen * 0.9f) * unit,
-                        center = center
+                        color = if (accentOverride != null && clampedOpen > 0.5f) accentOverride else ringColor,
+                        radius = dotRadius,
+                        center = Offset(dotCenterX, center.y)
                     )
                 }
             }

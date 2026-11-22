@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/aperture_iris_logo_1795380559765"
+        android:drawable="@drawable/focus_eclipse_mark_1795386118554"
         android:gravity="center" />
 </layer-list>
