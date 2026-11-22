@@ -36,44 +36,29 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 14
+    const val CURRENT_RELEASE_ID = 15
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 14,
+            releaseId = 15,
             versionLabel = "Latest Update",
-            headline = "Completion Success Screen & Cleaner Scheduled Lock",
-            summary = "Added a 3-second scheduled session success screen that waits for phone unlock when finished while locked, simplified the scheduled lock screen with a medium Goal & Streak pill, and kept all previous schedule reliability upgrades.",
+            headline = "Redesigned Scheduled Lock & Manual Completion Dismiss",
+            summary = "Completely redesigned the scheduled lock and completion screens into a minimal, theme-matched monolith layout, and replaced the 3-second auto-dismiss on the completion card with a dedicated Done button.",
             items = listOf(
                 WhatsNewItem(
-                    title = "3-Second Scheduled Completion Screen",
-                    description = "When a scheduled focus timer ends, a celebratory completion screen with your focused time and encouragement message stays for 3 seconds. If the timer finishes while your phone is locked, it waits and appears for 3 full seconds right after you unlock.",
+                    title = "Redesigned Scheduled Lock Screen",
+                    description = "Rebuilt from the ground up with a minimal, unified monolith layout that brings your countdown ring, session window rail, daily goal, streak, and silenced alerts together in one cohesive card with zero clutter.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "Cleaner Scheduled Lock & Medium Goal Pill",
-                    description = "Removed Focus Mantra and Session Timeline from the scheduled lock screen for a cleaner layout, and upgraded the Goal & Streak bar to medium size for better readability.",
+                    title = "Full Theme-Matched Lock & Completion Cards",
+                    description = "Every element on the scheduled lock and completion screens now seamlessly follows your active app theme's timer ring, progress rail, typography, glass surfaces, and dividers.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "1-Minute Schedule Time Picker",
-                    description = "Schedule start and stop minute buttons now adjust by 1 minute per tap (00 to 59) instead of 5-minute jumps, and new schedules default close to the current time.",
+                    title = "Manual Dismiss for Completion Screen",
+                    description = "Removed the 3-second automatic dismissal on the scheduled focus completion screen and added a Done button so you can review your session summary and dismiss it whenever you are ready.",
                     category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Streamlined Scheduled Lock Screen",
-                    description = "Removed Lock Studio and locked in a clean Dot Ring layout with balanced spacing and the Compact Bottom Dock directly below your modules.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Reliable Scheduled Focus Triggers",
-                    description = "Fixed scheduled locks not starting on time by switching to high-priority AlarmClock scheduling, WakeLock protection, an active foreground schedule watcher, and a one-tap Exact Alarm permission prompt.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Removed Nothing Island",
-                    description = "Completely removed Nothing Island from overlays and Settings, restoring the clean in-app Blocked Notifications summary sheet on unlock.",
-                    category = WhatsNewCategory.FIX
                 )
             )
         )

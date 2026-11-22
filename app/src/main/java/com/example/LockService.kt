@@ -155,7 +155,6 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val EXTRA_SCHEDULE_NAME = "extra_schedule_name"
         const val EXTRA_SCHEDULE_TIME_RANGE = "extra_schedule_time_range"
         const val EXTRA_SCHEDULE_END_TIME_MS = "extra_schedule_end_time_ms"
-        private const val SCHEDULED_SUCCESS_DURATION_MS = 3_000L
 
         @Volatile
         var currentSessionStartTimeMs: Long = 0L
@@ -767,11 +766,15 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val successPayload by scheduledSuccessUiState
 
                     if (successPayload != null) {
+                        val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
+                        val dailyPct = ((xpState.todayFocusMs.toFloat() / goalMs.toFloat()) * 100f).toInt().coerceIn(0, 999)
                         ScheduledSuccessScreen(
                             scheduleName = successPayload!!.scheduleName,
                             durationMs = successPayload!!.durationMs,
                             encouragementMessage = successPayload!!.encouragementMessage,
-                            displayDurationMs = SCHEDULED_SUCCESS_DURATION_MS
+                            dailyGoalPercent = dailyPct,
+                            currentStreak = xpState.currentStreak,
+                            onDismiss = { stopLock() }
                         )
                     } else if (minimized) {
                         FloatingBubble(
@@ -1093,7 +1096,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         if (isDeviceLockedOrScreenOff()) {
             // Remove the strict lock overlay so the user can unlock their phone unimpeded,
-            // then show the 3-second success screen immediately after unlock.
+            // then show the completion screen immediately after unlock until dismissed.
             removeOverlayView()
             runCatching {
                 val nm = getSystemService(NotificationManager::class.java)
@@ -1107,7 +1110,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
             registerUnlockReceiverForSuccess(payload)
         } else {
-            presentSuccessOverlayAndFinish(payload)
+            presentSuccessOverlay(payload)
         }
     }
 
@@ -1131,9 +1134,9 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             waitingForUnlockToShowSuccess = false
             successDismissJob?.cancel()
             successDismissJob = scope.launch(Dispatchers.Main) {
-                // Brief settle so the Android keyguard transition clears before showing the 3s overlay
+                // Brief settle so the Android keyguard transition clears before showing the overlay
                 delay(180L)
-                presentSuccessOverlayAndFinish(payload)
+                presentSuccessOverlay(payload)
             }
         }
 
@@ -1163,9 +1166,20 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    private fun presentSuccessOverlayAndFinish(payload: ScheduledSuccessPayload) {
+    private fun presentSuccessOverlay(payload: ScheduledSuccessPayload) {
         scheduledSuccessUiState.value = payload
         setMinimized(false)
+
+        runCatching {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm?.notify(
+                1,
+                buildServiceNotification(
+                    title = "Scheduled Focus Complete",
+                    text = "${payload.scheduleName} finished · Tap Done to dismiss."
+                )
+            )
+        }
 
         if (overlayContainer == null) {
             if (lifecycleRegistry.currentState == Lifecycle.State.CREATED) {
@@ -1178,10 +1192,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         successDismissJob?.cancel()
-        successDismissJob = scope.launch(Dispatchers.Main) {
-            delay(SCHEDULED_SUCCESS_DURATION_MS)
-            stopLock()
-        }
+        successDismissJob = null
     }
 
     private fun finalizeSessionDataOnce(endTimeMs: Long): Boolean {

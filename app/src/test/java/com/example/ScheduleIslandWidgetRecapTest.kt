@@ -7,15 +7,18 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.AllowedApp
 import com.example.data.FocusSchedule
 import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsState
 import com.example.data.FocusXpState
+import com.example.data.LockAppLayout
 import com.example.data.LockModuleSize
 import com.example.data.LockSpacingDensity
 import com.example.data.NothingWidgetKind
 import com.example.data.ScheduleRepeatMode
 import com.example.data.ScheduledBottomDockMode
+import com.example.data.ScheduledLockLayoutConfig
 import com.example.data.ScheduledLockModuleType
 import com.example.data.ScheduledTimerStyle
 import com.example.data.WidgetCornerStyle
@@ -25,6 +28,8 @@ import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.RecapCardOptions
 import com.example.ui.components.RecapCardTheme
 import com.example.ui.components.RecapTimeframe
+import com.example.ui.components.ScheduledLockScreen
+import com.example.ui.components.ScheduledSuccessScreen
 import com.example.ui.components.ShareRecapCardRenderer
 import com.example.ui.screens.ScheduleScreen
 import com.example.ui.theme.AppVisualTheme
@@ -256,5 +261,68 @@ class ScheduleIslandWidgetRecapTest {
             assertEquals(540, bmp.width)
             assertEquals(675, bmp.height)
         }
+    }
+
+    @Test
+    fun scheduledLockScreen_rendersUnifiedMonolithAndIntegratedTelemetry() {
+        val startMs = 1_700_000_000_000L
+        val endMs = startMs + 60 * 60_000L
+        composeRule.setContent {
+            MyApplicationTheme(appTheme = AppVisualTheme.LIQUID_GLASS) {
+                ScheduledLockScreen(
+                    scheduleName = "Deep Work",
+                    timeRangeLabel = "9:00 AM → 10:00 AM",
+                    startTimeMs = startMs,
+                    endTimeMs = endMs,
+                    layoutConfig = ScheduledLockLayoutConfig(),
+                    dailyGoalPercent = 82,
+                    currentStreak = 5,
+                    allowedApps = listOf(
+                        AllowedApp("preset_phone", "Phone", "com.android.dialer", true)
+                    ),
+                    appLayout = LockAppLayout.PILL_ROW,
+                    isPreview = true
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("scheduled_lock_header").assertIsDisplayed()
+        composeRule.onNodeWithText("Deep Work").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_lock_monolith_card").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_lock_countdown_text").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_lock_window_rail").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_tile_goal").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_tile_streak").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_tile_silenced").assertIsDisplayed()
+        composeRule.onNodeWithText("82%").assertIsDisplayed()
+        composeRule.onNodeWithText("5d").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_lock_apps_tray").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_lock_unlock_footer").assertIsDisplayed()
+    }
+
+    @Test
+    fun scheduledSuccessScreen_hasManualDismissButtonAndNoAutoCountdown() {
+        var dismissed = false
+        composeRule.setContent {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+                ScheduledSuccessScreen(
+                    scheduleName = "Morning Focus",
+                    durationMs = 45 * 60_000L,
+                    encouragementMessage = "Strong focus session.",
+                    dailyGoalPercent = 100,
+                    currentStreak = 7,
+                    onDismiss = { dismissed = true }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("scheduled_success_screen").assertIsDisplayed()
+        composeRule.onNodeWithText("SESSION COMPLETE").assertIsDisplayed()
+        composeRule.onNodeWithText("Morning Focus").assertIsDisplayed()
+        composeRule.onNodeWithText("45m").assertIsDisplayed()
+        composeRule.onNodeWithTag("scheduled_success_countdown").assertDoesNotExist()
+        composeRule.onNodeWithTag("scheduled_success_dismiss_button").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        assertTrue(dismissed)
     }
 }
