@@ -32,8 +32,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +46,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +61,23 @@ import com.example.data.FocusSettingsRepository
 import com.example.data.LockAppLayout
 import com.example.ui.theme.FocusThemePalette
 import com.example.ui.theme.LocalFocusTheme
+import kotlin.math.roundToInt
+
+/**
+ * Shared exact lock-screen tray width metrics used by ManualLockScreen,
+ * ScheduledLockScreen, and the Settings 1:1 Live Preview so pill wrapping
+ * matches reality down to the pixel.
+ */
+object LockAppsTrayMetrics {
+    const val OUTER_HORIZONTAL_PADDING_DP = 22f
+    const val MAX_CONTENT_WIDTH_DP = 400f
+    const val TRAY_INNER_HORIZONTAL_PADDING_DP = 16f
+
+    fun computeLockTrayContentWidthDp(screenWidthDp: Float): Float {
+        val containerW = minOf(screenWidthDp - (OUTER_HORIZONTAL_PADDING_DP * 2f), MAX_CONTENT_WIDTH_DP)
+        return (containerW - (TRAY_INNER_HORIZONTAL_PADDING_DP * 2f)).coerceAtLeast(180f)
+    }
+}
 
 @Immutable
 data class LockPalette(
@@ -175,13 +197,13 @@ fun LockAllowedAppsSection(
     isPreview: Boolean = false,
     pillButtonSizeDp: Int = FocusSettingsRepository.DEFAULT_PILL_BUTTON_SIZE_DP,
     iconCache: Map<String, ImageBitmap> = emptyMap(),
-    readFromCacheOnly: Boolean = true
+    readFromCacheOnly: Boolean = true,
+    onRowCountMeasured: ((Int) -> Unit)? = null
 ) {
     if (apps.isEmpty()) return
     val themePalette = LocalFocusTheme.current
     val activeTheme = themePalette.theme
     val haptics = rememberFocusHaptics()
-    val softBorder = palette.border.copy(alpha = 0.7f)
 
     when (layout) {
         LockAppLayout.PILL_ROW -> {
@@ -192,27 +214,51 @@ fun LockAllowedAppsSection(
             )
             val sizeRatio = (clampedSize - FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP).toFloat() /
                 (FocusSettingsRepository.MAX_PILL_BUTTON_SIZE_DP - FocusSettingsRepository.MIN_PILL_BUTTON_SIZE_DP).toFloat()
-            val previewScale = if (isPreview) 0.85f else 1f
-            val pillHeight = (clampedSize * previewScale).dp
-            val containerDp = ((clampedSize * 0.62f) * previewScale).dp
-            val iconDp = ((clampedSize * 0.38f) * previewScale).dp
-            val gapBetweenPills = ((4f + 5f * sizeRatio) * previewScale).dp
-            val innerGap = ((4f + 4f * sizeRatio) * previewScale).dp
-            val startPad = ((4f + 6f * sizeRatio) * previewScale).dp
-            val endPad = ((7f + 7f * sizeRatio) * previewScale).dp
-            val labelSp = ((9.5f + 4f * sizeRatio) * if (isPreview) 0.9f else 1f).sp
-            val maxLabelW = ((54f + 48f * sizeRatio) * previewScale).dp
+
+            // Exact 1:1 dimensions in both real lock screen and Settings Live Preview
+            val pillHeight = clampedSize.dp
+            val containerDp = (clampedSize * 0.62f).dp
+            val iconDp = (clampedSize * 0.38f).dp
+            val gapBetweenPills = (4f + 5f * sizeRatio).dp
+            val innerGap = (4f + 4f * sizeRatio).dp
+            val startPad = (4f + 6f * sizeRatio).dp
+            val endPad = (7f + 7f * sizeRatio).dp
+            val labelSp = (9.5f + 4f * sizeRatio).sp
+            val maxLabelW = (54f + 48f * sizeRatio).dp
+
+            val itemRowBuckets = remember(apps.size, clampedSize) { mutableStateMapOf<Int, Int>() }
+            if (onRowCountMeasured != null) {
+                val distinctRows = itemRowBuckets.values.distinct().size
+                LaunchedEffect(distinctRows, apps.size) {
+                    if (itemRowBuckets.size >= apps.size && distinctRows > 0) {
+                        onRowCountMeasured(distinctRows)
+                    }
+                }
+            }
 
             FlowRow(
                 modifier = modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(gapBetweenPills, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(gapBetweenPills)
             ) {
-                apps.forEach { app ->
+                apps.forEachIndexed { idx, app ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(innerGap),
                         modifier = Modifier
+                            .then(
+                                if (onRowCountMeasured != null) {
+                                    Modifier.onGloballyPositioned { coords ->
+                                        // Bucket y into 8px bands so sub-pixel rounding never inflates row count
+                                        val bucket = (coords.positionInParent().y / 8f).roundToInt()
+                                        if (itemRowBuckets[idx] != bucket) {
+                                            itemRowBuckets[idx] = bucket
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .height(pillHeight)
                             .focusGlassPanel(shape = pillShape, palette = themePalette)
                             .clickable(enabled = !isPreview) {

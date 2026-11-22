@@ -12,24 +12,19 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import com.example.LockService
 import com.example.MainActivity
-import com.example.uploadPinToFirebase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.Locale
-import kotlin.random.Random
 
 /**
- * Translucent launcher-trampoline activity invoked by tapping "TAP TO LOCK" on the 2x2 widget.
- * Generates an OTP PIN, syncs it to Firebase RTDB, and starts LockService cleanly in foreground
- * without hitting Android 12+ background foreground-service restrictions.
+ * Translucent launcher-trampoline activity invoked by tapping "TAP TO LOCK" on home widgets.
+ * Starts LockService immediately on-device without any network or Firebase dependency.
  */
 class QuickLockActivity : ComponentActivity() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,35 +49,16 @@ class QuickLockActivity : ComponentActivity() {
             return
         }
 
-        val pin = String.format(Locale.US, "%06d", Random.nextInt(1_000_000))
+        val serviceIntent = Intent(this, LockService::class.java)
+        ContextCompat.startForegroundService(this, serviceIntent)
+        val appCtx = applicationContext
         scope.launch {
-            val uploaded = withContext(Dispatchers.IO) {
-                uploadPinToFirebase(pin)
-            }
-            if (uploaded) {
-                val serviceIntent = Intent(this@QuickLockActivity, LockService::class.java).apply {
-                    putExtra("PIN", pin)
-                }
-                ContextCompat.startForegroundService(this@QuickLockActivity, serviceIntent)
-                withContext(Dispatchers.IO) {
-                    NothingFocusWidgetUpdater.updateAllWidgets(applicationContext)
-                }
-            } else {
-                Toast.makeText(
-                    this@QuickLockActivity,
-                    "Could not sync unlock PIN. Check your connection.",
-                    Toast.LENGTH_SHORT
-                ).show()
-                startActivity(
-                    Intent(this@QuickLockActivity, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    }
-                )
-            }
-            finish()
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
+            runCatching { NothingFocusWidgetUpdater.updateAllWidgets(appCtx) }
         }
+
+        finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
 
     override fun onDestroy() {

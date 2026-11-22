@@ -213,6 +213,13 @@ object FocusScheduleRepository {
         return readState(prefs)
     }
 
+    fun reloadFromPrefs(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        synchronized(this) {
+            _state?.value = readState(prefs)
+        }
+    }
+
     fun todayDateKey(nowMs: Long = System.currentTimeMillis()): String {
         val cal = Calendar.getInstance().apply { timeInMillis = nowMs }
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)

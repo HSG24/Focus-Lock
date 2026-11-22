@@ -41,13 +41,6 @@ class GitHubUpdaterTest {
     }
 
     @Test
-    fun parseTokenPayload_handlesQuotedJsonStringAndObject() {
-        assertEquals("ghp_abc123", GitHubUpdater.parseTokenPayload("\"ghp_abc123\""))
-        assertEquals("ghp_xyz789", GitHubUpdater.parseTokenPayload("{\"token\":\"ghp_xyz789\"}"))
-        assertEquals("ghp_raw", GitHubUpdater.parseTokenPayload("ghp_raw"))
-    }
-
-    @Test
     fun getInstalledVersion_reflectsPackageInfoVersionName() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val shadowPm = Shadows.shadowOf(context.packageManager)

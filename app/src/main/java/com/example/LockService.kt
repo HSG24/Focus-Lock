@@ -111,6 +111,7 @@ import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
+import com.example.ui.components.ManualLockScreen
 import com.example.ui.components.ScheduledLockScreen
 import com.example.ui.components.ScheduledSuccessScreen
 import com.example.ui.components.ThemeBackdropLayer
@@ -806,32 +807,24 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             onTimerFinished = { handleScheduledTimerFinished() }
                         )
                     } else {
-                        LockScreen(
-                            targetPin = targetPin,
-                            onLaunchGoogleLens = {
-                                launchAllowedApp(
-                                    AllowedApp("preset_google", "Google", FocusSettingsRepository.PRESET_GOOGLE_PKG, true)
-                                )
-                            },
-                            onLaunchPhone = {
-                                launchAllowedApp(
-                                    AllowedApp("preset_phone", "Phone", FocusSettingsRepository.PRESET_PHONE_PKG, true)
-                                )
-                            },
-                            onLaunchXiaomiHome = {
-                                launchAllowedApp(
-                                    AllowedApp("preset_xiaomi", "Xiaomi Home", FocusSettingsRepository.PRESET_XIAOMI_PKG, true)
-                                )
-                            },
-                            onUnlock = { stopLock() },
+                        val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
+                        val dailyPct = ((xpState.todayFocusMs.toFloat() / goalMs.toFloat()) * 100f).toInt().coerceIn(0, 999)
+                        LaunchedEffect(settingsState.allowedApps) {
+                            FocusSettingsRepository.preloadAppIcons(this@LockService, settingsState.allowedApps)
+                        }
+                        ManualLockScreen(
+                            dailyGoalPercent = dailyPct,
+                            currentStreak = xpState.currentStreak,
                             allowedApps = settingsState.allowedApps,
-                            layout = settingsState.lockAppLayout,
+                            appLayout = settingsState.lockAppLayout,
                             minimalPillButtonSizeDp = settingsState.minimalPillButtonSizeDp,
                             showSessionTimer = settingsState.showSessionTimer,
                             hapticKeypad = settingsState.hapticKeypad,
-                            autoClearWrongPin = settingsState.autoClearWrongPin,
+                            autoClearWrongAnswer = settingsState.autoClearWrongPin,
                             sessionStartTimeMs = startTime,
-                            onLaunchApp = { app -> launchAllowedApp(app) }
+                            iconCache = iconCache,
+                            onLaunchApp = { app -> launchAllowedApp(app) },
+                            onUnlock = { stopLock() }
                         )
                     }
                 }
@@ -1318,10 +1311,10 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
 @Composable
 fun LockScreen(
-    targetPin: String,
-    onLaunchGoogleLens: () -> Unit,
-    onLaunchPhone: () -> Unit,
-    onLaunchXiaomiHome: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") targetPin: String = "",
+    onLaunchGoogleLens: () -> Unit = {},
+    onLaunchPhone: () -> Unit = {},
+    onLaunchXiaomiHome: () -> Unit = {},
     onUnlock: () -> Unit,
     allowedApps: List<AllowedApp> = FocusSettingsRepository.DEFAULT_ALLOWED_APPS,
     layout: LockAppLayout = LockAppLayout.PILL_ROW,
@@ -1329,45 +1322,27 @@ fun LockScreen(
     showSessionTimer: Boolean = true,
     hapticKeypad: Boolean = true,
     autoClearWrongPin: Boolean = true,
-    sessionStartTimeMs: Long = 0L,
+    sessionStartTimeMs: Long = System.currentTimeMillis(),
     onLaunchApp: ((AllowedApp) -> Unit)? = null
 ) {
-    val themePalette = LocalFocusTheme.current
-    val palette = remember(themePalette) { LockPalette.fromFocusTheme(themePalette) }
     val context = LocalContext.current
-    val haptics = rememberFocusHaptics()
     val iconCache by FocusSettingsRepository.appIconsState.collectAsState()
-    var enteredPin by remember { mutableStateOf("") }
-    var wrongPinError by remember { mutableStateOf(false) }
-    val shakeOffset = remember { Animatable(0f) }
-    var pinDragAccumulated by remember { mutableFloatStateOf(0f) }
-
     LaunchedEffect(allowedApps) {
         FocusSettingsRepository.preloadAppIcons(context, allowedApps)
     }
 
-    LaunchedEffect(wrongPinError, autoClearWrongPin) {
-        if (wrongPinError) {
-            if (hapticKeypad) {
-                haptics.reject()
-            }
-            for (target in listOf(-16f, 16f, -12f, 12f, -6f, 6f, 0f)) {
-                shakeOffset.animateTo(
-                    target,
-                    spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessHigh)
-                )
-            }
-            if (autoClearWrongPin) {
-                delay(180L)
-                enteredPin = ""
-                wrongPinError = false
-            }
-        }
-    }
-
-    val resolvedAppClick: (AllowedApp) -> Unit = remember(onLaunchApp, onLaunchGoogleLens, onLaunchPhone, onLaunchXiaomiHome, haptics) {
-        { app ->
-            haptics.tap()
+    ManualLockScreen(
+        dailyGoalPercent = 0,
+        currentStreak = 0,
+        allowedApps = allowedApps,
+        appLayout = layout,
+        minimalPillButtonSizeDp = minimalPillButtonSizeDp,
+        showSessionTimer = showSessionTimer,
+        hapticKeypad = hapticKeypad,
+        autoClearWrongAnswer = autoClearWrongPin,
+        sessionStartTimeMs = if (sessionStartTimeMs > 0L) sessionStartTimeMs else System.currentTimeMillis(),
+        iconCache = iconCache,
+        onLaunchApp = { app ->
             if (onLaunchApp != null) {
                 onLaunchApp(app)
             } else {
@@ -1377,315 +1352,9 @@ fun LockScreen(
                     FocusSettingsRepository.PRESET_XIAOMI_PKG -> onLaunchXiaomiHome()
                 }
             }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(palette.background)
-            .padding(horizontal = 28.dp, vertical = 32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        ThemeBackdropLayer(palette = themePalette)
-
-        Column(
-            modifier = Modifier
-                .widthIn(max = 400.dp)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(22.dp)
-        ) {
-            // Serene Minimal Timer Hero
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (showSessionTimer) {
-                    ThemedSessionClockHero(
-                        sessionStartTimeMs = sessionStartTimeMs,
-                        themePalette = themePalette,
-                        palette = palette
-                    )
-                } else {
-                    ThemedTimerRing(
-                        progress = 1f,
-                        size = 112.dp,
-                        palette = themePalette
-                    ) {
-                        FocusLockEmblem(
-                            size = 52.dp,
-                            showAmbientGlow = true
-                        )
-                    }
-                }
-
-                Text(
-                    text = if (wrongPinError) {
-                        "Incorrect PIN"
-                    } else if (enteredPin.isNotEmpty()) {
-                        "Swipe dots left to clear"
-                    } else {
-                        "Enter 6-digit PIN"
-                    },
-                    color = if (wrongPinError) MaterialTheme.colorScheme.error else palette.secondaryText,
-                    fontSize = 13.sp,
-                    letterSpacing = 0.2.sp
-                )
-            }
-
-            // Animated Minimal PIN Dots with Shake + Swipe-Left-to-Backspace
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer { translationX = shakeOffset.value }
-                    .pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { pinDragAccumulated = 0f },
-                            onHorizontalDrag = { _, dragAmount ->
-                                pinDragAccumulated += dragAmount
-                            },
-                            onDragEnd = {
-                                if (pinDragAccumulated < -48f && enteredPin.isNotEmpty()) {
-                                    if (hapticKeypad) haptics.tick()
-                                    wrongPinError = false
-                                    enteredPin = if (pinDragAccumulated < -160f) {
-                                        ""
-                                    } else {
-                                        enteredPin.dropLast(1)
-                                    }
-                                }
-                                pinDragAccumulated = 0f
-                            },
-                            onDragCancel = { pinDragAccumulated = 0f }
-                        )
-                    }
-                    .padding(vertical = 8.dp)
-            ) {
-                for (i in 0 until 6) {
-                    val filled = i < enteredPin.length
-                    val dotSize by animateDpAsState(
-                        targetValue = if (filled) 14.dp else 11.dp,
-                        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-                        label = "pin_dot_size_$i"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(dotSize)
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    wrongPinError -> MaterialTheme.colorScheme.error
-                                    filled -> palette.accent
-                                    else -> palette.surfaceElevated
-                                }
-                            )
-                    )
-                }
-            }
-
-            // Dynamic Allowed Apps in Chosen Sleek Layout
-            if (allowedApps.isNotEmpty()) {
-                LockAllowedAppsSection(
-                    apps = allowedApps,
-                    layout = layout,
-                    palette = palette,
-                    onAppClick = resolvedAppClick,
-                    pillButtonSizeDp = minimalPillButtonSizeDp,
-                    iconCache = iconCache,
-                    readFromCacheOnly = true
-                )
-            }
-
-            // Minimalist Tactile Keypad
-            val keys = listOf(
-                listOf("1", "2", "3"),
-                listOf("4", "5", "6"),
-                listOf("7", "8", "9"),
-                listOf("", "0", "DEL")
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                for (row in keys) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        for (key in row) {
-                            if (key.isEmpty()) {
-                                Spacer(modifier = Modifier.size(66.dp))
-                            } else {
-                                KeypadButton(
-                                    text = key,
-                                    palette = palette
-                                ) {
-                                    if (hapticKeypad) {
-                                        if (key == "DEL") haptics.tick() else haptics.tap()
-                                    }
-                                    if (key == "DEL") {
-                                        wrongPinError = false
-                                        if (enteredPin.isNotEmpty()) {
-                                            enteredPin = enteredPin.dropLast(1)
-                                        }
-                                    } else {
-                                        if (enteredPin.length < 6) {
-                                            wrongPinError = false
-                                            enteredPin += key
-                                            if (enteredPin == targetPin) {
-                                                if (hapticKeypad) haptics.confirm()
-                                                onUnlock()
-                                            } else if (enteredPin.length == 6) {
-                                                wrongPinError = true
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThemedSessionClockHero(
-    sessionStartTimeMs: Long,
-    themePalette: FocusThemePalette,
-    palette: LockPalette
-) {
-    var elapsedSeconds by remember(sessionStartTimeMs) {
-        mutableLongStateOf(
-            if (sessionStartTimeMs > 0L) {
-                ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
-            } else {
-                0L
-            }
-        )
-    }
-
-    LaunchedEffect(sessionStartTimeMs) {
-        while (isActive) {
-            if (sessionStartTimeMs > 0L) {
-                elapsedSeconds = ((System.currentTimeMillis() - sessionStartTimeMs).coerceAtLeast(0L)) / 1000L
-            }
-            delay(1000L)
-        }
-    }
-
-    val mins = elapsedSeconds / 60L
-    val secs = elapsedSeconds % 60L
-    val minuteProgress = ((elapsedSeconds % 60L) / 60f).let { if (it <= 0f) 1f else it }
-
-    ThemedTimerRing(
-        progress = minuteProgress,
-        size = 160.dp,
-        palette = themePalette
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Text(
-                text = String.format(Locale.US, "%02d:%02d", mins, secs),
-                fontFamily = themePalette.numeralFont,
-                color = palette.primaryText,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "FOCUSING",
-                fontFamily = themePalette.displayFont,
-                color = palette.accent,
-                fontSize = 9.5.sp,
-                letterSpacing = 1.8.sp
-            )
-        }
-    }
-}
-
-@Composable
-fun KeypadButton(
-    text: String,
-    palette: LockPalette = LockPalette.StealthDark,
-    onClick: () -> Unit
-) {
-    val themePalette = LocalFocusTheme.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.88f)
-    val isDelete = text == "DEL"
-
-    if (!isDelete && themePalette.isLiquidGlass) {
-        Box(
-            modifier = Modifier
-                .size(66.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .focusGlassPanel(
-                    shape = CircleShape,
-                    palette = themePalette,
-                    elevated = true,
-                    isPressed = isPressed
-                )
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                fontFamily = themePalette.numeralFont,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium,
-                color = palette.primaryText,
-                textAlign = TextAlign.Center
-            )
-        }
-    } else {
-        Button(
-            onClick = onClick,
-            interactionSource = interactionSource,
-            modifier = Modifier
-                .size(66.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                },
-            shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isDelete) Color.Transparent else palette.surface,
-                contentColor = palette.primaryText
-            ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-            contentPadding = PaddingValues(0.dp)
-        ) {
-            if (isDelete) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Backspace,
-                    contentDescription = "Delete",
-                    tint = palette.secondaryText,
-                    modifier = Modifier.size(20.dp)
-                )
-            } else {
-                Text(
-                    text = text,
-                    fontFamily = themePalette.numeralFont,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
+        },
+        onUnlock = onUnlock
+    )
 }
 
 @Composable

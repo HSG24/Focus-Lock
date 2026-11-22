@@ -82,6 +82,12 @@ object NotificationBlockerRepository {
     }
 
     @Synchronized
+    fun reloadFromPrefs(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        _state?.value = readState(prefs)
+    }
+
+    @Synchronized
     fun startFreshSession(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()

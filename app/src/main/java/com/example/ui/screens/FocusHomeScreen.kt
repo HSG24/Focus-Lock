@@ -94,12 +94,10 @@ import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.components.rememberSpringPressScale
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
-import com.example.uploadPinToFirebase
 import com.example.widget.NothingFocusWidgetUpdater
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 @Composable
 fun FocusHomeScreen(
@@ -205,25 +203,11 @@ fun FocusHomeScreen(
         }
 
         haptics.confirm()
-        val pin = String.format(Locale.US, "%06d", Random.nextInt(1000000))
-        isLoading = true
         errorMessage = null
-
-        coroutineScope.launch {
-            val success = uploadPinToFirebase(pin)
-            isLoading = false
-            if (success) {
-                val serviceIntent = Intent(context, LockService::class.java).apply {
-                    putExtra("PIN", pin)
-                }
-                ContextCompat.startForegroundService(context, serviceIntent)
-                NothingFocusWidgetUpdater.scheduleUpdateAll(context)
-                (context as? ComponentActivity)?.moveTaskToBack(true)
-            } else {
-                haptics.reject()
-                errorMessage = "Could not sync unlock PIN. Check your connection."
-            }
-        }
+        val serviceIntent = Intent(context, LockService::class.java)
+        ContextCompat.startForegroundService(context, serviceIntent)
+        NothingFocusWidgetUpdater.scheduleUpdateAll(context)
+        (context as? ComponentActivity)?.moveTaskToBack(true)
     }
 
     Box(

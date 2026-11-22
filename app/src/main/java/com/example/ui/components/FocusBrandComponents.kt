@@ -45,6 +45,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -61,6 +62,9 @@ import com.example.ui.theme.LocalFocusTheme
 import com.example.ui.theme.PureWhite
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 fun View.performClockTickHaptic() {
     performFocusTick()
@@ -93,21 +97,27 @@ fun rememberSpringPressScale(
 }
 
 /**
- * Custom geometric Focus Lock emblem matching the adaptive launcher icon and
- * dynamically colored by the active theme in LocalFocusTheme.
+ * Original Precision Aperture Iris emblem for FocusLock.
+ *
+ * Six interlocking optical shutter blades frame a calm, luminous focal core.
+ * Dynamically adapts to the active [LocalFocusTheme] palette and supports
+ * real-time iris expansion via [openProgress] (0f = locked focus, 1f = unlocked).
  */
 @Composable
 fun FocusLockEmblem(
     modifier: Modifier = Modifier,
     size: Dp = 128.dp,
-    showAmbientGlow: Boolean = true
+    showAmbientGlow: Boolean = true,
+    openProgress: Float = 0f,
+    accentOverride: Color? = null
 ) {
     val palette = LocalFocusTheme.current
-    val primaryColor = palette.primary
-    val deepColor = palette.primaryDeep
-    val glowColor = palette.primaryGlow
-    val surfaceColor = palette.surface
+    val primaryColor = accentOverride ?: palette.primary
+    val deepColor = accentOverride?.copy(alpha = 0.72f) ?: palette.primaryDeep
+    val glowColor = accentOverride?.copy(alpha = 0.55f) ?: palette.primaryGlow
+    val surfaceColor = palette.surfaceElevated
     val strokePrimary = palette.textPrimary
+    val clampedOpen = openProgress.coerceIn(0f, 1f)
 
     Box(
         modifier = modifier
@@ -122,9 +132,9 @@ fun FocusLockEmblem(
                 val glowBrush = if (showAmbientGlow) {
                     Brush.radialGradient(
                         colors = listOf(
-                            primaryColor.copy(alpha = 0.20f),
-                            deepColor.copy(alpha = 0.10f),
-                            glowColor.copy(alpha = 0.05f),
+                            primaryColor.copy(alpha = 0.24f),
+                            deepColor.copy(alpha = 0.11f),
+                            glowColor.copy(alpha = 0.04f),
                             Color.Transparent
                         ),
                         center = center,
@@ -134,53 +144,34 @@ fun FocusLockEmblem(
                     null
                 }
 
-                val ringRadius = 31f * unit
+                val bladePath = Path()
+                val ringRadius = 38.5f * unit
                 val ringTopLeft = Offset(center.x - ringRadius, center.y - ringRadius)
                 val ringSize = Size(ringRadius * 2f, ringRadius * 2f)
-                val ringStroke = Stroke(width = 2.2f * unit, cap = StrokeCap.Round)
-                val arcAngles = floatArrayOf(-78f, 12f, 102f, 192f)
-
-                val tickStroke = 2.2f * unit
-                val outerTick = 36f * unit
-                val innerTick = 26.5f * unit
-
-                val shackleRadius = 9f * unit
-                val shackleCenterY = center.y - 12.5f * unit
-                val shackleTopLeft = Offset(center.x - shackleRadius, shackleCenterY - shackleRadius)
-                val shackleSize = Size(shackleRadius * 2f, shackleRadius * 2f)
-                val shackleStrokeWidth = 3.0f * unit
-                val shackleStroke = Stroke(width = shackleStrokeWidth, cap = StrokeCap.Round)
-                val shackleBottomY = center.y - 5.5f * unit
-
-                val bodyWidth = 33f * unit
-                val bodyHeight = 25f * unit
-                val bodyTopLeft = Offset(center.x - bodyWidth / 2f, shackleBottomY)
-                val bodySize = Size(bodyWidth, bodyHeight)
-                val bodyCorner = CornerRadius(4.2f * unit, 4.2f * unit)
-                val bodyStroke = Stroke(width = 2.5f * unit, join = StrokeJoin.Round)
-
-                val coreCenter = Offset(center.x, center.y + 4.8f * unit)
-                val coreOuterRadius = 6.5f * unit
-                val coreInnerRadius = 4.0f * unit
-                val coreHaloColor = primaryColor.copy(alpha = 0.25f)
-                val coreKeyholeStart = Offset(center.x, coreCenter.y + 2f * unit)
-                val coreKeyholeEnd = Offset(center.x, coreCenter.y + 8.6f * unit)
-                val coreKeyholeWidth = 2.6f * unit
+                val ringStroke = Stroke(width = 1.6f * unit, cap = StrokeCap.Round)
+                val bladeStroke = Stroke(
+                    width = 1.5f * unit,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
 
                 onDrawBehind {
                     if (glowBrush != null) {
                         drawCircle(
                             brush = glowBrush,
-                            radius = glowRadius,
+                            radius = glowRadius * (1f + clampedOpen * 0.18f),
                             center = center
                         )
                     }
 
-                    for (start in arcAngles) {
+                    // 1. Subtle outer precision aperture housing (6 segmented arcs)
+                    val housingRotation = clampedOpen * 32f
+                    for (i in 0 until 6) {
+                        val startDeg = -76f + i * 60f + housingRotation
                         drawArc(
-                            color = strokePrimary,
-                            startAngle = start,
-                            sweepAngle = 66f,
+                            color = strokePrimary.copy(alpha = 0.34f - clampedOpen * 0.12f),
+                            startAngle = startDeg,
+                            sweepAngle = 40f,
                             useCenter = false,
                             topLeft = ringTopLeft,
                             size = ringSize,
@@ -188,89 +179,69 @@ fun FocusLockEmblem(
                         )
                     }
 
-                    drawLine(
-                        color = primaryColor,
-                        start = Offset(center.x, center.y - outerTick),
-                        end = Offset(center.x, center.y - innerTick),
-                        strokeWidth = tickStroke,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = primaryColor,
-                        start = Offset(center.x, center.y + innerTick),
-                        end = Offset(center.x, center.y + outerTick),
-                        strokeWidth = tickStroke,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = primaryColor,
-                        start = Offset(center.x - outerTick, center.y),
-                        end = Offset(center.x - innerTick, center.y),
-                        strokeWidth = tickStroke,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = primaryColor,
-                        start = Offset(center.x + innerTick, center.y),
-                        end = Offset(center.x + outerTick, center.y),
-                        strokeWidth = tickStroke,
-                        cap = StrokeCap.Round
-                    )
+                    // 2. Six geometric optical aperture blades rotating open with openProgress
+                    val innerR = (10.5f + clampedOpen * 17.5f) * unit
+                    val midR = (23.5f + clampedOpen * 7.5f) * unit
+                    val outerR = (33.5f + clampedOpen * 3.5f) * unit
+                    val twistDeg = clampedOpen * 42f
+                    val bladeAlpha = (1f - clampedOpen * 0.32f).coerceIn(0.35f, 1f)
 
-                    drawArc(
-                        color = strokePrimary,
-                        startAngle = 180f,
-                        sweepAngle = 180f,
-                        useCenter = false,
-                        topLeft = shackleTopLeft,
-                        size = shackleSize,
-                        style = shackleStroke
-                    )
-                    drawLine(
-                        color = strokePrimary,
-                        start = Offset(center.x - shackleRadius, shackleCenterY),
-                        end = Offset(center.x - shackleRadius, shackleBottomY),
-                        strokeWidth = shackleStrokeWidth,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = strokePrimary,
-                        start = Offset(center.x + shackleRadius, shackleCenterY),
-                        end = Offset(center.x + shackleRadius, shackleBottomY),
-                        strokeWidth = shackleStrokeWidth,
-                        cap = StrokeCap.Round
-                    )
+                    for (i in 0 until 6) {
+                        val baseDeg = i * 60.0 - 90.0 + twistDeg
+                        val a0 = baseDeg * PI / 180.0
+                        val a1 = (baseDeg + 26.0) * PI / 180.0
+                        val a2 = (baseDeg + 51.0) * PI / 180.0
+                        val a3 = (baseDeg + 34.0) * PI / 180.0
 
-                    drawRoundRect(
-                        color = surfaceColor,
-                        topLeft = bodyTopLeft,
-                        size = bodySize,
-                        cornerRadius = bodyCorner
-                    )
-                    drawRoundRect(
-                        color = strokePrimary,
-                        topLeft = bodyTopLeft,
-                        size = bodySize,
-                        cornerRadius = bodyCorner,
-                        style = bodyStroke
-                    )
+                        val p0 = Offset(center.x + (innerR * cos(a0)).toFloat(), center.y + (innerR * sin(a0)).toFloat())
+                        val p1 = Offset(center.x + (outerR * cos(a1)).toFloat(), center.y + (outerR * sin(a1)).toFloat())
+                        val p2 = Offset(center.x + (midR * cos(a2)).toFloat(), center.y + (midR * sin(a2)).toFloat())
+                        val p3 = Offset(center.x + (innerR * cos(a3)).toFloat(), center.y + (innerR * sin(a3)).toFloat())
 
+                        bladePath.reset()
+                        bladePath.moveTo(p0.x, p0.y)
+                        bladePath.lineTo(p1.x, p1.y)
+                        bladePath.lineTo(p2.x, p2.y)
+                        bladePath.lineTo(p3.x, p3.y)
+                        bladePath.close()
+
+                        val isAccentBlade = i % 2 == 0
+                        drawPath(
+                            path = bladePath,
+                            color = if (isAccentBlade) {
+                                surfaceColor.copy(alpha = 0.94f * bladeAlpha)
+                            } else {
+                                strokePrimary.copy(alpha = 0.11f * bladeAlpha)
+                            }
+                        )
+                        drawPath(
+                            path = bladePath,
+                            color = if (isAccentBlade) {
+                                strokePrimary.copy(alpha = 0.88f * bladeAlpha)
+                            } else {
+                                primaryColor.copy(alpha = 0.72f * bladeAlpha)
+                            },
+                            style = bladeStroke
+                        )
+                    }
+
+                    // 3. Crisp inner iris ring + luminous focal core
+                    val coreHaloR = (8.8f + clampedOpen * 6.5f) * unit
+                    val coreR = (4.6f + clampedOpen * 2.2f) * unit
                     drawCircle(
-                        color = coreHaloColor,
-                        radius = coreOuterRadius,
-                        center = coreCenter
+                        color = primaryColor.copy(alpha = 0.22f + clampedOpen * 0.16f),
+                        radius = coreHaloR,
+                        center = center
                     )
                     drawCircle(
                         color = primaryColor,
-                        radius = coreInnerRadius,
-                        center = coreCenter
+                        radius = coreR,
+                        center = center
                     )
-                    drawLine(
-                        color = primaryColor,
-                        start = coreKeyholeStart,
-                        end = coreKeyholeEnd,
-                        strokeWidth = coreKeyholeWidth,
-                        cap = StrokeCap.Round
+                    drawCircle(
+                        color = PureWhite.copy(alpha = 0.85f),
+                        radius = (1.6f + clampedOpen * 0.9f) * unit,
+                        center = center
                     )
                 }
             }

@@ -2,9 +2,6 @@ package com.example.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
 import androidx.compose.runtime.Immutable
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -17,15 +14,7 @@ import com.example.calculateMaxStreak
 import com.example.calculateStreak
 import com.example.isSameDay
 import com.example.isSameDayCalendar
-import com.example.sharedHttpClient
 import com.example.widget.NothingFocusWidgetUpdater
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.DatabaseReference
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,17 +22,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 
 private val Context.focusStatsDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "focus_stats_datastore"
@@ -163,9 +147,6 @@ data class FocusHeatmapData(
 )
 
 object FocusStatsRepository {
-    const val RTDB_BASE_URL =
-        "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app"
-
     private const val PREFS_NAME = "focus_stats_cache"
     private const val KEY_CACHED_SESSIONS = "cached_sessions_json"
     private const val KEY_PENDING_SESSIONS = "pending_sessions_json"
@@ -183,33 +164,10 @@ object FocusStatsRepository {
     private val DS_MAX_STREAK = intPreferencesKey(KEY_CACHED_MAX_STREAK)
 
     private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val initStarted = AtomicBoolean(false)
-    private val syncInFlight = AtomicBoolean(false)
     private val cacheLock = Any()
 
     @Volatile
     private var appContextRef: Context? = null
-
-    @Volatile
-    private var sessionsDbRef: DatabaseReference? = null
-
-    @Volatile
-    private var connectedDbRef: DatabaseReference? = null
-
-    @Volatile
-    private var sessionsListener: ValueEventListener? = null
-
-    @Volatile
-    private var connectedListener: ValueEventListener? = null
-
-    @Volatile
-    private var networkCallbackRegistered = false
-
-    @Volatile
-    private var isOsNetworkAvailable = true
-
-    @Volatile
-    private var isRtdbConnected = false
 
     @Volatile
     private var _state: MutableStateFlow<FocusStatsState>? = null
@@ -218,25 +176,12 @@ object FocusStatsRepository {
         val appCtx = context.applicationContext
         appContextRef = appCtx
         ensureFlowHydrated(appCtx)
-
-        if (initStarted.compareAndSet(false, true)) {
-            isOsNetworkAvailable = checkNetworkAvailable(appCtx)
-            updateSyncStatusFromConnectivity()
-            registerConnectivityCallback(appCtx)
-            repoScope.launch {
-                setupFirebaseRealtimeDatabase(appCtx)
-                if (isOsNetworkAvailable) {
-                    syncWithServerInternal(appCtx)
-                }
-            }
-        }
     }
 
     fun observe(context: Context): StateFlow<FocusStatsState> {
         val appCtx = context.applicationContext
         appContextRef = appCtx
         val flow = ensureFlowHydrated(appCtx)
-        initialize(appCtx)
         return flow.asStateFlow()
     }
 
@@ -248,37 +193,48 @@ object FocusStatsRepository {
         return mergeSessionRecords(cached, pending).map { it.toSession() }
     }
 
+    fun getAllSessionRecords(context: Context): List<CachedSessionRecord> {
+        val appCtx = context.applicationContext
+        val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val cached = parseRecords(prefs.getString(KEY_CACHED_SESSIONS, "[]"))
+        val pending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
+        return mergeSessionRecords(cached, pending)
+    }
+
     fun refreshNow(context: Context) {
         val appCtx = context.applicationContext
-        initialize(appCtx)
-        isOsNetworkAvailable = checkNetworkAvailable(appCtx)
-        if (!isOsNetworkAvailable) {
-            updateSyncStatusFromConnectivity()
-            return
-        }
-        repoScope.launch {
-            syncWithServerInternal(appCtx)
+        appContextRef = appCtx
+        synchronized(cacheLock) {
+            val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val cached = parseRecords(prefs.getString(KEY_CACHED_SESSIONS, "[]"))
+            val pending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
+            val merged = mergeSessionRecords(cached, pending)
+            if (pending.isNotEmpty()) {
+                val now = System.currentTimeMillis()
+                persistToPrefsAndMirrorAsync(
+                    appCtx = appCtx,
+                    prefs = prefs,
+                    cached = merged,
+                    pending = emptyList(),
+                    merged = merged,
+                    lastSyncedMs = now
+                )
+            }
+            val lastUpdated = prefs.getLong(KEY_LAST_SYNCED_MS, System.currentTimeMillis())
+            ensureFlowHydrated(appCtx).value = FocusStatsState(
+                sessions = merged.map { it.toSession() },
+                syncStatus = StatsSyncStatus.SYNCED,
+                pendingUploadCount = 0,
+                lastSyncedAtMs = lastUpdated,
+                isInitialLoadComplete = true
+            )
         }
     }
 
     suspend fun fetchAuthoritativeSessions(context: Context? = appContextRef): List<Session> {
-        val ctx = context?.applicationContext ?: appContextRef
-        if (ctx != null) {
-            ensureFlowHydrated(ctx)
-        }
-        val remote = fetchRemoteSessionsViaRest()
-        if (remote != null) {
-            if (ctx != null) {
-                reconcileWithRemoteRecords(ctx, remote)
-                return getCachedSessions(ctx)
-            }
-            return remote.map { it.toSession() }
-        }
-        return if (ctx != null) {
-            getCachedSessions(ctx)
-        } else {
-            emptyList()
-        }
+        val ctx = context?.applicationContext ?: appContextRef ?: return emptyList()
+        ensureFlowHydrated(ctx)
+        return getCachedSessions(ctx)
     }
 
     fun recordCompletedSession(
@@ -300,42 +256,47 @@ object FocusStatsRepository {
 
         synchronized(cacheLock) {
             val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val pending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]")).toMutableList()
-            if (pending.none { it.id == recordId || (it.startTime == startTimeMs && it.duration == durationMs) }) {
-                pending.add(newRecord)
-            }
             val cached = parseRecords(prefs.getString(KEY_CACHED_SESSIONS, "[]"))
-            val merged = mergeSessionRecords(cached, pending)
+            val legacyPending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
+            val mergedExisting = mergeSessionRecords(cached, legacyPending).toMutableList()
+            if (mergedExisting.none { it.id == recordId || (it.startTime == startTimeMs && it.duration == durationMs) }) {
+                mergedExisting.add(newRecord)
+            }
+            val sorted = mergedExisting.sortedBy { it.startTime }
+            val now = System.currentTimeMillis()
             persistToPrefsAndMirrorAsync(
                 appCtx = appCtx,
                 prefs = prefs,
-                cached = cached,
-                pending = pending,
-                merged = merged,
-                lastSyncedMs = prefs.getLong(KEY_LAST_SYNCED_MS, 0L)
+                cached = sorted,
+                pending = emptyList(),
+                merged = sorted,
+                lastSyncedMs = now
             )
-            emitState(appCtx, merged, pending.size, prefs.getLong(KEY_LAST_SYNCED_MS, 0L))
+            emitState(sorted, now)
         }
+        NothingFocusWidgetUpdater.scheduleUpdateAll(appCtx)
+    }
 
-        // Push to Firebase RTDB SDK (queued on disk automatically when offline)
-        runCatching {
-            sessionsDbRef?.child(recordId)?.setValue(
-                mapOf(
-                    "startTime" to startTimeMs,
-                    "duration" to durationMs
-                )
+    fun replaceAllSessions(
+        context: Context,
+        records: List<CachedSessionRecord>
+    ) {
+        val appCtx = context.applicationContext
+        appContextRef = appCtx
+        ensureFlowHydrated(appCtx)
+        val clean = mergeSessionRecords(records, emptyList())
+        val now = System.currentTimeMillis()
+        synchronized(cacheLock) {
+            val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            persistToPrefsAndMirrorAsync(
+                appCtx = appCtx,
+                prefs = prefs,
+                cached = clean,
+                pending = emptyList(),
+                merged = clean,
+                lastSyncedMs = now
             )
-        }
-
-        // Also flush immediately over HTTPS if network is currently online
-        repoScope.launch {
-            if (checkNetworkAvailable(appCtx)) {
-                flushPendingSessions(appCtx)
-                syncWithServerInternal(appCtx)
-            } else {
-                isOsNetworkAvailable = false
-                updateSyncStatusFromConnectivity()
-            }
+            emitState(clean, now)
         }
     }
 
@@ -345,16 +306,24 @@ object FocusStatsRepository {
             _state?.let { return it }
             val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val cached = parseRecords(prefs.getString(KEY_CACHED_SESSIONS, "[]"))
-            val pending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
-            val merged = mergeSessionRecords(cached, pending)
-            val lastSync = prefs.getLong(KEY_LAST_SYNCED_MS, 0L)
-            val online = checkNetworkAvailable(appCtx)
-            isOsNetworkAvailable = online
+            val legacyPending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
+            val merged = mergeSessionRecords(cached, legacyPending)
+            val lastUpdated = prefs.getLong(KEY_LAST_SYNCED_MS, System.currentTimeMillis())
+            if (legacyPending.isNotEmpty()) {
+                persistToPrefsAndMirrorAsync(
+                    appCtx = appCtx,
+                    prefs = prefs,
+                    cached = merged,
+                    pending = emptyList(),
+                    merged = merged,
+                    lastSyncedMs = lastUpdated
+                )
+            }
             val initial = FocusStatsState(
                 sessions = merged.map { it.toSession() },
-                syncStatus = if (online) StatsSyncStatus.SYNCED else StatsSyncStatus.OFFLINE_CACHED,
-                pendingUploadCount = pending.size,
-                lastSyncedAtMs = lastSync,
+                syncStatus = StatsSyncStatus.SYNCED,
+                pendingUploadCount = 0,
+                lastSyncedAtMs = lastUpdated,
                 isInitialLoadComplete = true
             )
             val flow = MutableStateFlow(initial)
@@ -363,326 +332,19 @@ object FocusStatsRepository {
         }
     }
 
-    private fun setupFirebaseRealtimeDatabase(appCtx: Context) {
-        runCatching {
-            if (FirebaseApp.getApps(appCtx).isEmpty()) {
-                val options = FirebaseOptions.Builder()
-                    .setApplicationId("1:1058622075709:android:focuslock")
-                    .setProjectId("focuslock-b6c0f")
-                    .setDatabaseUrl(RTDB_BASE_URL)
-                    .setApiKey("AIzaSyFocusLockPublicRtdbKey")
-                    .build()
-                FirebaseApp.initializeApp(appCtx, options)
-            }
-
-            val database = FirebaseDatabase.getInstance(RTDB_BASE_URL)
-            runCatching { database.setPersistenceEnabled(true) }
-
-            val sessionsRef = database.getReference("sessions")
-            runCatching { sessionsRef.keepSynced(true) }
-            sessionsDbRef = sessionsRef
-
-            if (sessionsListener == null) {
-                val listener = object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        val remoteList = mutableListOf<CachedSessionRecord>()
-                        for (child in snapshot.children) {
-                            val key = child.key ?: continue
-                            val startTime = (child.child("startTime").value as? Number)?.toLong() ?: 0L
-                            val duration = (child.child("duration").value as? Number)?.toLong() ?: 0L
-                            if (startTime > 0L && duration > 0L) {
-                                remoteList.add(
-                                    CachedSessionRecord(
-                                        id = key,
-                                        startTime = startTime,
-                                        duration = duration
-                                    )
-                                )
-                            }
-                        }
-                        if (remoteList.isEmpty() && !isRtdbConnected && !isOsNetworkAvailable) {
-                            return
-                        }
-                        repoScope.launch {
-                            reconcileWithRemoteRecords(appCtx, remoteList)
-                        }
-                    }
-
-                    override fun onCancelled(error: DatabaseError) {
-                        updateSyncStatusFromConnectivity()
-                    }
-                }
-                sessionsListener = listener
-                sessionsRef.addValueEventListener(listener)
-            }
-
-            val connRef = database.getReference(".info/connected")
-            connectedDbRef = connRef
-            if (connectedListener == null) {
-                val connListener = object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        val connected = snapshot.getValue(Boolean::class.java) == true
-                        isRtdbConnected = connected
-                        if (connected) {
-                            isOsNetworkAvailable = true
-                            repoScope.launch {
-                                syncWithServerInternal(appCtx)
-                            }
-                        } else {
-                            isOsNetworkAvailable = checkNetworkAvailable(appCtx)
-                            updateSyncStatusFromConnectivity()
-                        }
-                    }
-
-                    override fun onCancelled(error: DatabaseError) {
-                        isRtdbConnected = false
-                        updateSyncStatusFromConnectivity()
-                    }
-                }
-                connectedListener = connListener
-                connRef.addValueEventListener(connListener)
-            }
-        }
-    }
-
-    private fun registerConnectivityCallback(appCtx: Context) {
-        if (networkCallbackRegistered) return
-        runCatching {
-            val cm = appCtx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                ?: return
-            val callback = object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) {
-                    isOsNetworkAvailable = true
-                    repoScope.launch {
-                        syncWithServerInternal(appCtx)
-                    }
-                }
-
-                override fun onCapabilitiesChanged(
-                    network: Network,
-                    networkCapabilities: NetworkCapabilities
-                ) {
-                    val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    if (hasInternet && !isOsNetworkAvailable) {
-                        isOsNetworkAvailable = true
-                        repoScope.launch {
-                            syncWithServerInternal(appCtx)
-                        }
-                    }
-                }
-
-                override fun onLost(network: Network) {
-                    val stillOnline = checkNetworkAvailable(appCtx)
-                    isOsNetworkAvailable = stillOnline
-                    if (!stillOnline) {
-                        isRtdbConnected = false
-                    }
-                    updateSyncStatusFromConnectivity()
-                }
-            }
-            cm.registerDefaultNetworkCallback(callback)
-            networkCallbackRegistered = true
-        }
-    }
-
-    private fun checkNetworkAvailable(context: Context): Boolean {
-        return runCatching {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                ?: return false
-            val active = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(active) ?: return false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        }.getOrDefault(false)
-    }
-
-    private suspend fun syncWithServerInternal(appCtx: Context) {
-        if (!syncInFlight.compareAndSet(false, true)) return
-        try {
-            setSyncStatus(StatsSyncStatus.SYNCING)
-            runCatching { sessionsDbRef?.keepSynced(true) }
-            flushPendingSessions(appCtx)
-            val remote = fetchRemoteSessionsViaRest()
-            if (remote != null) {
-                reconcileWithRemoteRecords(appCtx, remote)
-                setSyncStatus(StatsSyncStatus.SYNCED)
-            } else {
-                isOsNetworkAvailable = checkNetworkAvailable(appCtx)
-                updateSyncStatusFromConnectivity()
-            }
-        } finally {
-            syncInFlight.set(false)
-        }
-    }
-
-    private suspend fun flushPendingSessions(appCtx: Context) {
-        val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val pendingSnapshot = synchronized(cacheLock) {
-            parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
-        }
-        if (pendingSnapshot.isEmpty()) return
-
-        val uploadedIds = mutableSetOf<String>()
-        for (item in pendingSnapshot) {
-            val ok = putSessionViaRest(item)
-            if (ok) {
-                uploadedIds.add(item.id)
-            }
-        }
-
-        if (uploadedIds.isNotEmpty()) {
-            synchronized(cacheLock) {
-                val latestPending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
-                    .filterNot { it.id in uploadedIds }
-                val latestCached = parseRecords(prefs.getString(KEY_CACHED_SESSIONS, "[]"))
-                    .toMutableList()
-                for (item in pendingSnapshot) {
-                    if (item.id in uploadedIds && latestCached.none {
-                            it.id == item.id || (it.startTime == item.startTime && it.duration == item.duration)
-                        }
-                    ) {
-                        latestCached.add(item)
-                    }
-                }
-                val merged = mergeSessionRecords(latestCached, latestPending)
-                val now = System.currentTimeMillis()
-                persistToPrefsAndMirrorAsync(
-                    appCtx = appCtx,
-                    prefs = prefs,
-                    cached = latestCached,
-                    pending = latestPending,
-                    merged = merged,
-                    lastSyncedMs = now
-                )
-                emitState(appCtx, merged, latestPending.size, now)
-            }
-        }
-    }
-
-    private fun reconcileWithRemoteRecords(
-        appCtx: Context,
-        remote: List<CachedSessionRecord>
-    ) {
-        val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val mergedSessions: List<Session>
-        synchronized(cacheLock) {
-            val currentPending = parseRecords(prefs.getString(KEY_PENDING_SESSIONS, "[]"))
-            val remainingPending = currentPending.filterNot { p ->
-                remote.any { r ->
-                    r.id == p.id || (r.startTime == p.startTime && r.duration == p.duration)
-                }
-            }
-            val merged = mergeSessionRecords(remote, remainingPending)
-            val now = System.currentTimeMillis()
-            persistToPrefsAndMirrorAsync(
-                appCtx = appCtx,
-                prefs = prefs,
-                cached = remote,
-                pending = remainingPending,
-                merged = merged,
-                lastSyncedMs = now
-            )
-            emitState(appCtx, merged, remainingPending.size, now)
-            mergedSessions = merged.map { it.toSession() }
-        }
-
-        val dailyGoalMinutes = FocusSettingsRepository.getCurrent(appCtx).dailyGoalMinutes
-        FocusXpRepository.syncWithRemoteSessions(
-            context = appCtx,
-            sessions = mergedSessions,
-            dailyGoalMinutes = dailyGoalMinutes
-        )
-        NothingFocusWidgetUpdater.scheduleUpdateAll(appCtx)
-    }
-
     private fun emitState(
-        appCtx: Context,
         merged: List<CachedSessionRecord>,
-        pendingCount: Int,
-        lastSyncedMs: Long
+        lastUpdatedMs: Long
     ) {
-        val status = when {
-            !isOsNetworkAvailable && !isRtdbConnected -> StatsSyncStatus.OFFLINE_CACHED
-            syncInFlight.get() -> StatsSyncStatus.SYNCING
-            else -> StatsSyncStatus.SYNCED
-        }
         val flow = _state ?: return
         flow.value = FocusStatsState(
             sessions = merged.map { it.toSession() },
-            syncStatus = status,
-            pendingUploadCount = pendingCount,
-            lastSyncedAtMs = lastSyncedMs,
+            syncStatus = StatsSyncStatus.SYNCED,
+            pendingUploadCount = 0,
+            lastSyncedAtMs = lastUpdatedMs,
             isInitialLoadComplete = true
         )
     }
-
-    private fun setSyncStatus(status: StatsSyncStatus) {
-        val flow = _state ?: return
-        flow.value = flow.value.copy(syncStatus = status)
-    }
-
-    private fun updateSyncStatusFromConnectivity() {
-        val flow = _state ?: return
-        val status = when {
-            !isOsNetworkAvailable && !isRtdbConnected -> StatsSyncStatus.OFFLINE_CACHED
-            syncInFlight.get() -> StatsSyncStatus.SYNCING
-            else -> StatsSyncStatus.SYNCED
-        }
-        flow.value = flow.value.copy(syncStatus = status)
-    }
-
-    private suspend fun fetchRemoteSessionsViaRest(): List<CachedSessionRecord>? =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val request = Request.Builder()
-                    .url("$RTDB_BASE_URL/sessions.json")
-                    .get()
-                    .build()
-                sharedHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@runCatching null
-                    val body = response.body?.string()?.trim().orEmpty()
-                    if (body.isEmpty() || body == "null") {
-                        return@runCatching emptyList()
-                    }
-                    val jsonObject = JSONObject(body)
-                    val result = mutableListOf<CachedSessionRecord>()
-                    val keys = jsonObject.keys()
-                    while (keys.hasNext()) {
-                        val key = keys.next()
-                        val obj = jsonObject.optJSONObject(key) ?: continue
-                        val startTime = obj.optLong("startTime", 0L)
-                        val duration = obj.optLong("duration", 0L)
-                        if (startTime > 0L && duration > 0L) {
-                            result.add(
-                                CachedSessionRecord(
-                                    id = key,
-                                    startTime = startTime,
-                                    duration = duration
-                                )
-                            )
-                        }
-                    }
-                    result
-                }
-            }.getOrNull()
-        }
-
-    private suspend fun putSessionViaRest(record: CachedSessionRecord): Boolean =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val payload = JSONObject().apply {
-                    put("startTime", record.startTime)
-                    put("duration", record.duration)
-                }.toString()
-                val body = payload.toRequestBody("application/json; charset=utf-8".toMediaType())
-                val request = Request.Builder()
-                    .url("$RTDB_BASE_URL/sessions/${record.id}.json")
-                    .put(body)
-                    .build()
-                sharedHttpClient.newCall(request).execute().use { response ->
-                    response.isSuccessful
-                }
-            }.getOrDefault(false)
-        }
 
     private fun persistToPrefsAndMirrorAsync(
         appCtx: Context,

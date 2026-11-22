@@ -53,6 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.FocusOnboardingRepository
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
 import com.example.data.FocusWhatsNewRepository
@@ -69,6 +70,8 @@ import com.example.ui.components.PillNavTab
 import com.example.ui.components.UpdateBottomSheet
 import com.example.ui.components.WhatsNewBottomSheet
 import com.example.ui.components.performClockTickHaptic
+import com.example.ui.screens.BackupRestoreScreen
+import com.example.ui.screens.FirstInstallSetupScreen
 import com.example.ui.screens.FocusHomeScreen
 import com.example.ui.screens.ScheduleScreen
 import com.example.ui.screens.SettingsScreen
@@ -82,11 +85,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -202,7 +201,11 @@ class MainActivity : ComponentActivity() {
 
             val settingsState by FocusSettingsRepository.observe(this).collectAsStateWithLifecycle()
             val blockerState by NotificationBlockerRepository.observe(this).collectAsStateWithLifecycle()
+            var showFirstInstallSetup by remember {
+                mutableStateOf(FocusOnboardingRepository.shouldShowFirstInstallSetup(this))
+            }
             var showShare by remember { mutableStateOf(false) }
+            var showBackupRestore by remember { mutableStateOf(false) }
 
             // Foreground schedule watcher: guarantees exact-second scheduled lock start while the app is open
             LaunchedEffect(Unit) {
@@ -291,7 +294,7 @@ class MainActivity : ComponentActivity() {
                 FocusStatsRepository.initialize(context)
                 val initialVersion = GitHubUpdater.getInstalledVersion(context)
                 installedVersion = initialVersion
-                if (FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, initialVersion)) {
+                if (!showFirstInstallSetup && FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, initialVersion)) {
                     showWhatsNewSheet = true
                 }
                 triggerUpdateCheck(silent = true)
@@ -328,7 +331,7 @@ class MainActivity : ComponentActivity() {
                         ScheduleAlarmScheduler.syncAllAlarms(context)
                         val resumedVersion = GitHubUpdater.getInstalledVersion(context)
                         installedVersion = resumedVersion
-                        if (FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, resumedVersion)) {
+                        if (!showFirstInstallSetup && FocusWhatsNewRepository.shouldShowAutoWhatsNew(context, resumedVersion)) {
                             showWhatsNewSheet = true
                         }
                         if (awaitingInstallPermission) {
@@ -385,7 +388,7 @@ class MainActivity : ComponentActivity() {
                     }
             }
 
-            BackHandler(enabled = !showShare && pagerState.currentPage != 0) {
+            BackHandler(enabled = !showFirstInstallSetup && !showShare && !showBackupRestore && pagerState.currentPage != 0) {
                 view.performClockTickHaptic()
                 coroutineScope.launch {
                     pagerState.animateScrollToPage(
@@ -500,7 +503,8 @@ class MainActivity : ComponentActivity() {
                                     updateUiState = updateState,
                                     onCheckForUpdates = onCheckForUpdates,
                                     onOpenUpdateSheet = onOpenUpdateSheet,
-                                    onOpenWhatsNew = { showWhatsNewSheet = true }
+                                    onOpenWhatsNew = { showWhatsNewSheet = true },
+                                    onOpenBackupRestore = { showBackupRestore = true }
                                 )
                             }
                         }
@@ -600,7 +604,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    if (showWhatsNewSheet && !showUpdateSheet) {
+                    if (showWhatsNewSheet && !showUpdateSheet && !showFirstInstallSetup) {
                         WhatsNewBottomSheet(
                             installedVersion = installedVersion,
                             onDismiss = {
@@ -609,6 +613,63 @@ class MainActivity : ComponentActivity() {
                                     context = context,
                                     installedVersionName = installedVersion
                                 )
+                            }
+                        )
+                    }
+
+                    if (showFirstInstallSetup) {
+                        FirstInstallSetupScreen(
+                            settingsState = settingsState,
+                            onOpenRestoreBackup = { showBackupRestore = true },
+                            onCompleteSetup = {
+                                FocusOnboardingRepository.markSetupCompleted(context)
+                                FocusWhatsNewRepository.markWhatsNewSeen(
+                                    context = context,
+                                    installedVersionName = installedVersion
+                                )
+                                showFirstInstallSetup = false
+                            }
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = showBackupRestore,
+                        enter = slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            initialOffsetY = { it / 6 }
+                        ) + fadeIn(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ),
+                        exit = slideOutVertically(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            targetOffsetY = { it / 6 }
+                        ) + fadeOut(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )
+                    ) {
+                        BackupRestoreScreen(
+                            onBack = { showBackupRestore = false },
+                            onRestoreApplied = {
+                                if (showFirstInstallSetup) {
+                                    FocusOnboardingRepository.markSetupCompleted(context)
+                                    FocusWhatsNewRepository.markWhatsNewSeen(
+                                        context = context,
+                                        installedVersionName = installedVersion
+                                    )
+                                    showFirstInstallSetup = false
+                                }
                             }
                         )
                     }
@@ -735,24 +796,4 @@ fun calculateMaxStreak(allSessions: List<Session>): Int {
         maxStreak = currentStreak
     }
     return maxStreak
-}
-
-suspend fun uploadPinToFirebase(pin: String): Boolean {
-    return withContext(Dispatchers.IO) {
-        try {
-            val url = "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/current_lock/pin.json"
-            val body = "\"$pin\"".toRequestBody("application/json; charset=utf-8".toMediaType())
-            val request = Request.Builder()
-                .url(url)
-                .put(body)
-                .build()
-
-            sharedHttpClient.newCall(request).execute().use { response ->
-                response.isSuccessful
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
 }

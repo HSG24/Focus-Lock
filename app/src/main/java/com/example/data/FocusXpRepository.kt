@@ -102,6 +102,13 @@ object FocusXpRepository {
         return readState(prefs)
     }
 
+    @Synchronized
+    fun reloadFromPrefs(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        ensureTrackingStartInitialized(prefs)
+        _state?.value = readState(prefs)
+    }
+
     fun dateKeyForMs(timeMs: Long): String {
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(timeMs))
     }

@@ -66,6 +66,7 @@ data class FocusThemePalette(
     val textSecondary: Color,
     val success: Color,
     val warning: Color,
+    val error: Color = Color(0xFFFF4D57),
     val displayFont: FontFamily,
     val numeralFont: FontFamily,
     val bodyFont: FontFamily,

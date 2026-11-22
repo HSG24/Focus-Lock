@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.VerifiedUser
@@ -65,6 +68,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -104,6 +108,7 @@ import com.example.ui.components.ElasticPillSegment
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.HomeScreenWidgetSection
 import com.example.ui.components.LockAllowedAppsSection
+import com.example.ui.components.LockAppsTrayMetrics
 import com.example.ui.components.LockPalette
 import com.example.ui.components.ProtectionAndBlockersSection
 import com.example.ui.components.ThemeBackdropLayer
@@ -130,6 +135,7 @@ fun SettingsScreen(
     onCheckForUpdates: () -> Unit,
     onOpenUpdateSheet: () -> Unit,
     onOpenWhatsNew: (() -> Unit)? = null,
+    onOpenBackupRestore: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -146,6 +152,7 @@ fun SettingsScreen(
     var showAddAppDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
     var showLocalWhatsNewSheet by remember { mutableStateOf(false) }
+    var showLocalBackupScreen by remember { mutableStateOf(false) }
     var goalInputText by remember(settingsState.dailyGoalMinutes) {
         mutableStateOf(settingsState.dailyGoalMinutes.toString())
     }
@@ -431,6 +438,17 @@ fun SettingsScreen(
                     onSelectGraceSeconds = onSelectGraceSeconds
                 )
 
+                BackupRestoreSettingsSection(
+                    onOpenBackupRestore = {
+                        view.performKeyTapHaptic()
+                        if (onOpenBackupRestore != null) {
+                            onOpenBackupRestore()
+                        } else {
+                            showLocalBackupScreen = true
+                        }
+                    }
+                )
+
                 AppUpdatesSection(
                     installedVersion = installedVersion,
                     updateUiState = updateUiState,
@@ -492,6 +510,12 @@ fun SettingsScreen(
         WhatsNewBottomSheet(
             installedVersion = installedVersion,
             onDismiss = { showLocalWhatsNewSheet = false }
+        )
+    }
+
+    if (showLocalBackupScreen) {
+        BackupRestoreScreen(
+            onBack = { showLocalBackupScreen = false }
         )
     }
 }
@@ -697,6 +721,7 @@ private fun LockScreenLayoutSection(
     onSelectLayout: (LockAppLayout) -> Unit,
     onSelectPillSize: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     val palette = LocalFocusTheme.current
     val previewShape = remember { RoundedCornerShape(24.dp) }
     val optionShape = remember { RoundedCornerShape(22.dp) }
@@ -704,6 +729,14 @@ private fun LockScreenLayoutSection(
     val previewPalette = remember(palette) { LockPalette.fromFocusTheme(palette) }
     val previewApps = remember(allowedApps) {
         allowedApps.ifEmpty { FocusSettingsRepository.DEFAULT_ALLOWED_APPS }
+    }
+    var measuredPillRows by remember(previewApps.size, pillButtonSizeDp) { mutableIntStateOf(1) }
+
+    // Exact lock-screen tray width on this device so pill wrapping matches reality 1:1
+    val realLockTrayWidthDp = remember(context) {
+        val dm = context.resources.displayMetrics
+        val screenWidthDp = dm.widthPixels / dm.density.coerceAtLeast(1f)
+        LockAppsTrayMetrics.computeLockTrayContentWidthDp(screenWidthDp)
     }
 
     ThemedSettingsSectionCard(title = "LOCK SCREEN APPS LAYOUT") {
@@ -726,34 +759,83 @@ private fun LockScreenLayoutSection(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "LIVE PREVIEW",
+                        text = "LIVE 1:1 PREVIEW",
                         fontFamily = JetBrainsMono,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = palette.textSecondary
                     )
-                    Text(
-                        text = if (selectedLayout == LockAppLayout.PILL_ROW) {
-                            "${selectedLayout.title} • ${pillButtonSizeDp}dp"
-                        } else {
-                            selectedLayout.title
-                        },
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = palette.primary
-                    )
+                    if (selectedLayout == LockAppLayout.PILL_ROW) {
+                        val isSingleRow = measuredPillRows <= 1
+                        val badgeAccent = if (isSingleRow) palette.success else palette.warning
+                        Text(
+                            text = if (isSingleRow) {
+                                "1 ROW · ${pillButtonSizeDp}dp"
+                            } else {
+                                "$measuredPillRows ROWS · ${pillButtonSizeDp}dp"
+                            },
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = badgeAccent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(badgeAccent.copy(alpha = 0.14f), RoundedCornerShape(50))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .testTag("pill_preview_row_status_badge")
+                        )
+                    } else {
+                        Text(
+                            text = selectedLayout.title,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.primary
+                        )
+                    }
                 }
 
-                LockAllowedAppsSection(
-                    apps = previewApps,
-                    layout = selectedLayout,
-                    palette = previewPalette,
-                    onAppClick = noopPreviewClick,
-                    isPreview = true,
-                    pillButtonSizeDp = pillButtonSizeDp,
-                    iconCache = iconCache,
-                    readFromCacheOnly = true
-                )
+                // Render PILL_ROW at exact realLockTrayWidthDp and scale uniformly only if card is narrower
+                if (selectedLayout == LockAppLayout.PILL_ROW) {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val availableDp = maxWidth.value.coerceAtLeast(160f)
+                        val fitScale = (availableDp / realLockTrayWidthDp).coerceIn(0.60f, 1f)
+                        Box(
+                            modifier = Modifier
+                                .requiredWidth(realLockTrayWidthDp.dp)
+                                .graphicsLayer {
+                                    scaleX = fitScale
+                                    scaleY = fitScale
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            LockAllowedAppsSection(
+                                apps = previewApps,
+                                layout = selectedLayout,
+                                palette = previewPalette,
+                                onAppClick = noopPreviewClick,
+                                isPreview = true,
+                                pillButtonSizeDp = pillButtonSizeDp,
+                                iconCache = iconCache,
+                                readFromCacheOnly = true,
+                                onRowCountMeasured = { rows -> measuredPillRows = rows }
+                            )
+                        }
+                    }
+                } else {
+                    LockAllowedAppsSection(
+                        apps = previewApps,
+                        layout = selectedLayout,
+                        palette = previewPalette,
+                        onAppClick = noopPreviewClick,
+                        isPreview = true,
+                        pillButtonSizeDp = pillButtonSizeDp,
+                        iconCache = iconCache,
+                        readFromCacheOnly = true
+                    )
+                }
             }
 
             AnimatedVisibility(visible = selectedLayout == LockAppLayout.PILL_ROW) {
@@ -914,7 +996,7 @@ private fun FocusBehaviorSection(
 
             ThemedSettingsSwitchRow(
                 title = "Keypad Haptic Feedback",
-                subtitle = "Subtle tactile pulse when entering unlock PIN",
+                subtitle = "Subtle tactile pulse during the unlock challenge",
                 checked = hapticKeypad,
                 onCheckedChange = onToggleHapticKeypad,
                 testTag = "switch_haptic_keypad"
@@ -923,8 +1005,8 @@ private fun FocusBehaviorSection(
             ThemedDivider(palette = palette)
 
             ThemedSettingsSwitchRow(
-                title = "Auto-Clear Wrong PIN",
-                subtitle = "Reset digits automatically after an incorrect attempt",
+                title = "Auto-Clear Wrong Answer",
+                subtitle = "Reset input automatically after an incorrect attempt",
                 checked = autoClearWrongPin,
                 onCheckedChange = onToggleAutoClearWrongPin,
                 testTag = "switch_auto_clear_pin"
@@ -965,6 +1047,83 @@ private fun FocusBehaviorSection(
                     height = 42.dp,
                     fontSize = 13.sp,
                     useElevatedContainer = true
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupRestoreSettingsSection(
+    onOpenBackupRestore: () -> Unit
+) {
+    val palette = LocalFocusTheme.current
+    val pillShape = remember { RoundedCornerShape(50) }
+
+    ThemedSettingsSectionCard(title = "DATA & BACKUP") {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(palette.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Restore,
+                        contentDescription = "Backup & Restore",
+                        tint = palette.primary,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Export & Import Backup",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 15.sp,
+                        color = palette.textPrimary
+                    )
+                    Text(
+                        text = "Save or restore all settings, stats, XP, schedules & quiz history",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        color = palette.textSecondary
+                    )
+                }
+            }
+
+            Button(
+                onClick = onOpenBackupRestore,
+                shape = pillShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.primaryContainer,
+                    contentColor = palette.textPrimary
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .testTag("open_backup_restore_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Restore,
+                    contentDescription = null,
+                    tint = palette.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Open Backup & Restore",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }

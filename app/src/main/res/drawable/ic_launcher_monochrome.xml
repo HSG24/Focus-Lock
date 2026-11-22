@@ -4,47 +4,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Monochrome Target Ring Segments -->
+    <!-- Precision Aperture Iris monochrome themed icon (6-blade optical shutter + focal core) -->
     <path
-        android:pathData="M59,25.4 A29,29 0 0,1 82.6,49"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
-        android:strokeLineCap="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,22 A32,32 0 1,0 54,86 A32,32 0 1,0 54,22 Z M54,39 A15,15 0 1,1 54,69 A15,15 0 1,1 54,39 Z" />
     <path
-        android:pathData="M82.6,59 A29,29 0 0,1 59,82.6"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
-        android:strokeLineCap="round" />
+        android:strokeColor="#FF000000"
+        android:strokeWidth="3.2"
+        android:pathData="M54,21 L67,44 M82,38 L61,51 M82,70 L54,68 M54,87 L41,64 M26,70 L47,57 M26,38 L54,40" />
     <path
-        android:pathData="M49,82.6 A29,29 0 0,1 25.4,59"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M25.4,49 A29,29 0 0,1 49,25.4"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
-        android:strokeLineCap="round" />
-
-    <!-- Cardinal Target Ticks -->
-    <path
-        android:pathData="M54,21.5 L54,28.5 M54,79.5 L54,86.5 M21.5,54 L28.5,54 M79.5,54 L86.5,54"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
-        android:strokeLineCap="round" />
-
-    <!-- Geometric Padlock Shackle -->
-    <path
-        android:pathData="M45.5,48 L45.5,41.5 A8.5,8.5 0 0,1 62.5,41.5 L62.5,48"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3.0"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-
-    <!-- Padlock Body with Cutout Keyhole using evenOdd fillType -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M41.5,48 H66.5 A3.5,3.5 0 0,1 70,51.5 V67.5 A4.5,4.5 0 0,1 65.5,72 H42.5 A4.5,4.5 0 0,1 38,67.5 V51.5 A3.5,3.5 0 0,1 41.5,48 Z M54,55.2 A4.2,4.2 0 1,0 54,63.6 A4.2,4.2 0 1,0 54,55.2 Z M52.6,62.4 H55.4 V67.2 H52.6 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,48.5 A5.5,5.5 0 1,0 54,59.5 A5.5,5.5 0 1,0 54,48.5 Z" />
 </vector>

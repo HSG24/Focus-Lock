@@ -314,12 +314,11 @@ fun ScheduledLockScreen(
                         }
                     }
 
-                    // Integrated Session Window Rail (Start -> Active Progress -> Auto-Unlock)
-                    SessionWindowProgressRail(
+                    // Minimal inline session window strip (circular ring is the sole progress bar)
+                    SessionWindowStrip(
                         startClockText = startClockText,
                         endClockText = endClockText,
                         elapsedMins = elapsedMins,
-                        progressFraction = progressFraction,
                         scale = scale,
                         palette = palette,
                         modifier = Modifier.fillMaxWidth()
@@ -662,7 +661,7 @@ fun ScheduledSuccessScreen(
 }
 
 @Composable
-private fun SanctuaryAmbientHalo(
+internal fun SanctuaryAmbientHalo(
     accent: Color,
     alpha: Float
 ) {
@@ -689,9 +688,9 @@ private fun SanctuaryAmbientHalo(
 }
 
 @Composable
-private fun StatusPulseDot(
+internal fun StatusPulseDot(
     color: Color,
-    scale: Float
+    scale: Float = 1f
 ) {
     Box(
         modifier = Modifier
@@ -710,7 +709,7 @@ private fun StatusPulseDot(
 }
 
 @Composable
-private fun SanctuaryMonolithCard(
+internal fun SanctuaryMonolithCard(
     palette: FocusThemePalette,
     cornerRadius: Dp,
     contentPaddingHorizontal: Dp,
@@ -750,7 +749,7 @@ private fun SanctuaryMonolithCard(
 }
 
 @Composable
-private fun SanctuaryBentoTile(
+internal fun SanctuaryBentoTile(
     icon: ImageVector,
     iconTint: Color,
     value: String,
@@ -810,131 +809,52 @@ private fun SanctuaryBentoTile(
 }
 
 @Composable
-private fun SessionWindowProgressRail(
+private fun SessionWindowStrip(
     startClockText: String,
     endClockText: String,
     elapsedMins: Long,
-    progressFraction: Float,
     scale: Float,
     palette: FocusThemePalette,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.testTag("scheduled_lock_window_rail"),
-        verticalArrangement = Arrangement.spacedBy((8f * scale).coerceAtLeast(5f).dp)
+    val pillShape = remember(scale) { RoundedCornerShape(50) }
+    val fill = if (palette.isLiquidGlass) {
+        Color(0x5206080E)
+    } else {
+        palette.background.copy(alpha = 0.42f)
+    }
+    val borderColor = palette.border.copy(alpha = if (palette.isLiquidGlass) 0.24f else 0.56f)
+
+    Row(
+        modifier = modifier
+            .clip(pillShape)
+            .background(fill, pillShape)
+            .border(width = 0.75.dp, color = borderColor, shape = pillShape)
+            .padding(
+                horizontal = (14f * scale).coerceAtLeast(9f).dp,
+                vertical = (8f * scale).coerceAtLeast(5f).dp
+            )
+            .testTag("scheduled_lock_window_rail"),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = startClockText,
-                fontFamily = JetBrainsMono,
-                fontSize = (10.5f * scale).coerceAtLeast(7.5f).sp,
-                color = palette.textSecondary
-            )
-            Text(
-                text = "${elapsedMins}m elapsed",
-                fontFamily = JetBrainsMono,
-                fontSize = (10f * scale).coerceAtLeast(7f).sp,
-                color = palette.textSecondary.copy(alpha = 0.72f)
-            )
-            Text(
-                text = endClockText,
-                fontFamily = JetBrainsMono,
-                fontSize = (10.5f * scale).coerceAtLeast(7.5f).sp,
-                fontWeight = FontWeight.SemiBold,
-                color = palette.textPrimary
-            )
-        }
-
-        val clamped = progressFraction.coerceIn(0f, 1f)
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height((10f * scale).coerceAtLeast(6f).dp)
-        ) {
-            val midY = size.height / 2f
-            when (palette.theme) {
-                AppVisualTheme.NOTHING_CRIMSON -> {
-                    val dotCount = 24
-                    val activeDots = (clamped * dotCount).roundToInt().coerceIn(1, dotCount)
-                    val step = size.width / dotCount.toFloat()
-                    val baseR = (size.height * 0.24f).coerceAtLeast(1.8f)
-                    for (i in 0 until dotCount) {
-                        val cx = i * step + step / 2f
-                        val isHead = i == activeDots - 1
-                        val isPassed = i < activeDots
-                        drawCircle(
-                            color = when {
-                                isHead -> palette.primary
-                                isPassed -> palette.textPrimary.copy(alpha = 0.84f)
-                                else -> palette.borderHighlight.copy(alpha = 0.55f)
-                            },
-                            radius = if (isHead) baseR * 1.45f else baseR,
-                            center = Offset(cx, midY)
-                        )
-                    }
-                }
-
-                AppVisualTheme.SOLAR_AMBER -> {
-                    val tickCount = 28
-                    val activeTicks = (clamped * tickCount).roundToInt().coerceIn(1, tickCount)
-                    val step = size.width / tickCount.toFloat()
-                    for (i in 0 until tickCount) {
-                        val cx = i * step + step / 2f
-                        val isMajor = i % 7 == 0 || i == tickCount - 1
-                        val halfH = if (isMajor) size.height * 0.44f else size.height * 0.28f
-                        val isActive = i < activeTicks
-                        drawLine(
-                            color = if (isActive) palette.primary else palette.borderHighlight.copy(alpha = 0.55f),
-                            start = Offset(cx, midY - halfH),
-                            end = Offset(cx, midY + halfH),
-                            strokeWidth = if (isMajor) 2.dp.toPx() else 1.25.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
-
-                AppVisualTheme.LIQUID_GLASS, AppVisualTheme.NORDIC_SAGE -> {
-                    val trackHeight = (3.5f * scale).coerceAtLeast(2.5f).dp.toPx()
-                    val corner = CornerRadius(trackHeight / 2f, trackHeight / 2f)
-                    val trackTop = midY - trackHeight / 2f
-                    // Base track
-                    drawRoundRect(
-                        color = palette.borderHighlight.copy(
-                            alpha = if (palette.isLiquidGlass) 0.22f else 0.45f
-                        ),
-                        topLeft = Offset(0f, trackTop),
-                        size = Size(size.width, trackHeight),
-                        cornerRadius = corner
-                    )
-                    // Active gradient fill
-                    val fillW = (size.width * clamped).coerceAtLeast(trackHeight)
-                    drawRoundRect(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(palette.primarySecondary, palette.primary)
-                        ),
-                        topLeft = Offset(0f, trackTop),
-                        size = Size(fillW, trackHeight),
-                        cornerRadius = corner
-                    )
-                    // Luminous head marker
-                    val headX = fillW.coerceIn(trackHeight, size.width - trackHeight)
-                    drawCircle(
-                        color = palette.primary.copy(alpha = 0.28f),
-                        radius = trackHeight * 1.4f,
-                        center = Offset(headX, midY)
-                    )
-                    drawCircle(
-                        color = palette.textPrimary,
-                        radius = trackHeight * 0.65f,
-                        center = Offset(headX, midY)
-                    )
-                }
-            }
-        }
+        Text(
+            text = "$startClockText → $endClockText",
+            fontFamily = JetBrainsMono,
+            fontSize = (10.5f * scale).coerceAtLeast(7.5f).sp,
+            fontWeight = FontWeight.SemiBold,
+            color = palette.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${elapsedMins}m in",
+            fontFamily = JetBrainsMono,
+            fontSize = (10f * scale).coerceAtLeast(7f).sp,
+            fontWeight = FontWeight.Medium,
+            color = palette.primary,
+            maxLines = 1
+        )
     }
 }
 

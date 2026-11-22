@@ -53,8 +53,6 @@ sealed interface UpdateCheckResult {
 }
 
 object GitHubUpdater {
-    private const val RTDB_GITHUB_TOKEN_URL =
-        "https://focuslock-b6c0f-default-rtdb.asia-southeast1.firebasedatabase.app/app_config/github_token.json"
     private const val GITHUB_LATEST_RELEASE_URL =
         "https://api.github.com/repos/HSG24/Focus-Lock/releases/latest"
 
@@ -72,9 +70,6 @@ object GitHubUpdater {
         .writeTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
-
-    @Volatile
-    private var cachedToken: String? = null
 
     private fun readPackageInfo(context: Context): PackageInfo? {
         return runCatching {
@@ -147,42 +142,6 @@ object GitHubUpdater {
         return match?.value ?: trimmed
     }
 
-    suspend fun fetchGitHubToken(forceRefresh: Boolean = false): Result<String> = withContext(Dispatchers.IO) {
-        if (!forceRefresh) {
-            cachedToken?.takeIf { it.isNotBlank() }?.let { return@withContext Result.success(it) }
-        }
-        runCatching {
-            val request = Request.Builder()
-                .url(RTDB_GITHUB_TOKEN_URL)
-                .get()
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    error("Failed to retrieve update credentials (${response.code})")
-                }
-                val rawBody = response.body?.string()?.trim().orEmpty()
-                if (rawBody.isEmpty() || rawBody == "null") {
-                    error("Update token is not configured in Firebase")
-                }
-                val token = parseTokenPayload(rawBody)
-                if (token.isBlank()) {
-                    error("Update token is empty")
-                }
-                cachedToken = token
-                token
-            }
-        }
-    }
-
-    internal fun parseTokenPayload(rawBody: String): String {
-        val trimmed = rawBody.trim()
-        if (trimmed.startsWith("{")) {
-            val obj = JSONObject(trimmed)
-            return obj.optString("token", obj.optString("value", "")).trim()
-        }
-        return trimmed.removeSurrounding("\"").trim()
-    }
-
     suspend fun checkForUpdates(context: Context): UpdateCheckResult {
         val installedVersion = getInstalledVersion(context)
         return checkForUpdates(installedVersion)
@@ -192,16 +151,12 @@ object GitHubUpdater {
         currentVersion: String = BuildConfig.VERSION_NAME
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
         val normalizedCurrent = normalizeVersionString(currentVersion)
-        val tokenResult = fetchGitHubToken()
-        val token = tokenResult.getOrElse { err ->
-            return@withContext UpdateCheckResult.Failed(err.message ?: "Could not reach update server.")
-        }
 
         try {
             val request = Request.Builder()
                 .url(GITHUB_LATEST_RELEASE_URL)
-                .header("Authorization", "Bearer $token")
                 .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "FocusLock-Android")
                 .get()
                 .build()
 
@@ -238,12 +193,14 @@ object GitHubUpdater {
                         val asset = assets.optJSONObject(i) ?: continue
                         val name = asset.optString("name", "")
                         val contentType = asset.optString("content_type", "")
-                        val apiUrl = asset.optString("url", "")
+                        val browserUrl = asset.optString("browser_download_url", "").trim()
+                        val fallbackUrl = asset.optString("url", "").trim()
+                        val resolvedUrl = browserUrl.ifBlank { fallbackUrl }
                         if ((name.endsWith(".apk", ignoreCase = true) ||
                                 contentType.equals("application/vnd.android.package-archive", ignoreCase = true)) &&
-                            apiUrl.isNotBlank()
+                            resolvedUrl.isNotBlank()
                         ) {
-                            apkAssetUrl = apiUrl
+                            apkAssetUrl = resolvedUrl
                             apkFileName = name.ifBlank { "update.apk" }
                             apkSizeBytes = asset.optLong("size", 0L)
                             break
@@ -277,11 +234,10 @@ object GitHubUpdater {
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
-            val token = fetchGitHubToken().getOrThrow()
             val request = Request.Builder()
                 .url(release.apkAssetUrl)
-                .header("Authorization", "Bearer $token")
                 .header("Accept", "application/octet-stream")
+                .header("User-Agent", "FocusLock-Android")
                 .get()
                 .build()
 

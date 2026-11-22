@@ -171,6 +171,11 @@ object FocusSettingsRepository {
         return readState(prefs)
     }
 
+    fun reloadFromPrefs(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        _state?.value = readState(prefs)
+    }
+
     private fun readState(prefs: SharedPreferences): FocusSettingsState {
         val themeRaw = prefs.getString(KEY_APP_THEME, AppVisualTheme.LIQUID_GLASS.name)
         val appTheme = AppVisualTheme.fromIdOrName(themeRaw)
