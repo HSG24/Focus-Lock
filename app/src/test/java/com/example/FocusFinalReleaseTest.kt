@@ -106,8 +106,9 @@ class FocusFinalReleaseTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         assertTrue(FocusOnboardingRepository.shouldShowFirstInstallSetup(context))
 
-        // Simulate existing user footprint (e.g., an update to an existing install)
+        // Mid-setup edits (like choosing a goal during setup) keep setup active until finished
         FocusSettingsRepository.setDailyGoalMinutes(context, 180L)
+        FocusOnboardingRepository.markSetupCompleted(context)
         assertFalse(FocusOnboardingRepository.shouldShowFirstInstallSetup(context))
     }
 
@@ -119,7 +120,7 @@ class FocusFinalReleaseTest {
         assertTrue(titles.contains("Redesigned Scheduled Lock Screen"))
         assertTrue(titles.contains("Manual Dismiss for Completion Screen"))
         assertTrue(titles.any { it.contains("10-Question Infinite Quiz") })
-        assertTrue(titles.any { it.contains("Precision Aperture Iris") })
+        assertTrue(titles.any { it.contains("Solar Eclipse Focus Ring") })
     }
 
     @Test

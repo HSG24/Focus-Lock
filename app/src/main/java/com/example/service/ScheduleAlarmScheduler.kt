@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import com.example.LockService
 import com.example.MainActivity
+import com.example.data.FocusOnboardingRepository
 import com.example.data.FocusSchedule
 import com.example.data.FocusScheduleRepository
 import com.example.data.UpcomingScheduleWindow
@@ -237,8 +238,13 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
 
         when (action) {
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                // In-place update over an existing install: never show first-install welcome setup
+                FocusOnboardingRepository.markSetupCompleted(appCtx)
+                ScheduleAlarmScheduler.syncAllAlarms(appCtx)
+            }
+
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
