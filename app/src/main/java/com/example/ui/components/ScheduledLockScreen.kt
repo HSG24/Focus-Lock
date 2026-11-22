@@ -162,22 +162,19 @@ fun ScheduledLockScreen(
                     else Modifier
                         .statusBarsPadding()
                         .navigationBarsPadding()
-                        .padding(horizontal = 22.dp, vertical = 18.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 22.dp, vertical = 22.dp)
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Center
         ) {
             Column(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
-                    .widthIn(max = 440.dp)
-                    .then(if (!isPreview) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+                    .widthIn(max = 440.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(verticalGap)
             ) {
-                if (!isPreview) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
                 enabledModules.forEach { mod ->
                     val horizontalAlignment = when (mod.alignment) {
                         LockModuleAlignment.START -> Alignment.Start
@@ -279,28 +276,25 @@ fun ScheduledLockScreen(
                         }
                     }
                 }
-            }
 
-            // Minimal useful bottom dock tailored for strict timer-only sessions
-            ScheduledLockBottomDock(
-                mode = layoutConfig.bottomDockMode,
-                endClockText = endClockText,
-                progressFraction = progressFraction,
-                silencedCount = silencedCount,
-                resistedCheckIns = resistedCheckIns,
-                onLogResisted = {
-                    if (!isPreview) {
-                        haptics.tick()
-                        resistedCheckIns += 1
-                    }
-                },
-                scale = previewScale,
-                palette = palette,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 440.dp)
-                    .padding(top = (8f * previewScale).dp)
-            )
+                // Compact bottom dock sits directly below the Goal & Streak pill
+                ScheduledLockBottomDock(
+                    mode = layoutConfig.bottomDockMode,
+                    endClockText = endClockText,
+                    progressFraction = progressFraction,
+                    silencedCount = silencedCount,
+                    resistedCheckIns = resistedCheckIns,
+                    onLogResisted = {
+                        if (!isPreview) {
+                            haptics.tick()
+                            resistedCheckIns += 1
+                        }
+                    },
+                    scale = previewScale,
+                    palette = palette,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }

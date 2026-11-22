@@ -160,7 +160,7 @@ data class ScheduledLockLayoutConfig(
     val modules: List<ScheduledLockModuleConfig> = DEFAULT_MODULES,
     val timerStyle: ScheduledTimerStyle = ScheduledTimerStyle.DOT_RING,
     val spacingDensity: LockSpacingDensity = LockSpacingDensity.BALANCED,
-    val bottomDockMode: ScheduledBottomDockMode = ScheduledBottomDockMode.CONSOLE,
+    val bottomDockMode: ScheduledBottomDockMode = ScheduledBottomDockMode.COMPACT,
     val customMantra: String = "Stay present. Protect your focus."
 ) {
     companion object {
@@ -168,10 +168,10 @@ data class ScheduledLockLayoutConfig(
             ScheduledLockModuleConfig(ScheduledLockModuleType.CLOCK_DATE, enabled = true, size = LockModuleSize.SMALL),
             ScheduledLockModuleConfig(ScheduledLockModuleType.SCHEDULE_BADGE, enabled = true, size = LockModuleSize.MEDIUM),
             ScheduledLockModuleConfig(ScheduledLockModuleType.COUNTDOWN_TIMER, enabled = true, size = LockModuleSize.LARGE),
+            ScheduledLockModuleConfig(ScheduledLockModuleType.ALLOWED_APPS, enabled = true, size = LockModuleSize.MEDIUM),
             ScheduledLockModuleConfig(ScheduledLockModuleType.SESSION_TIMELINE, enabled = true, size = LockModuleSize.MEDIUM),
             ScheduledLockModuleConfig(ScheduledLockModuleType.FOCUS_MANTRA, enabled = true, size = LockModuleSize.MEDIUM),
-            ScheduledLockModuleConfig(ScheduledLockModuleType.DAILY_PROGRESS, enabled = true, size = LockModuleSize.SMALL),
-            ScheduledLockModuleConfig(ScheduledLockModuleType.ALLOWED_APPS, enabled = true, size = LockModuleSize.MEDIUM)
+            ScheduledLockModuleConfig(ScheduledLockModuleType.DAILY_PROGRESS, enabled = true, size = LockModuleSize.SMALL)
         )
     }
 }
@@ -495,8 +495,8 @@ object FocusScheduleRepository {
 
     private fun readState(prefs: SharedPreferences): FocusScheduleState {
         val schedules = parseSchedules(prefs.getString(KEY_SCHEDULES, "[]"))
-        val layout = parseLayout(prefs.getString(KEY_LOCK_LAYOUT, null))
-        return FocusScheduleState(schedules = schedules, layoutConfig = layout)
+        // Fixed scheduled lock layout (Lock Studio removed per user preference)
+        return FocusScheduleState(schedules = schedules, layoutConfig = ScheduledLockLayoutConfig())
     }
 
     private fun writeState(prefs: SharedPreferences, state: FocusScheduleState) {

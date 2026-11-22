@@ -7,34 +7,32 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
-import com.example.data.DynamicIslandConfig
-import com.example.data.DynamicIslandEvent
-import com.example.data.DynamicIslandRepository
 import com.example.data.FocusSchedule
 import com.example.data.FocusScheduleRepository
+import com.example.data.FocusSettingsState
 import com.example.data.FocusXpState
-import com.example.data.LockModuleAlignment
-import com.example.data.LockModuleSize
-import com.example.data.MilestoneKind
+import com.example.data.LockSpacingDensity
 import com.example.data.NothingWidgetKind
 import com.example.data.ScheduleRepeatMode
 import com.example.data.ScheduledBottomDockMode
 import com.example.data.ScheduledLockModuleType
+import com.example.data.ScheduledTimerStyle
 import com.example.data.WidgetCornerStyle
 import com.example.data.WidgetStudioRepository
 import com.example.data.WidgetSurfaceStyle
-import com.example.ui.components.NothingDynamicIslandPill
+import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.RecapCardOptions
 import com.example.ui.components.RecapCardTheme
 import com.example.ui.components.RecapTimeframe
 import com.example.ui.components.ShareRecapCardRenderer
+import com.example.ui.screens.ScheduleScreen
 import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.MyApplicationTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -59,12 +57,19 @@ class ScheduleIslandWidgetRecapTest {
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
         context.getSharedPreferences("focus_schedules_prefs", Context.MODE_PRIVATE).edit().clear().commit()
-        context.getSharedPreferences("focus_dynamic_island_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("focus_widget_studio_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        LockService.isRunning = false
+        LockService.isScheduledSession = false
+    }
+
+    @After
+    fun tearDown() {
+        LockService.isRunning = false
+        LockService.isScheduledSession = false
     }
 
     @Test
-    fun focusScheduleRepository_handlesOvernightSkipAndLayoutCustomizations() {
+    fun focusScheduleRepository_enforcesFixedDesignOrderAndOvernightSkip() {
         val overnight = FocusSchedule(
             id = "sched_night",
             name = "Late Study",
@@ -95,96 +100,88 @@ class ScheduleIslandWidgetRecapTest {
         val nextDayCal = Calendar.getInstance().apply { timeInMillis = nextWindow!!.startTimeMs }
         assertEquals(21, nextDayCal.get(Calendar.DAY_OF_MONTH))
 
-        // Lock Studio mutations: Countdown timer stays locked on; Session Timeline & Bottom Dock customize cleanly
-        FocusScheduleRepository.toggleModule(context, ScheduledLockModuleType.COUNTDOWN_TIMER, false)
-        assertTrue(
-            FocusScheduleRepository.getCurrent(context).layoutConfig.modules
-                .first { it.type == ScheduledLockModuleType.COUNTDOWN_TIMER }.enabled
+        // Verify exact fixed scheduled lock design (Lock Studio removed)
+        val layout = FocusScheduleRepository.getCurrent(context).layoutConfig
+        assertEquals(ScheduledTimerStyle.DOT_RING, layout.timerStyle)
+        assertEquals(LockSpacingDensity.BALANCED, layout.spacingDensity)
+        assertEquals(ScheduledBottomDockMode.COMPACT, layout.bottomDockMode)
+        assertEquals("Stay present. Protect your focus.", layout.customMantra)
+        assertEquals(
+            listOf(
+                ScheduledLockModuleType.CLOCK_DATE,
+                ScheduledLockModuleType.SCHEDULE_BADGE,
+                ScheduledLockModuleType.COUNTDOWN_TIMER,
+                ScheduledLockModuleType.ALLOWED_APPS,
+                ScheduledLockModuleType.SESSION_TIMELINE,
+                ScheduledLockModuleType.FOCUS_MANTRA,
+                ScheduledLockModuleType.DAILY_PROGRESS
+            ),
+            layout.modules.map { it.type }
         )
-
-        FocusScheduleRepository.setModuleSize(context, ScheduledLockModuleType.SESSION_TIMELINE, LockModuleSize.LARGE)
-        FocusScheduleRepository.setModuleAlignment(context, ScheduledLockModuleType.SESSION_TIMELINE, LockModuleAlignment.START)
-        FocusScheduleRepository.moveModule(context, ScheduledLockModuleType.SESSION_TIMELINE, -1)
-        FocusScheduleRepository.setBottomDockMode(context, ScheduledBottomDockMode.COMPACT)
-
-        val updatedLayout = FocusScheduleRepository.getCurrent(context).layoutConfig
-        val timelineMod = updatedLayout.modules.first { it.type == ScheduledLockModuleType.SESSION_TIMELINE }
-        assertEquals(LockModuleSize.LARGE, timelineMod.size)
-        assertEquals(LockModuleAlignment.START, timelineMod.alignment)
-        assertEquals(ScheduledBottomDockMode.COMPACT, updatedLayout.bottomDockMode)
     }
 
     @Test
-    fun dynamicIsland_skipTodayAppearsOnlyWhenScheduleIslandIsExpanded() {
-        val event = DynamicIslandEvent.UpcomingSchedule(
-            id = "warn_1",
-            scheduleId = "sched_1",
-            scheduleName = "Morning Focus",
-            timeRangeLabel = "9:00 AM → 10:30 AM",
-            startsAtMs = System.currentTimeMillis() + 10 * 60_000L
+    fun scheduleAlarmScheduler_skipsScheduleForTodayWhenManualOtpLockIsRunning() {
+        val nowCal = Calendar.getInstance().apply {
+            set(2026, Calendar.NOVEMBER, 21, 10, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val schedule = FocusSchedule(
+            id = "sched_morning",
+            name = "Morning Deep Work",
+            startHour = 10,
+            startMinute = 0,
+            endHour = 11,
+            endMinute = 0,
+            repeatMode = ScheduleRepeatMode.DAILY
         )
-        var skipped = false
+        FocusScheduleRepository.addOrUpdateSchedule(context, schedule)
+
+        // Simulate an active manual OTP session
+        LockService.isRunning = true
+        LockService.isScheduledSession = false
+
+        val handled = ScheduleAlarmScheduler.triggerActiveScheduleIfDue(context, nowCal.timeInMillis)
+        assertTrue(handled)
+
+        val updated = FocusScheduleRepository.getCurrent(context).schedules.first { it.id == "sched_morning" }
+        assertTrue(FocusScheduleRepository.isSkippedToday(updated, nowCal.timeInMillis))
+    }
+
+    @Test
+    fun scheduleScreen_hasNoLockStudioAndMinuteStepperMovesByOneUpTo59() {
+        val existing = FocusSchedule(
+            id = "sched_exact",
+            name = "Exact Minute Test",
+            startHour = 9,
+            startMinute = 0,
+            endHour = 10,
+            endMinute = 58,
+            repeatMode = ScheduleRepeatMode.DAILY
+        )
+        FocusScheduleRepository.addOrUpdateSchedule(context, existing)
 
         composeRule.setContent {
-            val expandedState = androidx.compose.runtime.remember {
-                androidx.compose.runtime.mutableStateOf(false)
-            }
             MyApplicationTheme(appTheme = AppVisualTheme.LIQUID_GLASS) {
-                NothingDynamicIslandPill(
-                    event = event,
-                    config = DynamicIslandConfig(),
-                    isExpanded = expandedState.value,
-                    onToggleExpand = { expandedState.value = !expandedState.value },
-                    onDismiss = {},
-                    onSkipScheduleToday = { skipped = true },
-                    onClearNotifications = {},
-                    isInteractivePreview = true
-                )
+                ScheduleScreen(settingsState = FocusSettingsState())
             }
         }
 
-        // Compact pill MUST NOT show "Skip Today"
-        composeRule.onNodeWithTag("island_skip_today_button").assertDoesNotExist()
-        composeRule.onNodeWithText("MORNING FOCUS").assertIsDisplayed()
-
-        // Expand via click -> "Skip Today" appears and triggers callback
-        composeRule.onNodeWithTag("dynamic_island_compact").performClick()
+        // Lock Studio tab is completely removed
+        composeRule.onNodeWithTag("schedule_tab_studio").assertDoesNotExist()
+        composeRule.onNodeWithTag("schedule_card_sched_exact").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("island_skip_today_button").assertIsDisplayed().performClick()
-        assertTrue(skipped)
-    }
+        // Start minute 00 -> minus wraps to 59, plus goes back to 00, plus goes to 01
+        composeRule.onNodeWithTag("start_minute_minus").performClick()
+        composeRule.onNodeWithText("59m").assertIsDisplayed()
+        composeRule.onNodeWithTag("start_minute_plus").performClick()
+        composeRule.onNodeWithTag("start_minute_plus").performClick()
+        composeRule.onNodeWithText("01m").assertIsDisplayed()
 
-    @Test
-    fun dynamicIsland_evaluatesGoalAndStreakMilestones() {
-        val prev = FocusXpState(totalXp = 100, todayFocusMs = 10 * 60_000L, currentStreak = 1)
-        val updated = FocusXpState(totalXp = 500, todayFocusMs = 60 * 60_000L, currentStreak = 2)
-        DynamicIslandRepository.evaluatePostSessionMilestones(
-            context = context,
-            previousXpState = prev,
-            updatedXpState = updated,
-            dailyGoalMinutes = 60L
-        )
-        val active = DynamicIslandRepository.observe(context).value.activeEvent
-        assertTrue(active is DynamicIslandEvent.Milestone)
-        assertEquals(MilestoneKind.GOAL_REACHED, (active as DynamicIslandEvent.Milestone).kind)
-
-        // Live preview trigger sets timed auto-hide & increments pulse sequence
-        val previewEvent = DynamicIslandEvent.Milestone(
-            id = "preview_test",
-            kind = MilestoneKind.GOAL_REACHED,
-            title = "Preview",
-            subtitle = "Test",
-            badgeText = "100%"
-        )
-        DynamicIslandRepository.showLivePreview(context, previewEvent, durationMs = 3500L)
-        val previewState = DynamicIslandRepository.observe(context).value
-        assertEquals(3500L, previewState.previewAutoHideMs)
-        assertTrue(previewState.previewPulseSeq >= 1L)
-
-        DynamicIslandRepository.dismissActive(context)
-        assertNull(DynamicIslandRepository.observe(context).value.activeEvent)
-        assertNull(DynamicIslandRepository.observe(context).value.previewAutoHideMs)
+        // Stop minute 58 -> plus moves by 1 to 59
+        composeRule.onNodeWithTag("stop_minute_plus").performClick()
+        composeRule.onNodeWithText("59m").assertIsDisplayed()
     }
 
     @Test

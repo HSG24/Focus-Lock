@@ -94,7 +94,6 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.data.AllowedApp
-import com.example.data.DynamicIslandRepository
 import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
@@ -102,6 +101,7 @@ import com.example.data.FocusXpRepository
 import com.example.data.LockAppLayout
 import com.example.data.NotificationBlockerRepository
 import com.example.data.ShareRepository
+import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockPalette
@@ -479,8 +479,6 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             activeScheduleName = intent?.getStringExtra(EXTRA_SCHEDULE_NAME) ?: "Scheduled Focus"
             activeScheduleTimeRange = intent?.getStringExtra(EXTRA_SCHEDULE_TIME_RANGE) ?: ""
             activeScheduleEndTimeMs = intent?.getLongExtra(EXTRA_SCHEDULE_END_TIME_MS, 0L) ?: 0L
-            // Dismiss any upcoming-schedule warning island once the scheduled lock engages
-            DynamicIslandRepository.dismissActive(applicationContext)
         } else if (intent == null && prefs.getBoolean(KEY_ACTIVE_IS_SCHEDULED, false)) {
             isScheduledSession = true
             isScheduledUiState.value = true
@@ -978,33 +976,20 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val appCtx = applicationContext
 
         val hasBlockedNotifications = NotificationBlockerRepository.finalizeSessionOnUnlock(appCtx)
-        val islandConfig = DynamicIslandRepository.getConfig(appCtx)
 
         if (duration > 0) {
             val settings = FocusSettingsRepository.getCurrent(appCtx)
-            val prevXp = FocusXpRepository.getCurrent(appCtx)
             FocusXpRepository.recordCompletedSession(
                 context = appCtx,
                 sessionStartTimeMs = capturedStart,
                 durationMs = duration,
                 dailyGoalMinutes = settings.dailyGoalMinutes
             )
-            val nextXp = FocusXpRepository.getCurrent(appCtx)
             FocusStatsRepository.recordCompletedSession(
                 context = appCtx,
                 startTimeMs = capturedStart,
                 durationMs = duration
             )
-
-            // Trigger Goal & Streak Milestone Dynamic Island if no notification summary is taking priority
-            if (!hasBlockedNotifications || !(islandConfig.enabled && islandConfig.enableNotificationSummary)) {
-                DynamicIslandRepository.evaluatePostSessionMilestones(
-                    context = appCtx,
-                    previousXpState = prevXp,
-                    updatedXpState = nextXp,
-                    dailyGoalMinutes = settings.dailyGoalMinutes
-                )
-            }
 
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 runCatching { ShareRepository.syncLiveShareOnSessionEnd(appCtx) }
@@ -1014,20 +999,20 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             NothingFocusWidgetUpdater.scheduleUpdateAll(appCtx)
         }
 
+        // Re-arm next upcoming focus schedule cleanly after unlock
+        ScheduleAlarmScheduler.syncAllAlarms(
+            context = appCtx,
+            nowMs = System.currentTimeMillis() + 2_000L,
+            triggerIfActiveNow = false
+        )
+
         if (hasBlockedNotifications) {
-            if (islandConfig.enabled && islandConfig.enableNotificationSummary) {
-                DynamicIslandRepository.showNotificationSummary(
-                    context = appCtx,
-                    blockerState = NotificationBlockerRepository.getCurrent(appCtx)
-                )
-            } else {
-                runCatching {
-                    val launchIntent = Intent(appCtx, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra(MainActivity.EXTRA_SHOW_UNLOCK_SUMMARY, true)
-                    }
-                    startActivity(launchIntent)
+            runCatching {
+                val launchIntent = Intent(appCtx, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(MainActivity.EXTRA_SHOW_UNLOCK_SUMMARY, true)
                 }
+                startActivity(launchIntent)
             }
         }
 

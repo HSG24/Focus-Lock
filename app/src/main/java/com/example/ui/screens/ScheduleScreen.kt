@@ -1,12 +1,10 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedContent
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,13 +29,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ArrowDownward
-import androidx.compose.material.icons.outlined.ArrowUpward
-import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.AlarmOn
 import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.LockClock
-import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -52,6 +46,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,43 +55,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.FocusSchedule
 import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsState
-import com.example.data.FocusXpRepository
-import com.example.data.LockModuleAlignment
-import com.example.data.LockModuleSize
-import com.example.data.LockSpacingDensity
 import com.example.data.ScheduleRepeatMode
-import com.example.data.ScheduledBottomDockMode
-import com.example.data.ScheduledLockLayoutConfig
-import com.example.data.ScheduledLockModuleConfig
-import com.example.data.ScheduledLockModuleType
-import com.example.data.ScheduledTimerStyle
-import com.example.ui.components.ElasticMorphingSegmentedPill
-import com.example.ui.components.ElasticPillSegment
-import com.example.ui.components.ScheduledLockScreen
+import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
 import java.util.Calendar
-
-private enum class ScheduleSubTab {
-    SCHEDULES,
-    LOCK_STUDIO
-}
+import java.util.Locale
 
 @Composable
 fun ScheduleScreen(
@@ -104,26 +85,37 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
 
     val scheduleState by FocusScheduleRepository.observe(context).collectAsStateWithLifecycle()
-    val xpState by FocusXpRepository.observe(context).collectAsStateWithLifecycle()
-    val iconCache by com.example.data.FocusSettingsRepository.appIconsState.collectAsStateWithLifecycle()
 
-    var activeTab by remember { mutableStateOf(ScheduleSubTab.SCHEDULES) }
     var editingSchedule by remember { mutableStateOf<FocusSchedule?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
-    var showFullscreenPreview by remember { mutableStateOf(false) }
+
+    var hasOverlayPermission by remember {
+        mutableStateOf(runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false))
+    }
+    var hasExactAlarmPermission by remember {
+        mutableStateOf(ScheduleAlarmScheduler.canScheduleExactAlarms(context))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasOverlayPermission = runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
+                hasExactAlarmPermission = ScheduleAlarmScheduler.canScheduleExactAlarms(context)
+                ScheduleAlarmScheduler.syncAllAlarms(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val nextWindow = remember(scheduleState.schedules) {
         FocusScheduleRepository.findNextUpcomingWindow(scheduleState.schedules)
     }
-
-    val goalMs = settingsState.dailyGoalMinutes.coerceAtLeast(1L) * 60_000L
-    val dailyGoalPercent = ((xpState.todayFocusMs.toFloat() / goalMs.toFloat()) * 100f)
-        .toInt()
-        .coerceIn(0, 999)
 
     Box(
         modifier = modifier
@@ -147,7 +139,10 @@ fun ScheduleScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
                         text = "Schedule",
                         style = MaterialTheme.typography.titleLarge,
@@ -172,139 +167,84 @@ fun ScheduleScreen(
                     )
                 }
 
-                if (activeTab == ScheduleSubTab.SCHEDULES) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.primary)
-                            .clickable {
-                                haptics.tap()
-                                editingSchedule = null
-                                showCreateDialog = true
-                            }
-                            .padding(horizontal = 14.dp, vertical = 9.dp)
-                            .testTag("add_schedule_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = "New Schedule",
-                            tint = palette.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "New",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.onPrimary
-                        )
-                    }
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surfaceElevated)
-                            .clickable {
-                                haptics.tap()
-                                showFullscreenPreview = true
-                            }
-                            .padding(horizontal = 13.dp, vertical = 9.dp)
-                            .testTag("schedule_full_preview_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Fullscreen,
-                            contentDescription = "Full Preview",
-                            tint = palette.primary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "Preview",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.textPrimary
-                        )
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(palette.primary)
+                        .clickable {
+                            haptics.tap()
+                            editingSchedule = null
+                            showCreateDialog = true
+                        }
+                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                        .testTag("add_schedule_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = "New Schedule",
+                        tint = palette.onPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "New",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.onPrimary
+                    )
                 }
             }
 
-            // Elastic Segmented Switcher: Schedules | Lock Studio
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                ElasticMorphingSegmentedPill(
-                    segments = listOf(
-                        ElasticPillSegment("Schedules", "schedule_tab_list"),
-                        ElasticPillSegment("Lock Studio", "schedule_tab_studio")
-                    ),
-                    selectedIndex = if (activeTab == ScheduleSubTab.SCHEDULES) 0 else 1,
-                    onSelectIndex = { idx ->
-                        activeTab = if (idx == 0) ScheduleSubTab.SCHEDULES else ScheduleSubTab.LOCK_STUDIO
-                    },
-                    modifier = Modifier.widthIn(max = 600.dp)
-                )
-            }
-
-            AnimatedContent(
-                targetState = activeTab,
-                transitionSpec = {
-                    fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) togetherWith
-                        fadeOut(spring(stiffness = Spring.StiffnessMedium))
+            SchedulesListContent(
+                schedules = scheduleState.schedules,
+                needsOverlayPermission = !hasOverlayPermission,
+                needsExactAlarmPermission = !hasExactAlarmPermission,
+                onRequestOverlayPermission = {
+                    haptics.tap()
+                    runCatching {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                        context.startActivity(intent)
+                    }
                 },
-                label = "schedule_subtab_content",
-                modifier = Modifier.fillMaxSize()
-            ) { tab ->
-                when (tab) {
-                    ScheduleSubTab.SCHEDULES -> {
-                        SchedulesListContent(
-                            schedules = scheduleState.schedules,
-                            onCreateClick = {
-                                haptics.tap()
-                                editingSchedule = null
-                                showCreateDialog = true
-                            },
-                            onEditSchedule = { sched ->
-                                haptics.tap()
-                                editingSchedule = sched
-                                showCreateDialog = true
-                            },
-                            onToggleSchedule = { id, enabled ->
-                                haptics.tick()
-                                FocusScheduleRepository.setScheduleEnabled(context, id, enabled)
-                            },
-                            onUnskipSchedule = { id ->
-                                haptics.tick()
-                                FocusScheduleRepository.unskipForToday(context, id)
-                            },
-                            onDeleteSchedule = { id ->
-                                haptics.reject()
-                                FocusScheduleRepository.deleteSchedule(context, id)
-                            }
-                        )
+                onRequestExactAlarmPermission = {
+                    haptics.tap()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        runCatching {
+                            val intent = Intent(
+                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:${context.packageName}")
+                            ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                            context.startActivity(intent)
+                        }
                     }
-
-                    ScheduleSubTab.LOCK_STUDIO -> {
-                        ScheduledLockStudioContent(
-                            layoutConfig = scheduleState.layoutConfig,
-                            settingsState = settingsState,
-                            dailyGoalPercent = dailyGoalPercent,
-                            currentStreak = xpState.currentStreak,
-                            iconCache = iconCache,
-                            sampleScheduleName = nextWindow?.schedule?.name ?: "Deep Focus",
-                            sampleTimeRange = nextWindow?.schedule?.formattedTimeRange() ?: "9:00 AM → 11:00 AM",
-                            onOpenFullPreview = {
-                                haptics.tap()
-                                showFullscreenPreview = true
-                            }
-                        )
-                    }
+                },
+                onCreateClick = {
+                    haptics.tap()
+                    editingSchedule = null
+                    showCreateDialog = true
+                },
+                onEditSchedule = { sched ->
+                    haptics.tap()
+                    editingSchedule = sched
+                    showCreateDialog = true
+                },
+                onToggleSchedule = { id, enabled ->
+                    haptics.tick()
+                    FocusScheduleRepository.setScheduleEnabled(context, id, enabled)
+                },
+                onUnskipSchedule = { id ->
+                    haptics.tick()
+                    FocusScheduleRepository.unskipForToday(context, id)
+                },
+                onDeleteSchedule = { id ->
+                    haptics.reject()
+                    FocusScheduleRepository.deleteSchedule(context, id)
                 }
-            }
+            )
         }
     }
 
@@ -319,66 +259,15 @@ fun ScheduleScreen(
             }
         )
     }
-
-    if (showFullscreenPreview) {
-        val now = remember { System.currentTimeMillis() }
-        Dialog(
-            onDismissRequest = { showFullscreenPreview = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                ScheduledLockScreen(
-                    scheduleName = nextWindow?.schedule?.name ?: "Deep Focus",
-                    timeRangeLabel = nextWindow?.schedule?.formattedTimeRange() ?: "9:00 AM → 11:00 AM",
-                    startTimeMs = now - 25 * 60_000L,
-                    endTimeMs = now + 55 * 60_000L,
-                    layoutConfig = scheduleState.layoutConfig,
-                    dailyGoalPercent = dailyGoalPercent,
-                    currentStreak = xpState.currentStreak,
-                    allowedApps = settingsState.allowedApps,
-                    appLayout = settingsState.lockAppLayout,
-                    pillButtonSizeDp = settingsState.minimalPillButtonSizeDp,
-                    iconCache = iconCache,
-                    isPreview = false
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(18.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(palette.surfaceElevated.copy(alpha = 0.92f))
-                        .clickable {
-                            haptics.tap()
-                            showFullscreenPreview = false
-                        }
-                        .padding(horizontal = 13.dp, vertical = 8.dp)
-                        .testTag("close_fullscreen_preview_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Close,
-                        contentDescription = "Close Preview",
-                        tint = palette.textPrimary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Text(
-                        text = "Close",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = palette.textPrimary
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
 private fun SchedulesListContent(
     schedules: List<FocusSchedule>,
+    needsOverlayPermission: Boolean,
+    needsExactAlarmPermission: Boolean,
+    onRequestOverlayPermission: () -> Unit,
+    onRequestExactAlarmPermission: () -> Unit,
     onCreateClick: () -> Unit,
     onEditSchedule: (FocusSchedule) -> Unit,
     onToggleSchedule: (String, Boolean) -> Unit,
@@ -392,9 +281,36 @@ private fun SchedulesListContent(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 116.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 116.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // One-tap permission pills when required for reliable on-time background locking
+        if (needsOverlayPermission) {
+            item(key = "schedule_overlay_permission_pill") {
+                SchedulePermissionPill(
+                    icon = Icons.Outlined.Layers,
+                    title = "Display Over Other Apps",
+                    subtitle = "Required to show the scheduled lock screen automatically.",
+                    actionLabel = "Allow",
+                    onClick = onRequestOverlayPermission,
+                    testTag = "schedule_grant_overlay_button"
+                )
+            }
+        }
+
+        if (needsExactAlarmPermission) {
+            item(key = "schedule_exact_alarm_permission_pill") {
+                SchedulePermissionPill(
+                    icon = Icons.Outlined.AlarmOn,
+                    title = "Allow Exact Alarms",
+                    subtitle = "Required on Android 12+ so schedules start on the exact minute.",
+                    actionLabel = "Enable",
+                    onClick = onRequestExactAlarmPermission,
+                    testTag = "schedule_grant_exact_alarm_button"
+                )
+            }
+        }
+
         // Quiet rule notice pill
         item(key = "schedule_rule_pill") {
             Row(
@@ -421,7 +337,7 @@ private fun SchedulesListContent(
                     )
                 }
                 Text(
-                    text = "Timer-only strict locks — auto-unlocks when time ends. Auto-skips today if a manual OTP session is already active.",
+                    text = "Timer-only strict locks — unlocks automatically when time ends. Auto-skips today if a manual OTP session is already active.",
                     style = MaterialTheme.typography.bodyMedium,
                     fontSize = 11.5.sp,
                     color = palette.textSecondary,
@@ -463,11 +379,11 @@ private fun SchedulesListContent(
                         color = palette.textPrimary
                     )
                     Text(
-                        text = "Create daily, weekday, or custom focus blocks with a personalized timer-only lock screen.",
+                        text = "Create daily, weekday, or custom focus blocks that lock automatically on time.",
                         style = MaterialTheme.typography.bodyMedium,
                         fontSize = 12.5.sp,
                         color = palette.textSecondary,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                     Button(
                         onClick = onCreateClick,
@@ -605,6 +521,74 @@ private fun SchedulesListContent(
 }
 
 @Composable
+private fun SchedulePermissionPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    val palette = LocalFocusTheme.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .widthIn(max = 600.dp)
+            .fillMaxWidth()
+            .focusGlassPanel(shape = RoundedCornerShape(26.dp), palette = palette, elevated = true)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag(testTag)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(palette.warning.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = palette.warning,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = palette.textPrimary
+            )
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                color = palette.textSecondary,
+                lineHeight = 14.5.sp
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(palette.primary)
+                .padding(horizontal = 12.dp, vertical = 7.dp)
+        ) {
+            Text(
+                text = actionLabel,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = palette.onPrimary
+            )
+        }
+    }
+}
+
+@Composable
 private fun ScheduleMetaPill(text: String, accent: Boolean) {
     val palette = LocalFocusTheme.current
     val shape = remember { RoundedCornerShape(50) }
@@ -625,352 +609,6 @@ private fun ScheduleMetaPill(text: String, accent: Boolean) {
 }
 
 @Composable
-private fun ScheduledLockStudioContent(
-    layoutConfig: ScheduledLockLayoutConfig,
-    settingsState: FocusSettingsState,
-    dailyGoalPercent: Int,
-    currentStreak: Int,
-    iconCache: Map<String, androidx.compose.ui.graphics.ImageBitmap>,
-    sampleScheduleName: String,
-    sampleTimeRange: String,
-    onOpenFullPreview: () -> Unit
-) {
-    val context = LocalContext.current
-    val palette = LocalFocusTheme.current
-    val haptics = rememberFocusHaptics()
-    val now = remember { System.currentTimeMillis() }
-    var mantraDraft by remember(layoutConfig.customMantra) {
-        mutableStateOf(layoutConfig.customMantra)
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 116.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Live Phone-Frame Interactive Example Preview (updates immediately on every change!)
-        item(key = "live_preview_frame") {
-            val frameShape = remember { RoundedCornerShape(34.dp) }
-            Column(
-                modifier = Modifier
-                    .widthIn(max = 600.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(236.dp)
-                        .height(412.dp)
-                        .clip(frameShape)
-                        .background(palette.surfaceElevated.copy(alpha = 0.55f), frameShape)
-                        .padding(6.dp)
-                        .clickable(onClick = onOpenFullPreview)
-                        .testTag("lock_studio_live_preview_box")
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(28.dp))
-                    ) {
-                        ScheduledLockScreen(
-                            scheduleName = sampleScheduleName,
-                            timeRangeLabel = sampleTimeRange,
-                            startTimeMs = now - 25 * 60_000L,
-                            endTimeMs = now + 55 * 60_000L,
-                            layoutConfig = layoutConfig,
-                            dailyGoalPercent = dailyGoalPercent,
-                            currentStreak = currentStreak,
-                            allowedApps = settingsState.allowedApps,
-                            appLayout = settingsState.lockAppLayout,
-                            pillButtonSizeDp = settingsState.minimalPillButtonSizeDp,
-                            iconCache = iconCache,
-                            isPreview = true
-                        )
-                    }
-                }
-                Text(
-                    text = "Live preview · Tap preview for fullscreen",
-                    fontFamily = JetBrainsMono,
-                    fontSize = 10.5.sp,
-                    color = palette.textSecondary
-                )
-            }
-        }
-
-        // Global Styling Controls (Timer Style, Density, Breathing Cadence, Mantra)
-        item(key = "global_studio_controls") {
-            Column(
-                modifier = Modifier
-                    .widthIn(max = 600.dp)
-                    .fillMaxWidth()
-                    .focusGlassPanel(shape = RoundedCornerShape(28.dp), palette = palette)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "LOCK STYLE",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.sp,
-                        letterSpacing = 1.sp,
-                        color = palette.textSecondary
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surfaceElevated)
-                            .clickable {
-                                haptics.tap()
-                                FocusScheduleRepository.resetLayoutDefaults(context)
-                            }
-                            .padding(horizontal = 9.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.RestartAlt,
-                            contentDescription = "Reset Layout",
-                            tint = palette.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text("Reset", fontSize = 11.sp, color = palette.primary)
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Timer Display", fontSize = 12.sp, color = palette.textSecondary)
-                    ElasticMorphingSegmentedPill(
-                        segments = ScheduledTimerStyle.entries.map { ElasticPillSegment(it.label) },
-                        selectedIndex = ScheduledTimerStyle.entries.indexOf(layoutConfig.timerStyle),
-                        onSelectIndex = { idx ->
-                            FocusScheduleRepository.setTimerStyle(context, ScheduledTimerStyle.entries[idx])
-                        },
-                        height = 38.dp
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Vertical Spacing", fontSize = 12.sp, color = palette.textSecondary)
-                    ElasticMorphingSegmentedPill(
-                        segments = LockSpacingDensity.entries.map { ElasticPillSegment(it.label) },
-                        selectedIndex = LockSpacingDensity.entries.indexOf(layoutConfig.spacingDensity),
-                        onSelectIndex = { idx ->
-                            FocusScheduleRepository.setSpacingDensity(context, LockSpacingDensity.entries[idx])
-                        },
-                        height = 38.dp
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Bottom Dock", fontSize = 12.sp, color = palette.textSecondary)
-                    ElasticMorphingSegmentedPill(
-                        segments = ScheduledBottomDockMode.entries.map { ElasticPillSegment(it.label) },
-                        selectedIndex = ScheduledBottomDockMode.entries.indexOf(layoutConfig.bottomDockMode),
-                        onSelectIndex = { idx ->
-                            FocusScheduleRepository.setBottomDockMode(context, ScheduledBottomDockMode.entries[idx])
-                        },
-                        height = 38.dp
-                    )
-                }
-
-                OutlinedTextField(
-                    value = mantraDraft,
-                    onValueChange = { next ->
-                        if (next.length <= 90) {
-                            mantraDraft = next
-                            FocusScheduleRepository.setCustomMantra(context, next)
-                        }
-                    },
-                    label = { Text("Focus Mantra", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // Per-Module Reorder, Toggle, Size (S/M/L), and Alignment (L/C/R) Controls
-        items(items = layoutConfig.modules, key = { it.type.name }) { mod ->
-            val idx = layoutConfig.modules.indexOf(mod)
-            LockStudioModuleCard(
-                module = mod,
-                canMoveUp = idx > 0,
-                canMoveDown = idx < layoutConfig.modules.lastIndex,
-                onToggle = { enabled ->
-                    haptics.tick()
-                    FocusScheduleRepository.toggleModule(context, mod.type, enabled)
-                },
-                onMoveUp = {
-                    haptics.tick()
-                    FocusScheduleRepository.moveModule(context, mod.type, -1)
-                },
-                onMoveDown = {
-                    haptics.tick()
-                    FocusScheduleRepository.moveModule(context, mod.type, +1)
-                },
-                onSelectSize = { size ->
-                    FocusScheduleRepository.setModuleSize(context, mod.type, size)
-                },
-                onSelectAlignment = { align ->
-                    FocusScheduleRepository.setModuleAlignment(context, mod.type, align)
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun LockStudioModuleCard(
-    module: ScheduledLockModuleConfig,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onToggle: (Boolean) -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onSelectSize: (LockModuleSize) -> Unit,
-    onSelectAlignment: (LockModuleAlignment) -> Unit
-) {
-    val palette = LocalFocusTheme.current
-    val isCoreTimer = module.type == ScheduledLockModuleType.COUNTDOWN_TIMER
-
-    Column(
-        modifier = Modifier
-            .widthIn(max = 600.dp)
-            .fillMaxWidth()
-            .focusGlassPanel(shape = RoundedCornerShape(26.dp), palette = palette)
-            .padding(horizontal = 16.dp, vertical = 13.dp)
-            .testTag("lock_module_card_${module.type.name.lowercase()}"),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = module.type.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (module.enabled) palette.textPrimary else palette.textSecondary
-                )
-                Text(
-                    text = if (isCoreTimer) "Always visible on scheduled locks" else module.type.subtitle,
-                    fontSize = 11.5.sp,
-                    color = palette.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(palette.surfaceElevated)
-                        .clickable(enabled = canMoveUp, onClick = onMoveUp)
-                        .testTag("move_up_${module.type.name.lowercase()}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.ArrowUpward,
-                        contentDescription = "Move Up",
-                        tint = if (canMoveUp) palette.textPrimary else palette.textSecondary.copy(alpha = 0.32f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(palette.surfaceElevated)
-                        .clickable(enabled = canMoveDown, onClick = onMoveDown)
-                        .testTag("move_down_${module.type.name.lowercase()}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.ArrowDownward,
-                        contentDescription = "Move Down",
-                        tint = if (canMoveDown) palette.textPrimary else palette.textSecondary.copy(alpha = 0.32f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                if (!isCoreTimer) {
-                    Switch(
-                        checked = module.enabled,
-                        onCheckedChange = onToggle,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = palette.onPrimary,
-                            checkedTrackColor = palette.primary,
-                            uncheckedThumbColor = palette.textSecondary,
-                            uncheckedTrackColor = palette.surfaceElevated
-                        )
-                    )
-                }
-            }
-        }
-
-        AnimatedVisibility(visible = module.enabled) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "SIZE",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 9.5.sp,
-                        color = palette.textSecondary
-                    )
-                    ElasticMorphingSegmentedPill(
-                        segments = LockModuleSize.entries.map { ElasticPillSegment(it.shortLabel) },
-                        selectedIndex = LockModuleSize.entries.indexOf(module.size),
-                        onSelectIndex = { idx -> onSelectSize(LockModuleSize.entries[idx]) },
-                        height = 34.dp
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.weight(1.35f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "POSITION",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 9.5.sp,
-                        color = palette.textSecondary
-                    )
-                    ElasticMorphingSegmentedPill(
-                        segments = LockModuleAlignment.entries.map { ElasticPillSegment(it.shortLabel) },
-                        selectedIndex = LockModuleAlignment.entries.indexOf(module.alignment),
-                        onSelectIndex = { idx -> onSelectAlignment(LockModuleAlignment.entries[idx]) },
-                        height = 34.dp
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun ScheduleEditorDialog(
     initialSchedule: FocusSchedule?,
     onDismiss: () -> Unit,
@@ -979,11 +617,31 @@ private fun ScheduleEditorDialog(
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
 
+    val defaultTimes = remember(initialSchedule) {
+        if (initialSchedule != null) {
+            listOf(
+                initialSchedule.startHour,
+                initialSchedule.startMinute,
+                initialSchedule.endHour,
+                initialSchedule.endMinute
+            )
+        } else {
+            val startCal = Calendar.getInstance().apply { add(Calendar.MINUTE, 2) }
+            val endCal = (startCal.clone() as Calendar).apply { add(Calendar.HOUR_OF_DAY, 1) }
+            listOf(
+                startCal.get(Calendar.HOUR_OF_DAY),
+                startCal.get(Calendar.MINUTE),
+                endCal.get(Calendar.HOUR_OF_DAY),
+                endCal.get(Calendar.MINUTE)
+            )
+        }
+    }
+
     var name by remember(initialSchedule) { mutableStateOf(initialSchedule?.name ?: "Deep Focus") }
-    var startHour by remember(initialSchedule) { mutableIntStateOf(initialSchedule?.startHour ?: 9) }
-    var startMinute by remember(initialSchedule) { mutableIntStateOf(initialSchedule?.startMinute ?: 0) }
-    var endHour by remember(initialSchedule) { mutableIntStateOf(initialSchedule?.endHour ?: 11) }
-    var endMinute by remember(initialSchedule) { mutableIntStateOf(initialSchedule?.endMinute ?: 0) }
+    var startHour by remember(initialSchedule) { mutableIntStateOf(defaultTimes[0]) }
+    var startMinute by remember(initialSchedule) { mutableIntStateOf(defaultTimes[1]) }
+    var endHour by remember(initialSchedule) { mutableIntStateOf(defaultTimes[2]) }
+    var endMinute by remember(initialSchedule) { mutableIntStateOf(defaultTimes[3]) }
     var repeatMode by remember(initialSchedule) {
         mutableStateOf(initialSchedule?.repeatMode ?: ScheduleRepeatMode.DAILY)
     }
@@ -1023,13 +681,14 @@ private fun ScheduleEditorDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Start & Stop time pickers
+                // Start & Stop time pickers (1 minute per tap, 00..59)
                 TimeStepperRow(
                     label = "START TIME",
                     hour = startHour,
                     minute = startMinute,
                     onHourChange = { haptics.tick(); startHour = it },
-                    onMinuteChange = { haptics.tick(); startMinute = it }
+                    onMinuteChange = { haptics.tick(); startMinute = it },
+                    tagPrefix = "start"
                 )
 
                 TimeStepperRow(
@@ -1037,7 +696,8 @@ private fun ScheduleEditorDialog(
                     hour = endHour,
                     minute = endMinute,
                     onHourChange = { haptics.tick(); endHour = it },
-                    onMinuteChange = { haptics.tick(); endMinute = it }
+                    onMinuteChange = { haptics.tick(); endMinute = it },
+                    tagPrefix = "stop"
                 )
 
                 // Quick duration preset pills relative to Start Time
@@ -1045,7 +705,7 @@ private fun ScheduleEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf(30 to "30m", 60 to "1h", 90 to "1.5h", 120 to "2h").forEach { (mins, label) ->
+                    listOf(15 to "15m", 30 to "30m", 60 to "1h", 120 to "2h").forEach { (mins, label) ->
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -1226,7 +886,8 @@ private fun TimeStepperRow(
     hour: Int,
     minute: Int,
     onHourChange: (Int) -> Unit,
-    onMinuteChange: (Int) -> Unit
+    onMinuteChange: (Int) -> Unit,
+    tagPrefix: String
 ) {
     val palette = LocalFocusTheme.current
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1271,9 +932,10 @@ private fun TimeStepperRow(
                         .clip(CircleShape)
                         .clickable { onHourChange((hour + 23) % 24) }
                         .padding(horizontal = 10.dp, vertical = 2.dp)
+                        .testTag("${tagPrefix}_hour_minus")
                 )
                 Text(
-                    text = "${String.format("%02d", hour)}h",
+                    text = "${String.format(Locale.US, "%02d", hour)}h",
                     fontFamily = JetBrainsMono,
                     fontSize = 12.sp,
                     color = palette.textPrimary
@@ -1287,6 +949,7 @@ private fun TimeStepperRow(
                         .clip(CircleShape)
                         .clickable { onHourChange((hour + 1) % 24) }
                         .padding(horizontal = 10.dp, vertical = 2.dp)
+                        .testTag("${tagPrefix}_hour_plus")
                 )
             }
 
@@ -1306,14 +969,16 @@ private fun TimeStepperRow(
                     color = palette.textPrimary,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable { onMinuteChange((minute + 55) % 60) }
+                        .clickable { onMinuteChange((minute + 59) % 60) }
                         .padding(horizontal = 10.dp, vertical = 2.dp)
+                        .testTag("${tagPrefix}_minute_minus")
                 )
                 Text(
-                    text = "${String.format("%02d", minute)}m",
+                    text = "${String.format(Locale.US, "%02d", minute)}m",
                     fontFamily = JetBrainsMono,
                     fontSize = 12.sp,
-                    color = palette.textPrimary
+                    color = palette.textPrimary,
+                    modifier = Modifier.testTag("${tagPrefix}_minute_value")
                 )
                 Text(
                     text = "+",
@@ -1322,8 +987,9 @@ private fun TimeStepperRow(
                     color = palette.textPrimary,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable { onMinuteChange((minute + 5) % 60) }
+                        .clickable { onMinuteChange((minute + 1) % 60) }
                         .padding(horizontal = 10.dp, vertical = 2.dp)
+                        .testTag("${tagPrefix}_minute_plus")
                 )
             }
         }

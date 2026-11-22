@@ -53,7 +53,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.DynamicIslandRepository
 import com.example.data.FocusSettingsRepository
 import com.example.data.FocusStatsRepository
 import com.example.data.FocusWhatsNewRepository
@@ -63,10 +62,8 @@ import com.example.data.GitHubUpdater
 import com.example.data.NotificationBlockerRepository
 import com.example.data.UpdateCheckResult
 import com.example.data.UpdateUiState
-import com.example.service.DynamicIslandOverlayService
 import com.example.service.ScheduleAlarmScheduler
 import com.example.ui.components.BlockedSummaryBottomSheet
-import com.example.ui.components.DynamicIslandOverlayHost
 import com.example.ui.components.FloatingPillBottomBar
 import com.example.ui.components.PillNavTab
 import com.example.ui.components.UpdateBottomSheet
@@ -170,15 +167,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun presentUnlockSummary() {
-        val islandCfg = DynamicIslandRepository.getConfig(this)
-        if (islandCfg.enabled && islandCfg.enableNotificationSummary) {
-            DynamicIslandRepository.showNotificationSummary(
-                context = this,
-                blockerState = NotificationBlockerRepository.getCurrent(this)
-            )
-        } else {
-            NotificationBlockerRepository.openLastSummarySheet(this)
-        }
+        NotificationBlockerRepository.openLastSummarySheet(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -213,8 +202,15 @@ class MainActivity : ComponentActivity() {
 
             val settingsState by FocusSettingsRepository.observe(this).collectAsStateWithLifecycle()
             val blockerState by NotificationBlockerRepository.observe(this).collectAsStateWithLifecycle()
-            val islandState by DynamicIslandRepository.observe(this).collectAsStateWithLifecycle()
             var showShare by remember { mutableStateOf(false) }
+
+            // Foreground schedule watcher: guarantees exact-second scheduled lock start while the app is open
+            LaunchedEffect(Unit) {
+                while (true) {
+                    ScheduleAlarmScheduler.triggerActiveScheduleIfDue(context)
+                    kotlinx.coroutines.delay(1_000L)
+                }
+            }
             var shareInitialDateMs by remember { mutableStateOf<Long?>(null) }
 
             // GitHub In-App Updater state
@@ -614,15 +610,6 @@ class MainActivity : ComponentActivity() {
                                     installedVersionName = installedVersion
                                 )
                             }
-                        )
-                    }
-
-                    // In-app Dynamic Island fallback when system overlay is not active
-                    if (islandState.activeEvent != null && !DynamicIslandOverlayService.isOverlayVisible) {
-                        DynamicIslandOverlayHost(
-                            state = islandState,
-                            isSystemOverlay = false,
-                            modifier = Modifier.align(Alignment.TopCenter)
                         )
                     }
                 }

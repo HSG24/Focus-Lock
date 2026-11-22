@@ -36,34 +36,34 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 12
+    const val CURRENT_RELEASE_ID = 13
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 12,
+            releaseId = 13,
             versionLabel = "Latest Update",
-            headline = "Schedules, Nothing Widgets & Dynamic Island",
-            summary = "Automated timer-only Focus Schedules with live Lock Studio & bottom console, 5 new Nothing-inspired widgets, a customizable Dynamic Island system, and shareable image recap cards.",
+            headline = "Reliable Schedules & Streamlined Lock Screen",
+            summary = "Fixed scheduled locks to fire reliably on time without root, added 1-minute schedule precision, streamlined the scheduled lock screen to a clean fixed layout, and removed Nothing Island.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Schedule Tab & Custom Lock Studio",
-                    description = "Added a dedicated Schedule tab for multiple daily, weekday, weekend, custom-day, or one-time focus schedules. Scheduled locks run in strict timer-only mode with a live dot-matrix Session Timeline, a customizable bottom focus dock (silenced counter, stay-locked check-in & unlock ETA), and a real-time Lock Studio.",
+                    title = "1-Minute Schedule Time Picker",
+                    description = "Schedule start and stop minute buttons now adjust by 1 minute per tap (00 to 59) instead of 5-minute jumps, and new schedules default close to the current time.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "5 New Nothing-Inspired Home Widgets",
-                    description = "Added Dot-Matrix Focus Clock, Consistency Matrix Heatmap, Next Schedule Countdown, Daily Goal Capsule Bar, and Streak & Rank Badge widgets. Every widget supports an independent Nothing Mono vs App Theme toggle, surface/corner styles, and live previews in Widget Studio.",
+                    title = "Streamlined Scheduled Lock Screen",
+                    description = "Removed Lock Studio and locked in a clean Dot Ring layout with balanced spacing, default mantra, exact module order (Time & Date, Schedule Pill, Countdown Timer, Essential Apps, Session Timeline, Focus Mantra, Goal & Streak Pill), and the Compact Bottom Dock directly below.",
                     category = WhatsNewCategory.NEW
                 ),
                 WhatsNewItem(
-                    title = "Nothing Dynamic Island & Minimal Studio",
-                    description = "Added a dot-matrix Dynamic Island for Unlock Notification Summaries (with real full-color app icons on expand), Upcoming Schedule Alerts (with Skip Today inside the expanded card), and Goal & Streak Milestones — configured in a compact 3-tab studio that pops a live preview whenever you adjust size or look.",
-                    category = WhatsNewCategory.NEW
+                    title = "Reliable Scheduled Focus Triggers",
+                    description = "Fixed scheduled locks not starting on time by switching to high-priority AlarmClock scheduling, WakeLock protection, an active foreground schedule watcher, and a one-tap Exact Alarm permission prompt.",
+                    category = WhatsNewCategory.FIX
                 ),
                 WhatsNewItem(
-                    title = "Shareable Image Recap Cards",
-                    description = "Added a Recap Image Card studio inside Share with Today, 7 Days, 30 Days, and Custom Date selection, customizable themes, Streak & Best Session cards, goal progress, and mini heatmap, exporting crisp PNG cards to any app.",
-                    category = WhatsNewCategory.NEW
+                    title = "Removed Nothing Island",
+                    description = "Completely removed Nothing Island from overlays and Settings, restoring the clean in-app Blocked Notifications summary sheet on unlock.",
+                    category = WhatsNewCategory.FIX
                 )
             )
         )
