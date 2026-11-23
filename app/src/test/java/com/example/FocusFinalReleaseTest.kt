@@ -113,14 +113,11 @@ class FocusFinalReleaseTest {
     }
 
     @Test
-    fun whatsNew_keepsPreviousItemsAndAdvancesToRelease16() {
-        assertEquals(16, FocusWhatsNewCatalog.CURRENT_RELEASE_ID)
+    fun whatsNew_containsOnlyBugFixesInRelease17() {
+        assertEquals(17, FocusWhatsNewCatalog.CURRENT_RELEASE_ID)
         val items = FocusWhatsNewCatalog.releases.first().items
-        val titles = items.map { it.title }
-        assertTrue(titles.contains("Redesigned Scheduled Lock Screen"))
-        assertTrue(titles.contains("Manual Dismiss for Completion Screen"))
-        assertTrue(titles.any { it.contains("10-Question Infinite Quiz") })
-        assertTrue(titles.any { it.contains("Solar Eclipse Focus Ring") })
+        assertEquals(1, items.size)
+        assertEquals("Bug Fixes", items.first().title)
     }
 
     @Test

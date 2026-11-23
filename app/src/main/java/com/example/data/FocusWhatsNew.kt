@@ -36,69 +36,19 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 16
+    const val CURRENT_RELEASE_ID = 17
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 16,
-            versionLabel = "Final Release",
-            headline = "Mindful Quiz Unlock, Sleek New Identity & 100% On-Device Control",
-            summary = "Completely rebuilt manual locks with an infinite 10-question quiz, adaptive built-in keypad, and 5-second unlock celebration, moved all stats on-device, added JSON backup & restore, a fresh-install setup flow, exact 1:1 pill previews, and a new Solar Eclipse Focus Ring logo.",
+            releaseId = 17,
+            versionLabel = "Latest Update",
+            headline = "Bug Fixes",
+            summary = "Bug fixes.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Redesigned Manual Lock & 10-Question Infinite Quiz",
-                    description = "Replaced the 6-digit password with a clean, unified manual lock screen and an Unlock Session button that launches a 10-question procedural quiz directly inside the overlay — featuring Odd One Out, Number Reflex, Quick X, Number Flow, Emoji Algebra, Symbol Swap, Solo Hunter, and Easy Unscramble with permanent no-repeat memory.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Adaptive Built-In Keypad & Unlock Celebration",
-                    description = "The quiz automatically switches between a sleek numeric pad and a spacious, tall QWERTY A–Z keypad right inside the lock overlay, finishing with a smooth 5-second unlock animation after your 10th correct answer.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Solar Eclipse Focus Ring Logo & Identity",
-                    description = "Reimagined FocusLock's launcher icon and in-app emblem with a notched warm-ivory precision ring, floating focal dot, and glowing ember-amber eclipse crescent on matte carbon black.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Full Export & Import Backup Page",
-                    description = "Added a dedicated Backup & Restore page in Settings that exports and restores all settings, focus stats, XP, streaks, schedules, widget configs, notification logs, and quiz memory via .json files or clipboard copy/paste.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "100% On-Device Stats & Public GitHub Updates",
-                    description = "Removed Firebase dependencies across lock sessions, stats, and app updates so everything runs privately and instantaneously on-device (while keeping Share Links intact) and updates pull directly from the public GitHub Releases API.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "First-Install Welcome Setup",
-                    description = "Added a refined four-step welcome setup experience exclusively for brand-new installations, covering theme selection, daily goal calibration, essential permissions, and optional backup restore.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Exact 1:1 Minimal Pills Live Preview",
-                    description = "Rebuilt the Minimal Pills size preview in Settings to match the real lock screen's exact width and scale with zero distortion, complete with a live Single Row / Wraps indicator.",
+                    title = "Bug Fixes",
+                    description = "Bug fixes.",
                     category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Cleaner Scheduled Lock Progress Layout",
-                    description = "Removed the redundant second linear progress bar below the circular countdown timer on the scheduled lock screen and replaced it with a crisp inline session window strip.",
-                    category = WhatsNewCategory.FIX
-                ),
-                WhatsNewItem(
-                    title = "Redesigned Scheduled Lock Screen",
-                    description = "Rebuilt from the ground up with a minimal, unified monolith layout that brings your countdown ring, session window strip, daily goal, streak, and silenced alerts together in one cohesive card with zero clutter.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Full Theme-Matched Lock & Completion Cards",
-                    description = "Every element on the scheduled lock and completion screens now seamlessly follows your active app theme's timer ring, typography, glass surfaces, and dividers.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Manual Dismiss for Completion Screen",
-                    description = "Removed the 3-second automatic dismissal on the scheduled focus completion screen and added a Done button so you can review your session summary and dismiss it whenever you are ready.",
-                    category = WhatsNewCategory.NEW
                 )
             )
         )

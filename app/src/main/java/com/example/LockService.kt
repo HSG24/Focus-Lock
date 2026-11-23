@@ -824,7 +824,8 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             sessionStartTimeMs = startTime,
                             iconCache = iconCache,
                             onLaunchApp = { app -> launchAllowedApp(app) },
-                            onUnlock = { stopLock() }
+                            onUnlock = { stopLock() },
+                            onUnlockWithDuration = { focusedMs -> stopLock(overrideDurationMs = focusedMs) }
                         )
                     }
                 }
@@ -1188,7 +1189,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         successDismissJob = null
     }
 
-    private fun finalizeSessionDataOnce(endTimeMs: Long): Boolean {
+    private fun finalizeSessionDataOnce(endTimeMs: Long, overrideDurationMs: Long? = null): Boolean {
         if (!sessionRecorded.compareAndSet(false, true)) {
             return pendingHasBlockedNotifications
         }
@@ -1200,7 +1201,11 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         clearActiveSession()
 
         val capturedStart = startTime
-        val duration = if (capturedStart > 0L) (endTimeMs - capturedStart).coerceAtLeast(0L) else 0L
+        val duration = when {
+            overrideDurationMs != null -> overrideDurationMs.coerceAtLeast(0L)
+            capturedStart > 0L -> (endTimeMs - capturedStart).coerceAtLeast(0L)
+            else -> 0L
+        }
         startTime = 0L
         currentSessionStartTimeMs = 0L
         val appCtx = applicationContext
@@ -1240,7 +1245,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         return hasBlockedNotifications
     }
 
-    private fun stopLock() {
+    private fun stopLock(overrideDurationMs: Long? = null) {
         if (!isStoppingLock.compareAndSet(false, true)) return
 
         scheduleEndWatchJob?.cancel()
@@ -1254,7 +1259,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         removeOverlayView()
 
         val appCtx = applicationContext
-        val hasBlockedNotifications = finalizeSessionDataOnce(System.currentTimeMillis())
+        val hasBlockedNotifications = finalizeSessionDataOnce(System.currentTimeMillis(), overrideDurationMs)
         pendingHasBlockedNotifications = false
 
         if (hasBlockedNotifications) {

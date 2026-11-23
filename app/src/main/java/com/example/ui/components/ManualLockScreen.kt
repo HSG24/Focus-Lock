@@ -123,6 +123,7 @@ fun ManualLockScreen(
     iconCache: Map<String, ImageBitmap> = emptyMap(),
     onLaunchApp: (AllowedApp) -> Unit = {},
     onUnlock: () -> Unit = {},
+    onUnlockWithDuration: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -138,14 +139,21 @@ fun ManualLockScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var nowMs by remember(sessionStartTimeMs) { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(sessionStartTimeMs) {
-        while (true) {
-            nowMs = System.currentTimeMillis()
-            delay(1000L)
+    var accumulatedPausedMs by remember(sessionStartTimeMs) { mutableLongStateOf(0L) }
+    var pauseStartedAtMs by remember(sessionStartTimeMs) { mutableStateOf<Long?>(null) }
+    var finalFocusedMs by remember(sessionStartTimeMs) { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(sessionStartTimeMs, stage) {
+        if (stage == ManualLockStage.LOCKED) {
+            while (true) {
+                nowMs = System.currentTimeMillis()
+                delay(1000L)
+            }
         }
     }
 
-    val elapsedMs = (nowMs - sessionStartTimeMs).coerceAtLeast(0L)
+    val activeReferenceMs = pauseStartedAtMs ?: nowMs
+    val elapsedMs = finalFocusedMs ?: (activeReferenceMs - sessionStartTimeMs - accumulatedPausedMs).coerceAtLeast(0L)
     val elapsedSec = elapsedMs / 1000L
     val hours = elapsedSec / 3600L
     val mins = (elapsedSec % 3600L) / 60L
@@ -210,6 +218,9 @@ fun ManualLockScreen(
                         onLaunchApp = onLaunchApp,
                         onStartUnlockQuiz = {
                             if (hapticKeypad) haptics.confirm()
+                            if (pauseStartedAtMs == null) {
+                                pauseStartedAtMs = System.currentTimeMillis()
+                            }
                             if (quizQuestions.isEmpty()) {
                                 quizQuestions = FocusQuizEngine.generateQuizSet(
                                     context = context,
@@ -238,6 +249,12 @@ fun ManualLockScreen(
                             autoClearWrongAnswer = autoClearWrongAnswer,
                             onBackToLock = {
                                 if (hapticKeypad) haptics.tick()
+                                val pausedAt = pauseStartedAtMs
+                                if (pausedAt != null) {
+                                    accumulatedPausedMs += (System.currentTimeMillis() - pausedAt).coerceAtLeast(0L)
+                                    pauseStartedAtMs = null
+                                }
+                                nowMs = System.currentTimeMillis()
                                 userInput = ""
                                 errorMessage = null
                                 stage = ManualLockStage.LOCKED
@@ -256,6 +273,9 @@ fun ManualLockScreen(
                                 errorMessage = null
                                 userInput = ""
                                 if (currentIndex + 1 >= quizQuestions.size) {
+                                    val freezeRef = pauseStartedAtMs ?: System.currentTimeMillis()
+                                    finalFocusedMs = (freezeRef - sessionStartTimeMs - accumulatedPausedMs)
+                                        .coerceAtLeast(0L)
                                     stage = ManualLockStage.UNLOCKING
                                 } else {
                                     currentIndex += 1
@@ -266,10 +286,17 @@ fun ManualLockScreen(
                 }
 
                 ManualLockStage.UNLOCKING -> {
+                    val frozenDuration = finalFocusedMs ?: elapsedMs
                     ManualUnlockApertureStage(
                         palette = palette,
                         formattedElapsed = formattedElapsed,
-                        onAnimationFinished = onUnlock
+                        onAnimationFinished = {
+                            if (onUnlockWithDuration != null) {
+                                onUnlockWithDuration(frozenDuration)
+                            } else {
+                                onUnlock()
+                            }
+                        }
                     )
                 }
             }
