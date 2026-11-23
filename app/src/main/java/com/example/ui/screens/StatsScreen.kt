@@ -75,7 +75,6 @@ import com.example.ui.components.StatsSyncStatusBadge
 import com.example.ui.components.StatsTimeframeSwitcher
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemeScenicBackdropOverlay
-import com.example.ui.components.ThemeScenicVignetteFooter
 import com.example.ui.components.TopBarRankXpPill
 import com.example.ui.components.UnifiedBentoMetricsGrid
 import com.example.ui.components.UnifiedHeroInfographicCard
@@ -359,14 +358,6 @@ fun StatsScreen(
                                 }
                             },
                             modifier = Modifier.widthIn(max = 600.dp)
-                        )
-                    }
-
-                    item(key = "stats_scenic_footer", contentType = "scenic_footer") {
-                        ThemeScenicVignetteFooter(
-                            caption = "CONSISTENCY ARCHIVE",
-                            subtitle = "Every quiet hour compounds over time",
-                            palette = palette
                         )
                     }
                 }

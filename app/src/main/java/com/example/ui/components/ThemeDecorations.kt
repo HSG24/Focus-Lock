@@ -222,23 +222,6 @@ fun ThemeBackdropLayer(
                     rowIdx++
                 }
 
-                // Bottom subtle dot-matrix horizon fade
-                val bottomStart = h * 0.82f
-                var by = bottomStart
-                while (by < h - step * 0.4f) {
-                    val fade = ((by - bottomStart) / (h - bottomStart)).coerceIn(0f, 1f)
-                    var x = step * 0.8f
-                    while (x < w - step * 0.4f) {
-                        drawCircle(
-                            color = palette.textPrimary.copy(alpha = fade * 0.045f),
-                            radius = dotRadius,
-                            center = Offset(x, by)
-                        )
-                        x += step
-                    }
-                    by += step
-                }
-
                 // Delicate Nothing Glyph curved dotted arc framing upper right
                 val glyphCenter = Offset(w * 0.5f, h * 0.24f)
                 val glyphRadius = minOf(w, h) * 0.46f

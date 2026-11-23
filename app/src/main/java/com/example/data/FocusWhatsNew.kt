@@ -46,6 +46,11 @@ object FocusWhatsNewCatalog {
             summary = "New theme artwork on every screen plus Easy, Default, and Hard unlock questions.",
             items = listOf(
                 WhatsNewItem(
+                    title = "Improved visual aesthetics",
+                    description = "Cleaner headers, smoother botanical art, and refined minimal accents across every theme.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
                     title = "Artistic Theme Scenes",
                     description = "Added custom minimal artwork and relaxing nature visuals on every screen, unique to each theme.",
                     category = WhatsNewCategory.NEW

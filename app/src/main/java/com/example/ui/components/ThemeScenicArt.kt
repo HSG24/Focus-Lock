@@ -490,67 +490,55 @@ private fun DrawScope.drawNothingDotScenic(
         cap = StrokeCap.Round
     )
 
-    // Sculpted Halftone Dot-Matrix Mountain & Acoustic Horizon along lower third
-    val spacing = 11.dp.toPx()
-    val cols = (w / spacing).toInt().coerceIn(22, 46)
-    val baseY = h * 0.97f
-    val maxPeakH = h * (if (variant == ScenicPageVariant.LOCK) 0.10f else 0.165f)
+    // Unified, strictly grounded Halftone Dot-Matrix Horizon along the bottom
+    // Every dot lives on one uniform orthogonal grid (no overlapping grids, no floating dots).
+    val cell = 10.dp.toPx()
+    val cols = ((w - cell) / cell).toInt().coerceIn(20, 52)
+    val gridWidth = cols * cell
+    val startX = (w - gridWidth) * 0.5f
+    val baseY = h - cell * 0.7f
+    val maxRows = ((h * (if (variant == ScenicPageVariant.LOCK) 0.095f else 0.145f)) / cell)
+        .toInt()
+        .coerceIn(4, 14)
+
     val phaseOffset = when (variant) {
-        ScenicPageVariant.HOME -> 0.0
-        ScenicPageVariant.SCHEDULE -> 1.1
-        ScenicPageVariant.STATS -> 2.1
-        ScenicPageVariant.SETTINGS -> 3.0
-        ScenicPageVariant.SHARE -> 0.6
-        ScenicPageVariant.BACKUP -> 1.7
+        ScenicPageVariant.HOME -> 0.15
+        ScenicPageVariant.SCHEDULE -> 1.15
+        ScenicPageVariant.STATS -> 2.10
+        ScenicPageVariant.SETTINGS -> 3.05
+        ScenicPageVariant.SHARE -> 0.65
+        ScenicPageVariant.BACKUP -> 1.70
         ScenicPageVariant.SETUP -> 0.35
-        ScenicPageVariant.LOCK -> 2.5
+        ScenicPageVariant.LOCK -> 2.45
     }
+
+    val leftBeaconCol = (cols * 0.25f).toInt()
+    val rightBeaconCol = (cols * 0.75f).toInt()
 
     for (c in 0..cols) {
         val u = c.toFloat() / cols.toFloat()
-        val x = u * w
-        // Dual harmonic mountain-ridge contour
-        val primaryPeak = ((sin(u * PI * 2.15 + phaseOffset) + 1.0) * 0.5).toFloat()
-        val secondaryPeak = ((sin(u * PI * 4.4 - phaseOffset * 0.7 + drift * 0.45) + 1.0) * 0.5).toFloat()
-        val ridgeHeight = maxPeakH * (0.22f + 0.56f * primaryPeak + 0.22f * secondaryPeak)
-        val rowsInCol = (ridgeHeight / spacing).toInt().coerceAtLeast(1)
+        val x = startX + c * cell
+        // Smooth, strictly continuous dual-wave ridge silhouette
+        val waveA = ((sin(u * PI * 2.0 + phaseOffset) + 1.0) * 0.5).toFloat()
+        val waveB = ((sin(u * PI * 4.0 - phaseOffset * 0.65 + drift * 0.35) + 1.0) * 0.5).toFloat()
+        val heightFactor = (0.20f + 0.58f * waveA + 0.22f * waveB).coerceIn(0.18f, 1f)
+        val rowsInCol = (heightFactor * maxRows).toInt().coerceIn(2, maxRows)
 
         for (r in 0 until rowsInCol) {
-            val y = baseY - r * spacing
-            val elevationFrac = r.toFloat() / rowsInCol.toFloat()
+            val y = baseY - r * cell
+            val elevationFrac = if (rowsInCol <= 1) 1f else r.toFloat() / (rowsInCol - 1).toFloat()
             val isCrest = r == rowsInCol - 1
-            val isRedBeacon = isCrest && (c == (cols * 0.24f).toInt() || c == (cols * 0.76f).toInt())
-            val alpha = ((0.06f + 0.22f * elevationFrac) * intensity).coerceAtMost(0.34f)
+            val isRedBeacon = isCrest && (c == leftBeaconCol || c == rightBeaconCol)
+            val alpha = ((0.06f + 0.21f * elevationFrac) * intensity).coerceAtMost(0.32f)
             drawCircle(
                 color = if (isRedBeacon) dotRed.copy(alpha = 0.88f * intensity) else dotWhite.copy(alpha = alpha),
                 radius = when {
-                    isRedBeacon -> 2.2.dp.toPx()
-                    isCrest -> 1.65.dp.toPx()
-                    else -> (0.85f + 0.55f * elevationFrac).dp.toPx()
+                    isRedBeacon -> 2.1.dp.toPx()
+                    isCrest -> 1.55.dp.toPx()
+                    else -> (0.85f + 0.45f * elevationFrac).dp.toPx()
                 },
                 center = Offset(x, y)
             )
-        }
-    }
-
-    // Minimalist Bauhaus architectural rule + dot-sculpted conifer silhouette on side margin
-    if (variant != ScenicPageVariant.LOCK) {
-        val leftSide = variant == ScenicPageVariant.HOME || variant == ScenicPageVariant.STATS || variant == ScenicPageVariant.SETUP
-        val treeX = if (leftSide) w * 0.11f else w * 0.89f
-        val treeBaseY = h * 0.85f
-        val tiers = 5
-        for (t in 0 until tiers) {
-            val ty = treeBaseY - t * 9.dp.toPx()
-            val halfW = (tiers - t) * 4.2.dp.toPx()
-            val dotsInTier = ((halfW * 2f) / 5.5.dp.toPx()).toInt().coerceAtLeast(1)
-            for (d in 0..dotsInTier) {
-                val dx = if (dotsInTier == 0) 0f else -halfW + (halfW * 2f) * (d.toFloat() / dotsInTier.toFloat())
-                drawCircle(
-                    color = if (t == tiers - 1) dotRed.copy(alpha = 0.82f * intensity) else dotWhite.copy(alpha = 0.22f * intensity),
-                    radius = if (t == tiers - 1) 1.8.dp.toPx() else 1.15.dp.toPx(),
-                    center = Offset(treeX + dx, ty)
-                )
-            }
         }
     }
 }
