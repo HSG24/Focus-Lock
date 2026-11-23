@@ -67,6 +67,7 @@ data class FocusSettingsState(
     val showSessionTimer: Boolean = true,
     val hapticKeypad: Boolean = true,
     val autoClearWrongPin: Boolean = true,
+    val quizDifficulty: QuizDifficulty = QuizDifficulty.DEFAULT,
     val appSwitchGraceSeconds: Int = 2,
     val blockNotificationsDuringLock: Boolean = false,
     val blockPowerMenuDuringLock: Boolean = true,
@@ -89,6 +90,7 @@ object FocusSettingsRepository {
     private const val KEY_SHOW_TIMER = "show_session_timer"
     private const val KEY_HAPTIC_KEYPAD = "haptic_keypad"
     private const val KEY_AUTO_CLEAR_PIN = "auto_clear_wrong_pin"
+    private const val KEY_QUIZ_DIFFICULTY = "quiz_difficulty"
     private const val KEY_GRACE_SECONDS = "app_switch_grace_sec"
     private const val KEY_BLOCK_NOTIFICATIONS = "block_notifications_during_lock"
     private const val KEY_BLOCK_POWER_MENU = "block_power_menu_during_lock"
@@ -193,6 +195,10 @@ object FocusSettingsRepository {
             DEFAULT_ALLOWED_APPS
         }
 
+        val quizDifficulty = QuizDifficulty.fromName(
+            prefs.getString(KEY_QUIZ_DIFFICULTY, QuizDifficulty.DEFAULT.name)
+        )
+
         return FocusSettingsState(
             appTheme = appTheme,
             lockAppLayout = lockLayout,
@@ -202,6 +208,7 @@ object FocusSettingsRepository {
             showSessionTimer = prefs.getBoolean(KEY_SHOW_TIMER, true),
             hapticKeypad = prefs.getBoolean(KEY_HAPTIC_KEYPAD, true),
             autoClearWrongPin = prefs.getBoolean(KEY_AUTO_CLEAR_PIN, true),
+            quizDifficulty = quizDifficulty,
             appSwitchGraceSeconds = prefs.getInt(KEY_GRACE_SECONDS, 2).coerceIn(1, 5),
             blockNotificationsDuringLock = prefs.getBoolean(KEY_BLOCK_NOTIFICATIONS, false),
             blockPowerMenuDuringLock = prefs.getBoolean(KEY_BLOCK_POWER_MENU, true),
@@ -244,6 +251,10 @@ object FocusSettingsRepository {
 
     fun setAutoClearWrongPin(context: Context, enabled: Boolean) {
         update(context) { putBoolean(KEY_AUTO_CLEAR_PIN, enabled) }
+    }
+
+    fun setQuizDifficulty(context: Context, difficulty: QuizDifficulty) {
+        update(context) { putString(KEY_QUIZ_DIFFICULTY, difficulty.name) }
     }
 
     fun setAppSwitchGraceSeconds(context: Context, seconds: Int) {

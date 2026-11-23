@@ -228,7 +228,7 @@ class StatsRepositoryAndUiTest {
             durationMs = 35 * 60_000L
         )
 
-        var activeTheme by mutableStateOf(AppVisualTheme.NOTHING_CRIMSON)
+        var activeTheme by mutableStateOf(AppVisualTheme.NOTHING_DOT)
         composeRule.setContent {
             MyApplicationTheme(appTheme = activeTheme) {
                 StatsScreen(
@@ -333,7 +333,7 @@ class StatsRepositoryAndUiTest {
 
         composeRule.setContent {
             val observedSettings by FocusSettingsRepository.observe(context).collectAsStateWithLifecycle()
-            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_DOT) {
                 SettingsScreen(
                     settingsState = observedSettings,
                     installedVersion = "1.0.0",
@@ -371,7 +371,7 @@ class StatsRepositoryAndUiTest {
             apkSizeBytes = 12_000_000L
         )
         composeRule.setContent {
-            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_DOT) {
                 UpdateBottomSheet(
                     installedVersion = "1.0.0",
                     updateState = UpdateUiState.UpdateAvailable(release),
@@ -441,7 +441,7 @@ class StatsRepositoryAndUiTest {
     fun settingsScreen_whatsNewButtonRemainsAccessible_andOpensBottomSheet() {
         composeRule.setContent {
             val observedSettings by FocusSettingsRepository.observe(context).collectAsStateWithLifecycle()
-            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_DOT) {
                 SettingsScreen(
                     settingsState = observedSettings,
                     installedVersion = "1.0.5",
@@ -460,10 +460,9 @@ class StatsRepositoryAndUiTest {
         composeRule.onNodeWithText("v1.0.5").assertIsDisplayed()
         composeRule.onNodeWithTag("whats_new_section_new").assertIsDisplayed()
         composeRule.onNodeWithText("NEW").assertIsDisplayed()
-        composeRule.onNodeWithText("Redesigned Scheduled Lock Screen").assertIsDisplayed()
-        composeRule.onNodeWithText("Full Theme-Matched Lock & Completion Cards").assertIsDisplayed()
-        composeRule.onNodeWithText("Manual Dismiss for Completion Screen").assertIsDisplayed()
-        composeRule.onNodeWithText("3-Second Scheduled Completion Screen").assertDoesNotExist()
+        composeRule.onNodeWithText("Nothing Dot Theme").assertIsDisplayed()
+        composeRule.onNodeWithText("Three Distinct Themes").assertIsDisplayed()
+        composeRule.onNodeWithText("Visual Theme Picker").assertIsDisplayed()
         composeRule.onNodeWithTag("whats_new_section_fixes").assertDoesNotExist()
         composeRule.onNodeWithTag("whats_new_previous_toggle").assertDoesNotExist()
 
@@ -526,7 +525,7 @@ class StatsRepositoryAndUiTest {
         val blockerState = com.example.data.NotificationBlockerRepository.getCurrent(context)
 
         composeRule.setContent {
-            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_DOT) {
                 com.example.ui.components.BlockedSummaryBottomSheet(
                     blockerState = blockerState,
                     onDoneClearLog = {},

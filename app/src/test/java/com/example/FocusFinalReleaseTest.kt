@@ -12,6 +12,7 @@ import com.example.data.FocusStatsRepository
 import com.example.data.FocusWhatsNewCatalog
 import com.example.data.FocusXpRepository
 import com.example.data.LockAppLayout
+import com.example.data.QuizDifficulty
 import com.example.data.ScheduleRepeatMode
 import com.example.ui.components.LockAppsTrayMetrics
 import com.example.ui.theme.AppVisualTheme
@@ -85,7 +86,7 @@ class FocusFinalReleaseTest {
         assertEquals(5, valid.summary.quizHistoryCount)
 
         // Mutate state away, then restore from JSON
-        FocusSettingsRepository.setAppTheme(context, AppVisualTheme.NORDIC_SAGE)
+        FocusSettingsRepository.setAppTheme(context, AppVisualTheme.NOTHING_DOT)
         FocusSettingsRepository.setDailyGoalMinutes(context, 60L)
         FocusStatsRepository.replaceAllSessions(context, emptyList())
         FocusQuizEngine.replaceAskedSignatures(context, emptyList())
@@ -113,11 +114,43 @@ class FocusFinalReleaseTest {
     }
 
     @Test
-    fun whatsNew_containsOnlyBugFixesInRelease17() {
-        assertEquals(17, FocusWhatsNewCatalog.CURRENT_RELEASE_ID)
+    fun quizEngine_supportsEasyDefaultAndHardDifficultiesAndPersistsSetting() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertEquals(QuizDifficulty.DEFAULT, FocusSettingsRepository.getCurrent(context).quizDifficulty)
+
+        FocusSettingsRepository.setQuizDifficulty(context, QuizDifficulty.HARD)
+        assertEquals(QuizDifficulty.HARD, FocusSettingsRepository.getCurrent(context).quizDifficulty)
+
+        FocusSettingsRepository.setQuizDifficulty(context, QuizDifficulty.EASY)
+        assertEquals(QuizDifficulty.EASY, FocusSettingsRepository.getCurrent(context).quizDifficulty)
+
+        for (difficulty in QuizDifficulty.entries) {
+            FocusQuizEngine.replaceAskedSignatures(context, emptyList())
+            val batch = FocusQuizEngine.generateQuizSet(
+                context = context,
+                count = 15,
+                random = Random(99),
+                difficulty = difficulty
+            )
+            assertEquals(15, batch.size)
+            assertEquals(15, batch.map { it.signature }.distinct().size)
+            for (q in batch) {
+                assertTrue(FocusQuizEngine.checkAnswer(q, q.acceptedAnswers.first()))
+            }
+        }
+    }
+
+    @Test
+    fun whatsNew_preservesPreviousItemsAndAddsRelease19Highlights() {
+        assertEquals(19, FocusWhatsNewCatalog.CURRENT_RELEASE_ID)
         val items = FocusWhatsNewCatalog.releases.first().items
-        assertEquals(1, items.size)
-        assertEquals("Bug Fixes", items.first().title)
+        assertEquals(5, items.size)
+        val titles = items.map { it.title }
+        assertTrue("Artistic Theme Scenes" in titles)
+        assertTrue("Unlock Question Difficulty" in titles)
+        assertTrue("Nothing Dot Theme" in titles)
+        assertTrue("Three Distinct Themes" in titles)
+        assertTrue("Visual Theme Picker" in titles)
     }
 
     @Test

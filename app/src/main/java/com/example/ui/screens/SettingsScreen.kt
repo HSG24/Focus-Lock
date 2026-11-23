@@ -97,6 +97,7 @@ import com.example.data.FocusXpRepository
 import com.example.data.InstalledAppInfo
 import com.example.data.LockAppLayout
 import com.example.data.NotificationBlockerRepository
+import com.example.data.QuizDifficulty
 import com.example.data.UpdateUiState
 import com.example.service.FocusNotificationBlockerService
 import com.example.service.FocusPowerBlockerAccessibilityService
@@ -111,7 +112,10 @@ import com.example.ui.components.LockAllowedAppsSection
 import com.example.ui.components.LockAppsTrayMetrics
 import com.example.ui.components.LockPalette
 import com.example.ui.components.ProtectionAndBlockersSection
+import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemeScenicBackdropOverlay
+import com.example.ui.components.ThemeScenicVignetteFooter
 import com.example.ui.components.ThemedDivider
 import com.example.ui.components.ThemedSettingsSectionCard
 import com.example.ui.components.ThemedSettingsSwitchRow
@@ -248,6 +252,12 @@ fun SettingsScreen(
             FocusSettingsRepository.setAutoClearWrongPin(context, enabled)
         }
     }
+    val onSelectQuizDifficulty = remember(context, haptics) {
+        { difficulty: QuizDifficulty ->
+            haptics.tick()
+            FocusSettingsRepository.setQuizDifficulty(context, difficulty)
+        }
+    }
     val onSelectGraceSeconds = remember(context, haptics) {
         { sec: Int ->
             haptics.tick()
@@ -321,6 +331,10 @@ fun SettingsScreen(
             .navigationBarsPadding()
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.SETTINGS,
+            palette = palette
+        )
 
         Column(
             modifier = Modifier
@@ -431,10 +445,12 @@ fun SettingsScreen(
                     showSessionTimer = settingsState.showSessionTimer,
                     hapticKeypad = settingsState.hapticKeypad,
                     autoClearWrongPin = settingsState.autoClearWrongPin,
+                    quizDifficulty = settingsState.quizDifficulty,
                     appSwitchGraceSeconds = settingsState.appSwitchGraceSeconds,
                     onToggleSessionTimer = onToggleSessionTimer,
                     onToggleHapticKeypad = onToggleHapticKeypad,
                     onToggleAutoClearWrongPin = onToggleAutoClearWrongPin,
+                    onSelectQuizDifficulty = onSelectQuizDifficulty,
                     onSelectGraceSeconds = onSelectGraceSeconds
                 )
 
@@ -473,6 +489,12 @@ fun SettingsScreen(
                     onOpenUsageSettings = onOpenUsageSettings,
                     onOpenNotificationSettings = onOpenNotificationListenerSettings,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                )
+
+                ThemeScenicVignetteFooter(
+                    caption = "FOCUS SANCTUARY",
+                    subtitle = "Crafted for calm, distraction-free sessions",
+                    palette = palette
                 )
             }
         }
@@ -970,14 +992,15 @@ private fun FocusBehaviorSection(
     showSessionTimer: Boolean,
     hapticKeypad: Boolean,
     autoClearWrongPin: Boolean,
+    quizDifficulty: QuizDifficulty,
     appSwitchGraceSeconds: Int,
     onToggleSessionTimer: (Boolean) -> Unit,
     onToggleHapticKeypad: (Boolean) -> Unit,
     onToggleAutoClearWrongPin: (Boolean) -> Unit,
+    onSelectQuizDifficulty: (QuizDifficulty) -> Unit,
     onSelectGraceSeconds: (Int) -> Unit
 ) {
     val palette = LocalFocusTheme.current
-    val chipShape = remember { RoundedCornerShape(50) }
 
     ThemedSettingsSectionCard(title = "FOCUS & LOCK BEHAVIOR") {
         Column(
@@ -1011,6 +1034,50 @@ private fun FocusBehaviorSection(
                 onCheckedChange = onToggleAutoClearWrongPin,
                 testTag = "switch_auto_clear_pin"
             )
+
+            ThemedDivider(palette = palette)
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column {
+                    Text(
+                        text = "Question Difficulty",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 15.sp,
+                        color = palette.textPrimary
+                    )
+                    Text(
+                        text = quizDifficulty.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 12.sp,
+                        color = palette.textSecondary
+                    )
+                }
+                val difficultyOptions = remember {
+                    listOf(
+                        QuizDifficulty.EASY,
+                        QuizDifficulty.DEFAULT,
+                        QuizDifficulty.HARD
+                    )
+                }
+                val difficultySegments = remember {
+                    listOf(
+                        ElasticPillSegment(QuizDifficulty.EASY.label),
+                        ElasticPillSegment(QuizDifficulty.DEFAULT.label),
+                        ElasticPillSegment(QuizDifficulty.HARD.label)
+                    )
+                }
+                ElasticMorphingSegmentedPill(
+                    segments = difficultySegments,
+                    selectedIndex = difficultyOptions.indexOf(quizDifficulty).takeIf { it >= 0 } ?: 1,
+                    onSelectIndex = { idx ->
+                        difficultyOptions.getOrNull(idx)?.let(onSelectQuizDifficulty)
+                    },
+                    height = 42.dp,
+                    fontSize = 13.sp,
+                    useElevatedContainer = true,
+                    modifier = Modifier.testTag("quiz_difficulty_selector")
+                )
+            }
 
             ThemedDivider(palette = palette)
 

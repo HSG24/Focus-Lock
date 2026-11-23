@@ -112,8 +112,11 @@ import com.example.fetchAllSessions
 import com.example.ui.components.ElasticMorphingSegmentedPill
 import com.example.ui.components.ElasticPillSegment
 import com.example.ui.components.RollingMetricText
+import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ShareRecapCardStudio
 import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemeScenicBackdropOverlay
+import com.example.ui.components.ThemeScenicVignetteFooter
 import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.performFocusConfirm
 import com.example.ui.components.performFocusReject
@@ -250,6 +253,10 @@ fun ShareScreen(
             .background(palette.background)
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.SHARE,
+            palette = palette
+        )
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -490,6 +497,12 @@ fun ShareScreen(
                             if (errorMessage != null) {
                                 ErrorBanner(message = errorMessage!!)
                             }
+
+                            ThemeScenicVignetteFooter(
+                                caption = "SHARE YOUR MOMENTUM",
+                                subtitle = "Live links, snapshots & recap art cards",
+                                palette = palette
+                            )
 
                             Spacer(modifier = Modifier.height(12.dp))
                         }

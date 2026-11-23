@@ -178,6 +178,10 @@ fun ScheduledLockScreen(
             .testTag(if (isPreview) "scheduled_lock_preview_canvas" else "scheduled_lock_screen_root")
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.LOCK,
+            palette = palette
+        )
 
         // Soft centered focal aura behind the monolith to anchor depth
         SanctuaryAmbientHalo(
@@ -737,10 +741,10 @@ internal fun SanctuaryMonolithCard(
             .focusGlassPanel(
                 shape = shape,
                 palette = palette,
-                elevated = false,
+                elevated = true,
                 highlightAccent = accentRim?.copy(alpha = 0.55f)
             )
-            .border(width = 1.dp, brush = rimBrush, shape = shape)
+            .border(width = 0.75.dp, brush = rimBrush, shape = shape)
             .padding(horizontal = contentPaddingHorizontal, vertical = contentPaddingVertical),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
@@ -870,15 +874,15 @@ private fun CompletionHaloEmblem(palette: FocusThemePalette) {
             val outerR = size.minDimension * 0.46f
 
             when (palette.theme) {
-                AppVisualTheme.NOTHING_CRIMSON -> {
+                AppVisualTheme.NOTHING_DOT -> {
                     val dots = 24
                     for (i in 0 until dots) {
                         val rad = (-90.0 + (360.0 / dots) * i) * PI / 180.0
                         val x = cx + (outerR * cos(rad)).toFloat()
                         val y = cy + (outerR * sin(rad)).toFloat()
                         drawCircle(
-                            color = palette.success.copy(alpha = if (i % 2 == 0) 0.72f else 0.30f),
-                            radius = if (i % 2 == 0) 2.2.dp.toPx() else 1.4.dp.toPx(),
+                            color = palette.success.copy(alpha = if (i % 2 == 0) 0.78f else 0.30f),
+                            radius = if (i % 2 == 0) 2.3.dp.toPx() else 1.4.dp.toPx(),
                             center = Offset(x, y)
                         )
                     }
@@ -892,7 +896,7 @@ private fun CompletionHaloEmblem(palette: FocusThemePalette) {
                         val inner = outerR - if (isMajor) 4.dp.toPx() else 2.dp.toPx()
                         val outer = outerR + if (isMajor) 2.dp.toPx() else 1.dp.toPx()
                         drawLine(
-                            color = palette.success.copy(alpha = if (isMajor) 0.75f else 0.32f),
+                            color = palette.success.copy(alpha = if (isMajor) 0.78f else 0.32f),
                             start = Offset(cx + (inner * cos(rad)).toFloat(), cy + (inner * sin(rad)).toFloat()),
                             end = Offset(cx + (outer * cos(rad)).toFloat(), cy + (outer * sin(rad)).toFloat()),
                             strokeWidth = if (isMajor) 1.6.dp.toPx() else 1.dp.toPx(),
@@ -901,7 +905,7 @@ private fun CompletionHaloEmblem(palette: FocusThemePalette) {
                     }
                 }
 
-                AppVisualTheme.LIQUID_GLASS, AppVisualTheme.NORDIC_SAGE -> {
+                AppVisualTheme.LIQUID_GLASS -> {
                     drawCircle(
                         color = palette.success.copy(alpha = 0.14f),
                         radius = outerR,
@@ -911,7 +915,7 @@ private fun CompletionHaloEmblem(palette: FocusThemePalette) {
                         brush = Brush.sweepGradient(
                             colors = listOf(
                                 palette.success.copy(alpha = 0.25f),
-                                palette.success.copy(alpha = 0.75f),
+                                palette.success.copy(alpha = 0.78f),
                                 palette.success.copy(alpha = 0.25f)
                             )
                         ),

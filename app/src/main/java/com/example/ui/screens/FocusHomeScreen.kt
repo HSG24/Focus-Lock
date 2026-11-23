@@ -12,6 +12,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,8 +64,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -87,7 +93,10 @@ import com.example.data.FocusStatsRepository
 import com.example.data.FocusXpRepository
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.RankXpBottomSheet
+import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemeScenicBackdropOverlay
+import com.example.ui.components.ThemedHeroOrbitFrame
 import com.example.ui.components.ThemedTimerRing
 import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.rememberFocusHaptics
@@ -216,6 +225,10 @@ fun FocusHomeScreen(
             .background(palette.background)
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.HOME,
+            palette = palette
+        )
 
         Column(
             modifier = Modifier
@@ -283,37 +296,42 @@ fun FocusHomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(28.dp)
                 ) {
-                    // Minimal Progress Halo + Quiet Readout
-                    ThemedTimerRing(
-                        progress = animatedRingProgress,
-                        size = 224.dp,
+                    // Sculpted Theme Orbit Frame + Progress Halo + Quiet Readout
+                    ThemedHeroOrbitFrame(
+                        modifier = Modifier.size(258.dp),
                         palette = palette
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ThemedTimerRing(
+                            progress = animatedRingProgress,
+                            size = 224.dp,
+                            palette = palette
                         ) {
-                            Text(
-                                text = "TODAY",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                letterSpacing = 1.8.sp,
-                                color = palette.textSecondary
-                            )
-                            Text(
-                                text = todayFormatted,
-                                fontFamily = palette.numeralFont,
-                                fontSize = 40.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = palette.textPrimary
-                            )
-                            Text(
-                                text = if (goalMet) "GOAL MET" else "${(goalProgress * 100).toInt()}% OF $goalFormatted",
-                                fontFamily = JetBrainsMono,
-                                fontSize = 11.sp,
-                                letterSpacing = 0.6.sp,
-                                color = if (goalMet) palette.success else palette.textSecondary
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "TODAY",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.8.sp,
+                                    color = palette.textSecondary
+                                )
+                                Text(
+                                    text = todayFormatted,
+                                    fontFamily = palette.numeralFont,
+                                    fontSize = 40.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.textPrimary
+                                )
+                                Text(
+                                    text = if (goalMet) "GOAL MET" else "${(goalProgress * 100).toInt()}% OF $goalFormatted",
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 11.sp,
+                                    letterSpacing = 0.6.sp,
+                                    color = if (goalMet) palette.success else palette.textSecondary
+                                )
+                            }
                         }
                     }
 
@@ -475,18 +493,77 @@ private fun SlideOrTapFocusPill(
     val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.97f)
     var isDraggingThumb by remember { mutableStateOf(false) }
 
-    val sliderTrackModifier = if (palette.isLiquidGlass) {
-        Modifier.focusGlassPanel(
+    val sliderTrackModifier = when {
+        palette.isLiquidGlass -> Modifier.focusGlassPanel(
             shape = pillShape,
             palette = palette,
             elevated = true,
             isPressed = isPressed || isDraggingThumb,
-            shimmer = false
+            shimmer = false,
+            showOrnaments = false
         )
-    } else {
-        Modifier
+        palette.isNothingDot -> Modifier
             .clip(pillShape)
-            .background(Color(0xFF0A0A0D), pillShape)
+            .background(Color(0xFF0D0D12), pillShape)
+            .drawWithCache {
+                val strokeW = 0.9.dp.toPx()
+                val dotR = 1.dp.toPx()
+                val step = 7.dp.toPx()
+                onDrawWithContent {
+                    // Subtle Nothing dotted guide rail across right half of slider track
+                    val y = size.height / 2f
+                    var x = size.width * 0.72f
+                    while (x < size.width - 16.dp.toPx()) {
+                        drawCircle(
+                            color = palette.textPrimary.copy(alpha = 0.14f),
+                            radius = dotR,
+                            center = Offset(x, y)
+                        )
+                        x += step
+                    }
+                    drawContent()
+                    drawRoundRect(
+                        color = palette.borderHighlight.copy(alpha = 0.72f),
+                        cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                        style = Stroke(width = strokeW)
+                    )
+                }
+            }
+        else -> Modifier
+            .clip(pillShape)
+            .background(Color(0xFF13100B), pillShape)
+            .drawWithCache {
+                val strokeW = 0.9.dp.toPx()
+                onDrawWithContent {
+                    // Subtle chronograph millimeter tick marks along bottom edge
+                    val tickStep = 9.dp.toPx()
+                    var x = 62.dp.toPx()
+                    var idx = 0
+                    while (x < size.width - 20.dp.toPx()) {
+                        val isMaj = idx % 4 == 0
+                        val h = if (isMaj) 5.dp.toPx() else 2.5.dp.toPx()
+                        drawLine(
+                            color = palette.primary.copy(alpha = if (isMaj) 0.24f else 0.11f),
+                            start = Offset(x, size.height - 2.dp.toPx()),
+                            end = Offset(x, size.height - 2.dp.toPx() - h),
+                            strokeWidth = 0.85.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                        x += tickStep
+                        idx++
+                    }
+                    drawContent()
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            0.0f to palette.primary.copy(alpha = 0.36f),
+                            0.4f to palette.borderHighlight.copy(alpha = 0.52f),
+                            1.0f to palette.border.copy(alpha = 0.75f)
+                        ),
+                        cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                        style = Stroke(width = strokeW)
+                    )
+                }
+            }
     }
 
     BoxWithConstraints(

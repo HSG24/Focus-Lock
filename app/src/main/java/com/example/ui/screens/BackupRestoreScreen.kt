@@ -69,7 +69,10 @@ import com.example.data.BackupValidationResult
 import com.example.data.FocusBackupManager
 import com.example.data.FocusStatsRepository
 import com.example.ui.components.SanctuaryMonolithCard
+import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemeScenicBackdropOverlay
+import com.example.ui.components.ThemeScenicVignetteFooter
 import com.example.ui.components.ThemedDivider
 import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.theme.JetBrainsMono
@@ -173,6 +176,10 @@ fun BackupRestoreScreen(
             .testTag("backup_restore_screen")
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.BACKUP,
+            palette = palette
+        )
 
         Column(
             modifier = Modifier
@@ -571,6 +578,12 @@ fun BackupRestoreScreen(
                             }
                         }
                     }
+
+                    ThemeScenicVignetteFooter(
+                        caption = "PRIVATE VAULT",
+                        subtitle = "All settings, streaks & sessions kept on your device",
+                        palette = palette
+                    )
                 }
             }
         }

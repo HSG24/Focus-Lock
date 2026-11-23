@@ -821,6 +821,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             showSessionTimer = settingsState.showSessionTimer,
                             hapticKeypad = settingsState.hapticKeypad,
                             autoClearWrongAnswer = settingsState.autoClearWrongPin,
+                            quizDifficulty = settingsState.quizDifficulty,
                             sessionStartTimeMs = startTime,
                             iconCache = iconCache,
                             onLaunchApp = { app -> launchAllowedApp(app) },

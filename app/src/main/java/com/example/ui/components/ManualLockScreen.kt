@@ -83,6 +83,7 @@ import com.example.data.FocusQuizQuestion
 import com.example.data.FocusSettingsRepository
 import com.example.data.LockAppLayout
 import com.example.data.NotificationBlockerRepository
+import com.example.data.QuizDifficulty
 import com.example.ui.theme.FocusThemePalette
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
@@ -119,6 +120,7 @@ fun ManualLockScreen(
     showSessionTimer: Boolean = true,
     hapticKeypad: Boolean = true,
     autoClearWrongAnswer: Boolean = true,
+    quizDifficulty: QuizDifficulty = QuizDifficulty.DEFAULT,
     sessionStartTimeMs: Long = System.currentTimeMillis(),
     iconCache: Map<String, ImageBitmap> = emptyMap(),
     onLaunchApp: (AllowedApp) -> Unit = {},
@@ -184,6 +186,10 @@ fun ManualLockScreen(
             .testTag("manual_lock_screen_root")
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.LOCK,
+            palette = palette
+        )
 
         SanctuaryAmbientHalo(
             accent = haloAccent,
@@ -224,7 +230,8 @@ fun ManualLockScreen(
                             if (quizQuestions.isEmpty()) {
                                 quizQuestions = FocusQuizEngine.generateQuizSet(
                                     context = context,
-                                    count = FocusQuizEngine.QUESTIONS_PER_UNLOCK
+                                    count = FocusQuizEngine.QUESTIONS_PER_UNLOCK,
+                                    difficulty = quizDifficulty
                                 )
                                 currentIndex = 0
                             }
@@ -365,34 +372,15 @@ private fun ManualLockedOverview(
                     .padding(horizontal = 4.dp)
                     .testTag("manual_lock_header")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    StatusPulseDot(color = palette.primary, scale = 1f)
-                    Text(
-                        text = "DEEP FOCUS",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.8.sp,
-                        color = palette.primary
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(3.dp)
-                            .clip(CircleShape)
-                            .background(palette.textSecondary.copy(alpha = 0.45f))
-                    )
-                    Text(
-                        text = "$liveClockText · $liveDateText",
-                        fontFamily = JetBrainsMono,
-                        fontSize = 10.5.sp,
-                        color = palette.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Text(
+                    text = "$liveClockText · $liveDateText",
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.8.sp,
+                    color = palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
                 Text(
                     text = "Focus Mode",
@@ -418,37 +406,42 @@ private fun ManualLockedOverview(
                     .testTag("manual_lock_monolith_card")
             ) {
                 if (showSessionTimer) {
-                    ThemedTimerRing(
-                        progress = minuteProgress,
-                        size = 208.dp,
+                    ThemedHeroOrbitFrame(
+                        modifier = Modifier.size(236.dp),
                         palette = palette
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ThemedTimerRing(
+                            progress = minuteProgress,
+                            size = 208.dp,
+                            palette = palette
                         ) {
-                            FocusLockEmblem(
-                                size = 34.dp,
-                                showAmbientGlow = false
-                            )
-                            Text(
-                                text = formattedElapsed,
-                                fontFamily = palette.numeralFont,
-                                fontSize = if (elapsedSec >= 3600L) 29.sp else 36.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = (-0.5).sp,
-                                color = palette.textPrimary,
-                                maxLines = 1,
-                                modifier = Modifier.testTag("manual_lock_elapsed_text")
-                            )
-                            Text(
-                                text = "ELAPSED",
-                                fontFamily = JetBrainsMono,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                letterSpacing = 1.9.sp,
-                                color = palette.primary
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                FocusLockEmblem(
+                                    size = 34.dp,
+                                    showAmbientGlow = false
+                                )
+                                Text(
+                                    text = formattedElapsed,
+                                    fontFamily = palette.numeralFont,
+                                    fontSize = if (elapsedSec >= 3600L) 29.sp else 36.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = (-0.5).sp,
+                                    color = palette.textPrimary,
+                                    maxLines = 1,
+                                    modifier = Modifier.testTag("manual_lock_elapsed_text")
+                                )
+                                Text(
+                                    text = "ELAPSED",
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 1.9.sp,
+                                    color = palette.primary
+                                )
+                            }
                         }
                     }
                 } else {
@@ -724,32 +717,16 @@ private fun ManualUnlockQuizStage(
                 }
             }
 
-            // 10-Segment Precision Progress Track
-            Row(
+            // 10-Segment Theme-Crafted Progress Track
+            ThemedProgressSegments(
+                total = totalQuestions,
+                completed = questionIndex,
+                activeIndex = questionIndex,
+                palette = palette,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("quiz_segment_track"),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                for (i in 0 until totalQuestions) {
-                    val segColor by animateColorAsState(
-                        targetValue = when {
-                            i < questionIndex -> palette.success
-                            i == questionIndex -> palette.primary
-                            else -> palette.borderHighlight.copy(alpha = 0.42f)
-                        },
-                        animationSpec = tween(220),
-                        label = "quiz_seg_$i"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(segColor)
-                    )
-                }
-            }
+                    .testTag("quiz_segment_track")
+            )
 
             // Question Monolith Card
             AnimatedContent(

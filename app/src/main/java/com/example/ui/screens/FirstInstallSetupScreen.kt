@@ -90,9 +90,15 @@ import com.example.service.FocusNotificationBlockerService
 import com.example.ui.components.FocusLockEmblem
 import com.example.ui.components.SanctuaryAmbientHalo
 import com.example.ui.components.SanctuaryMonolithCard
+import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemeMiniArtPreview
+import com.example.ui.components.ThemeScenicBackdropOverlay
 import com.example.ui.components.ThemedDivider
+import com.example.ui.components.ThemedHeroOrbitFrame
+import com.example.ui.components.ThemedProgressSegments
 import com.example.ui.components.ThemedTimerRing
+import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.rememberFocusHaptics
 import com.example.ui.components.rememberSpringPressScale
 import com.example.ui.theme.AppVisualTheme
@@ -181,6 +187,10 @@ fun FirstInstallSetupScreen(
             .testTag("first_install_setup_screen")
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.SETUP,
+            palette = palette
+        )
         SanctuaryAmbientHalo(
             accent = palette.primary,
             alpha = if (palette.isLiquidGlass) 0.10f else 0.13f
@@ -223,31 +233,16 @@ fun FirstInstallSetupScreen(
                     Spacer(modifier = Modifier.size(44.dp))
                 }
 
-                // Step indicator segments
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testTag("setup_step_dots")
-                ) {
-                    for (i in 0 until TOTAL_SETUP_STEPS) {
-                        val segColor by animateColorAsState(
-                            targetValue = when {
-                                i == step -> palette.primary
-                                i < step -> palette.primary.copy(alpha = 0.55f)
-                                else -> palette.borderHighlight.copy(alpha = 0.45f)
-                            },
-                            animationSpec = tween(240),
-                            label = "setup_dot_$i"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(if (i == step) 26.dp else 10.dp)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(segColor)
-                        )
-                    }
-                }
+                // Theme-crafted step progress segments
+                ThemedProgressSegments(
+                    total = TOTAL_SETUP_STEPS,
+                    completed = step,
+                    activeIndex = step,
+                    palette = palette,
+                    modifier = Modifier
+                        .width(124.dp)
+                        .testTag("setup_step_dots")
+                )
 
                 Text(
                     text = "${step + 1}/$TOTAL_SETUP_STEPS",
@@ -596,57 +591,58 @@ private fun SetupThemeStep(
         AppVisualTheme.entries.forEach { theme ->
             val preview = remember(theme) { FocusThemePalette.from(theme) }
             val isSelected = theme == selectedTheme
-            val cardShape = RoundedCornerShape(22.dp)
+            val cardShape = RoundedCornerShape(24.dp)
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(
-                        if (isSelected) palette.primaryContainer else palette.surface,
-                        cardShape
-                    )
-                    .border(
-                        width = if (isSelected) 1.5.dp else 0.75.dp,
-                        color = if (isSelected) palette.primary else palette.borderHighlight.copy(alpha = 0.55f),
-                        shape = cardShape
+                    .focusGlassPanel(
+                        shape = cardShape,
+                        palette = palette,
+                        elevated = isSelected,
+                        highlightAccent = if (isSelected) preview.primary else null,
+                        showOrnaments = false
                     )
                     .clickable { onSelectTheme(theme) }
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .padding(12.dp)
                     .testTag("setup_theme_${theme.id}"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Theme swatch preview dot
-                Box(
+                ThemeMiniArtPreview(
+                    theme = theme,
+                    isSelected = isSelected,
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(preview.background)
-                        .border(2.dp, preview.primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(preview.primary)
-                    )
-                }
+                        .width(92.dp)
+                        .height(58.dp)
+                )
 
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = theme.displayName,
-                        fontFamily = preview.displayFont,
-                        fontSize = 15.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = palette.textPrimary
-                    )
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = theme.displayName,
+                            fontFamily = preview.displayFont,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = palette.textPrimary
+                        )
+                        Text(
+                            text = theme.badgeTag,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = preview.primary
+                        )
+                    }
                     Text(
                         text = theme.subtitle,
                         fontSize = 12.sp,
+                        lineHeight = 16.sp,
                         color = palette.textSecondary,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -717,30 +713,35 @@ private fun SetupDailyGoalStep(
         verticalSpacing = 18.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        ThemedTimerRing(
-            progress = ringFraction,
-            size = 176.dp,
+        ThemedHeroOrbitFrame(
+            modifier = Modifier.size(204.dp),
             palette = palette
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ThemedTimerRing(
+                progress = ringFraction,
+                size = 176.dp,
+                palette = palette
             ) {
-                Text(
-                    text = formattedGoal,
-                    fontFamily = palette.numeralFont,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = palette.textPrimary,
-                    modifier = Modifier.testTag("setup_goal_value_text")
-                )
-                Text(
-                    text = "PER DAY",
-                    fontFamily = JetBrainsMono,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 1.8.sp,
-                    color = palette.primary
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = formattedGoal,
+                        fontFamily = palette.numeralFont,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = palette.textPrimary,
+                        modifier = Modifier.testTag("setup_goal_value_text")
+                    )
+                    Text(
+                        text = "PER DAY",
+                        fontFamily = JetBrainsMono,
+                        fontSize = 9.5.sp,
+                        letterSpacing = 1.8.sp,
+                        color = palette.primary
+                    )
+                }
             }
         }
 

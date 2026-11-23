@@ -87,23 +87,12 @@ fun ThemedSettingsSectionCard(
     val palette = LocalFocusTheme.current
     val cardShape = remember { RoundedCornerShape(28.dp) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = JetBrainsMono,
-                fontSize = 10.5.sp,
-                letterSpacing = 1.4.sp,
-                color = palette.textSecondary
-            )
-            trailingAction?.invoke()
-        }
+        ThemedSectionHeader(
+            title = title,
+            palette = palette,
+            trailing = trailingAction,
+            modifier = Modifier.padding(horizontal = 10.dp)
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -171,7 +160,8 @@ fun ThemedSettingsSwitchRow(
 }
 
 /**
- * Minimal 4-column theme swatch selector replacing tall vertical theme cards.
+ * Bespoke 3-theme visual gallery selector showcasing Liquid Glass, Nothing Dot, and Solar Amber
+ * with live miniature canvas previews of each theme's unique aesthetic language.
  */
 @Composable
 fun AppearanceAndThemesSection(
@@ -180,133 +170,125 @@ fun AppearanceAndThemesSection(
 ) {
     val palette = LocalFocusTheme.current
     val haptics = rememberFocusHaptics()
-    val tileShape = remember { RoundedCornerShape(24.dp) }
+    val tileShape = remember { RoundedCornerShape(22.dp) }
 
     ThemedSettingsSectionCard(title = "THEME") {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AppVisualTheme.entries.forEach { themeOption ->
-                    val preview = remember(themeOption) { FocusThemePalette.from(themeOption) }
-                    val isSelected = selectedTheme == themeOption
-                    val interaction = remember { MutableInteractionSource() }
-                    val isTilePressed by interaction.collectIsPressedAsState()
-                    val scale = rememberSpringPressScale(interaction, pressedScale = 0.94f)
-                    val shortName = remember(themeOption) {
-                        when (themeOption) {
-                            AppVisualTheme.NOTHING_CRIMSON -> "Crimson"
-                            AppVisualTheme.LIQUID_GLASS -> "Glass"
-                            AppVisualTheme.SOLAR_AMBER -> "Amber"
-                            AppVisualTheme.NORDIC_SAGE -> "Sage"
-                        }
-                    }
+            AppVisualTheme.entries.forEach { themeOption ->
+                val preview = remember(themeOption) { FocusThemePalette.from(themeOption) }
+                val isSelected = selectedTheme == themeOption
+                val interaction = remember { MutableInteractionSource() }
+                val isTilePressed by interaction.collectIsPressedAsState()
+                val scale = rememberSpringPressScale(interaction, pressedScale = 0.97f)
 
-                    val tileModifier = if (palette.isLiquidGlass) {
-                        Modifier.focusGlassPanel(
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                        .focusGlassPanel(
                             shape = tileShape,
                             palette = palette,
                             elevated = isSelected,
                             isPressed = isTilePressed,
-                            highlightAccent = if (isSelected) palette.primary else null
+                            highlightAccent = if (isSelected) preview.primary else null,
+                            showOrnaments = false
                         )
-                    } else {
-                        Modifier
-                            .clip(tileShape)
-                            .background(
-                                color = if (isSelected) palette.primaryContainer else palette.surfaceElevated.copy(alpha = 0.7f),
-                                shape = tileShape
-                            )
-                    }
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
-                            }
-                            .then(tileModifier)
-                            .clickable(
-                                interactionSource = interaction,
-                                indication = null
-                            ) {
-                                if (!isSelected) {
-                                    haptics.segment()
-                                    onSelectTheme(themeOption)
-                                }
-                            }
-                            .padding(vertical = 10.dp, horizontal = 4.dp)
-                            .testTag("theme_option_${themeOption.id}")
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .then(
-                                    if (themeOption == AppVisualTheme.LIQUID_GLASS) {
-                                        Modifier.background(
-                                            Brush.linearGradient(
-                                                colors = listOf(
-                                                    Color(0xFF2B3445),
-                                                    Color(0xFF0A0D13),
-                                                    Color(0xFF1C2330)
-                                                )
-                                            ),
-                                            CircleShape
-                                        )
-                                    } else {
-                                        Modifier.background(preview.background, CircleShape)
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null
                         ) {
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Check,
-                                    contentDescription = themeOption.displayName,
-                                    tint = preview.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(preview.primary)
-                                )
+                            if (!isSelected) {
+                                haptics.segment()
+                                onSelectTheme(themeOption)
                             }
                         }
+                        .padding(10.dp)
+                        .testTag("theme_option_${themeOption.id}")
+                ) {
+                    ThemeMiniArtPreview(
+                        theme = themeOption,
+                        isSelected = isSelected,
+                        modifier = Modifier
+                            .width(96.dp)
+                            .height(58.dp)
+                    )
 
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = themeOption.displayName,
+                                fontFamily = preview.displayFont,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = themeOption.badgeTag,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp,
+                                color = preview.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(preview.primary.copy(alpha = 0.14f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                         Text(
-                            text = shortName,
-                            style = MaterialTheme.typography.labelMedium,
+                            text = themeOption.subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontSize = 11.5.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                            color = if (isSelected) palette.textPrimary else palette.textSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center
+                            color = palette.textSecondary,
+                            maxLines = 2,
+                            lineHeight = 15.sp,
+                            overflow = TextOverflow.Ellipsis
                         )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) preview.primary else palette.surfaceElevated
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = "Selected ${themeOption.displayName}",
+                                tint = preview.onPrimary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(preview.primary.copy(alpha = 0.65f))
+                            )
+                        }
                     }
                 }
             }
-
-            Text(
-                text = "${selectedTheme.displayName} · ${selectedTheme.subtitle}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 11.5.sp,
-                color = palette.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 2.dp)
-            )
         }
     }
 }

@@ -353,17 +353,58 @@ fun FloatingPillBottomBar(
             .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        val pillBgModifier = if (palette.isLiquidGlass) {
-            Modifier.focusGlassPanel(
+        val pillBgModifier = when {
+            palette.isLiquidGlass -> Modifier.focusGlassPanel(
                 shape = pillShape,
                 palette = palette,
                 elevated = true,
-                shimmer = false
+                shimmer = false,
+                showOrnaments = false
             )
-        } else {
-            Modifier
+            palette.isNothingDot -> Modifier
                 .clip(pillShape)
                 .background(palette.pillGlassFill, pillShape)
+                .drawWithCache {
+                    val strokeW = 0.9.dp.toPx()
+                    val dotR = 0.95.dp.toPx()
+                    onDrawWithContent {
+                        drawContent()
+                        drawRoundRect(
+                            color = palette.borderHighlight.copy(alpha = 0.72f),
+                            cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                            style = Stroke(width = strokeW)
+                        )
+                        // Subtle hardware telemetry dots flanking inner capsule edges
+                        drawCircle(
+                            color = palette.primary.copy(alpha = 0.45f),
+                            radius = dotR,
+                            center = Offset(10.dp.toPx(), size.height / 2f)
+                        )
+                        drawCircle(
+                            color = palette.textPrimary.copy(alpha = 0.22f),
+                            radius = dotR,
+                            center = Offset(size.width - 10.dp.toPx(), size.height / 2f)
+                        )
+                    }
+                }
+            else -> Modifier
+                .clip(pillShape)
+                .background(palette.pillGlassFill, pillShape)
+                .drawWithCache {
+                    val strokeW = 0.9.dp.toPx()
+                    onDrawWithContent {
+                        drawContent()
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(
+                                0.0f to palette.primary.copy(alpha = 0.40f),
+                                0.35f to palette.borderHighlight.copy(alpha = 0.55f),
+                                1.0f to palette.border.copy(alpha = 0.75f)
+                            ),
+                            cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                            style = Stroke(width = strokeW)
+                        )
+                    }
+                }
         }
 
         Box(
@@ -414,7 +455,8 @@ fun FloatingPillBottomBar(
                     modifier = Modifier
                         .fillMaxSize()
                         .drawWithCache {
-                            val liquidBrushColors = listOf(Color(0xFF283040), Color(0xFF191E2A))
+                            val liquidBrushColors = listOf(Color(0xFF2E384B), Color(0xFF1A202D))
+                            val solarBrushColors = listOf(Color(0xFFFFC947), Color(0xFFFFA014))
                             onDrawBehind {
                                 val (spanL, spanR) = computePillSpan()
                                 val slotW = size.width / tabCount.toFloat()
@@ -425,24 +467,52 @@ fun FloatingPillBottomBar(
                                 val pillH = (size.height - vInset * 2f).coerceAtLeast(1f)
                                 val corner = CornerRadius(pillH / 2f, pillH / 2f)
 
-                                if (palette.isLiquidGlass) {
-                                    drawRoundRect(
-                                        brush = Brush.verticalGradient(
-                                            colors = liquidBrushColors,
-                                            startY = vInset,
-                                            endY = vInset + pillH
-                                        ),
-                                        topLeft = Offset(pillX, vInset),
-                                        size = Size(pillW, pillH),
-                                        cornerRadius = corner
-                                    )
-                                } else {
-                                    drawRoundRect(
-                                        color = palette.primary,
-                                        topLeft = Offset(pillX, vInset),
-                                        size = Size(pillW, pillH),
-                                        cornerRadius = corner
-                                    )
+                                when {
+                                    palette.isLiquidGlass -> {
+                                        drawRoundRect(
+                                            brush = Brush.verticalGradient(
+                                                colors = liquidBrushColors,
+                                                startY = vInset,
+                                                endY = vInset + pillH
+                                            ),
+                                            topLeft = Offset(pillX, vInset),
+                                            size = Size(pillW, pillH),
+                                            cornerRadius = corner
+                                        )
+                                        drawRoundRect(
+                                            brush = Brush.verticalGradient(
+                                                0.0f to Color.White.copy(alpha = 0.28f),
+                                                0.5f to Color.Transparent,
+                                                1.0f to Color.White.copy(alpha = 0.08f),
+                                                startY = vInset,
+                                                endY = vInset + pillH
+                                            ),
+                                            topLeft = Offset(pillX, vInset),
+                                            size = Size(pillW, pillH),
+                                            cornerRadius = corner,
+                                            style = Stroke(width = 0.75.dp.toPx())
+                                        )
+                                    }
+                                    palette.isSolarAmber -> {
+                                        drawRoundRect(
+                                            brush = Brush.verticalGradient(
+                                                colors = solarBrushColors,
+                                                startY = vInset,
+                                                endY = vInset + pillH
+                                            ),
+                                            topLeft = Offset(pillX, vInset),
+                                            size = Size(pillW, pillH),
+                                            cornerRadius = corner
+                                        )
+                                    }
+                                    else -> {
+                                        drawRoundRect(
+                                            color = palette.primary,
+                                            topLeft = Offset(pillX, vInset),
+                                            size = Size(pillW, pillH),
+                                            cornerRadius = corner
+                                        )
+                                    }
                                 }
                             }
                         }

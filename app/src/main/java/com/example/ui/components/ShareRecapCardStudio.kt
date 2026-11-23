@@ -164,7 +164,7 @@ object ShareRecapCardRenderer {
             )
         }
         RecapCardTheme.CRIMSON -> {
-            val p = FocusThemePalette.from(AppVisualTheme.NOTHING_CRIMSON)
+            val p = FocusThemePalette.from(AppVisualTheme.NOTHING_DOT)
             CardColors(
                 bgTop = p.background.toArgb(),
                 bgBottom = android.graphics.Color.parseColor("#1B0B0E"),
@@ -190,14 +190,13 @@ object ShareRecapCardRenderer {
             )
         }
         RecapCardTheme.SAGE -> {
-            val p = FocusThemePalette.from(AppVisualTheme.NORDIC_SAGE)
             CardColors(
-                bgTop = p.background.toArgb(),
+                bgTop = android.graphics.Color.parseColor("#070908"),
                 bgBottom = android.graphics.Color.parseColor("#0E1A16"),
-                panel = p.surfaceElevated.toArgb(),
-                accent = p.primary.toArgb(),
-                textPrimary = p.textPrimary.toArgb(),
-                textSecondary = p.textSecondary.toArgb(),
+                panel = android.graphics.Color.parseColor("#1C2420"),
+                accent = android.graphics.Color.parseColor("#8EC2A1"),
+                textPrimary = android.graphics.Color.parseColor("#F4F7F4"),
+                textSecondary = android.graphics.Color.parseColor("#9EADA4"),
                 dotInactive = android.graphics.Color.parseColor("#22302B"),
                 dotMid = android.graphics.Color.parseColor("#8AB8A6")
             )
@@ -576,9 +575,8 @@ fun ShareRecapCardStudio(
             RecapCardOptions(
                 theme = when (palette.theme) {
                     AppVisualTheme.LIQUID_GLASS -> RecapCardTheme.LIQUID_GLASS
-                    AppVisualTheme.NOTHING_CRIMSON -> RecapCardTheme.NOTHING_MONO
+                    AppVisualTheme.NOTHING_DOT -> RecapCardTheme.NOTHING_MONO
                     AppVisualTheme.SOLAR_AMBER -> RecapCardTheme.AMBER
-                    AppVisualTheme.NORDIC_SAGE -> RecapCardTheme.SAGE
                 }
             )
         )
@@ -939,9 +937,9 @@ private fun RecapCardLivePreview(
         when (options.theme) {
             RecapCardTheme.NOTHING_MONO -> Color(0xFFD71921)
             RecapCardTheme.LIQUID_GLASS -> FocusThemePalette.from(AppVisualTheme.LIQUID_GLASS).primary
-            RecapCardTheme.CRIMSON -> FocusThemePalette.from(AppVisualTheme.NOTHING_CRIMSON).primary
+            RecapCardTheme.CRIMSON -> FocusThemePalette.from(AppVisualTheme.NOTHING_DOT).primary
             RecapCardTheme.AMBER -> FocusThemePalette.from(AppVisualTheme.SOLAR_AMBER).primary
-            RecapCardTheme.SAGE -> FocusThemePalette.from(AppVisualTheme.NORDIC_SAGE).primary
+            RecapCardTheme.SAGE -> Color(0xFF8EC2A1)
         }
     }
 

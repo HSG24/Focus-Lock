@@ -349,14 +349,15 @@ class FocusUpgradeTest {
 
     @Test
     fun unifiedThemesAndWidgetDefaults_resolveCleanly() {
-        assertEquals(4, AppVisualTheme.entries.size)
+        assertEquals(3, AppVisualTheme.entries.size)
         AppVisualTheme.entries.forEach { theme ->
             val palette = FocusThemePalette.from(theme)
             assertEquals(theme, palette.theme)
             assertEquals(theme, AppVisualTheme.fromIdOrName(theme.id))
         }
         assertTrue(FocusThemePalette.from(AppVisualTheme.LIQUID_GLASS).isLiquidGlass)
-        assertTrue(FocusThemePalette.from(AppVisualTheme.NORDIC_SAGE).useOrganicHorizon)
+        assertTrue(FocusThemePalette.from(AppVisualTheme.NOTHING_DOT).isNothingDot)
+        assertTrue(FocusThemePalette.from(AppVisualTheme.SOLAR_AMBER).isSolarAmber)
         // Verify Dark Liquid Glass uses deep obsidian background and opaque surface for crisp dialogs
         val darkGlass = FocusThemePalette.from(AppVisualTheme.LIQUID_GLASS)
         assertTrue(darkGlass.background.red < 0.05f && darkGlass.background.green < 0.05f && darkGlass.background.blue < 0.06f)
@@ -367,7 +368,11 @@ class FocusUpgradeTest {
             assertTrue("Expected bright textPrimary for $theme", p.textPrimary.red > 0.85f && p.textPrimary.green > 0.85f)
             assertTrue("Expected dark background for $theme", p.background.red < 0.10f && p.background.green < 0.10f && p.background.blue < 0.10f)
         }
-        // Removed legacy themes cleanly fall back to Liquid Glass (default theme)
+        // Legacy theme migrations: Nothing Crimson -> Nothing Dot, Nordic Sage & older themes -> Liquid Glass
+        assertEquals(AppVisualTheme.NOTHING_DOT, AppVisualTheme.fromIdOrName("nothing_crimson"))
+        assertEquals(AppVisualTheme.NOTHING_DOT, AppVisualTheme.fromIdOrName("NOTHING_CRIMSON"))
+        assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("nordic_sage"))
+        assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("NORDIC_SAGE"))
         assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("emerald_terminal"))
         assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("EMERALD_TERMINAL"))
         assertEquals(AppVisualTheme.LIQUID_GLASS, AppVisualTheme.fromIdOrName("cyber_ice"))

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -71,13 +77,18 @@ import com.example.data.FocusScheduleRepository
 import com.example.data.FocusSettingsState
 import com.example.data.ScheduleRepeatMode
 import com.example.service.ScheduleAlarmScheduler
+import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ThemeBackdropLayer
+import com.example.ui.components.ThemeScenicBackdropOverlay
 import com.example.ui.components.focusGlassPanel
 import com.example.ui.components.rememberFocusHaptics
+import com.example.ui.theme.AppVisualTheme
 import com.example.ui.theme.JetBrainsMono
 import com.example.ui.theme.LocalFocusTheme
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun ScheduleScreen(
@@ -125,6 +136,10 @@ fun ScheduleScreen(
             .testTag("schedule_screen_root")
     ) {
         ThemeBackdropLayer(palette = palette)
+        ThemeScenicBackdropOverlay(
+            variant = ScenicPageVariant.SCHEDULE,
+            palette = palette
+        )
 
         Column(
             modifier = Modifier
@@ -358,23 +373,76 @@ private fun SchedulesListContent(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(palette.primaryContainer),
+                        modifier = Modifier.size(84.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Schedule,
-                            contentDescription = null,
-                            tint = palette.primary,
-                            modifier = Modifier.size(26.dp)
-                        )
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val r = size.minDimension / 2f - 4.dp.toPx()
+                            when (palette.theme) {
+                                AppVisualTheme.LIQUID_GLASS -> {
+                                    drawCircle(
+                                        brush = Brush.sweepGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.05f),
+                                                Color.White.copy(alpha = 0.24f),
+                                                Color.White.copy(alpha = 0.05f)
+                                            )
+                                        ),
+                                        radius = r,
+                                        center = Offset(cx, cy),
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
+                                }
+                                AppVisualTheme.NOTHING_DOT -> {
+                                    val dots = 16
+                                    for (i in 0 until dots) {
+                                        val rad = Math.toRadians(-90.0 + (360.0 / dots) * i)
+                                        drawCircle(
+                                            color = if (i % 4 == 0) palette.primary else palette.borderHighlight,
+                                            radius = if (i % 4 == 0) 2.dp.toPx() else 1.1.dp.toPx(),
+                                            center = Offset(cx + (r * cos(rad)).toFloat(), cy + (r * sin(rad)).toFloat())
+                                        )
+                                    }
+                                }
+                                AppVisualTheme.SOLAR_AMBER -> {
+                                    val ticks = 24
+                                    for (i in 0 until ticks) {
+                                        val rad = Math.toRadians(-90.0 + (360.0 / ticks) * i)
+                                        val major = i % 6 == 0
+                                        val inner = r - if (major) 4.dp.toPx() else 2.dp.toPx()
+                                        drawLine(
+                                            color = if (major) palette.primary.copy(alpha = 0.72f) else palette.borderHighlight,
+                                            start = Offset(cx + (inner * cos(rad)).toFloat(), cy + (inner * sin(rad)).toFloat()),
+                                            end = Offset(cx + (r * cos(rad)).toFloat(), cy + (r * sin(rad)).toFloat()),
+                                            strokeWidth = if (major) 1.5.dp.toPx() else 0.85.dp.toPx(),
+                                            cap = StrokeCap.Round
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(palette.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Schedule,
+                                contentDescription = null,
+                                tint = palette.primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
                     }
                     Text(
                         text = "No Schedules Yet",
                         style = MaterialTheme.typography.titleMedium,
-                        fontSize = 17.sp,
+                        fontFamily = palette.displayFont,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = palette.textPrimary
                     )
@@ -421,7 +489,11 @@ private fun SchedulesListContent(
                     modifier = Modifier
                         .widthIn(max = 600.dp)
                         .fillMaxWidth()
-                        .focusGlassPanel(shape = cardShape, palette = palette)
+                        .focusGlassPanel(
+                            shape = cardShape,
+                            palette = palette,
+                            elevated = schedule.enabled
+                        )
                         .clickable { onEditSchedule(schedule) }
                         .padding(horizontal = 18.dp, vertical = 15.dp)
                         .testTag("schedule_card_${schedule.id}"),

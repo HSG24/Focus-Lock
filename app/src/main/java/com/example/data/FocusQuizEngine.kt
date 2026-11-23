@@ -10,6 +10,30 @@ enum class QuizInputMode {
     ALPHA
 }
 
+enum class QuizDifficulty(
+    val label: String,
+    val description: String
+) {
+    EASY(
+        label = "Easy",
+        description = "Smaller numbers, fewer items & extra hints for quicker unlocks"
+    ),
+    DEFAULT(
+        label = "Default",
+        description = "Original balanced difficulty across all unlock questions"
+    ),
+    HARD(
+        label = "Hard",
+        description = "Sharper mental math, wider sets & minimal hints — still fast to solve"
+    );
+
+    companion object {
+        fun fromName(raw: String?): QuizDifficulty {
+            return entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: DEFAULT
+        }
+    }
+}
+
 @Immutable
 data class FocusQuizQuestion(
     val category: String,
@@ -86,7 +110,9 @@ object FocusQuizEngine {
         "N", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
     )
 
+    private val easyFlowSteps = listOf(1, 2, 5, 10)
     private val flowSteps = listOf(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 20, 25)
+    private val hardFlowSteps = listOf(7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 23, 25)
 
     // =========================================================================
     // 4. EASY UNSCRAMBLE WORD POOL (Exact match to Python reference)
@@ -146,13 +172,14 @@ object FocusQuizEngine {
     fun generateQuizSet(
         context: Context,
         count: Int = QUESTIONS_PER_UNLOCK,
-        random: Random = Random.Default
+        random: Random = Random.Default,
+        difficulty: QuizDifficulty = QuizDifficulty.DEFAULT
     ): List<FocusQuizQuestion> = synchronized(lock) {
         val appCtx = context.applicationContext
         val asked = loadAskedSignaturesLocked(appCtx)
         val result = ArrayList<FocusQuizQuestion>(count)
         repeat(count) {
-            result.add(generateUniqueQuestionLocked(asked, random))
+            result.add(generateUniqueQuestionLocked(asked, random, difficulty))
         }
         saveAskedSignaturesLocked(appCtx, asked)
         result
@@ -166,14 +193,15 @@ object FocusQuizEngine {
 
     private fun generateUniqueQuestionLocked(
         askedSignatures: MutableSet<String>,
-        random: Random
+        random: Random,
+        difficulty: QuizDifficulty
     ): FocusQuizQuestion {
         for (attempt in 0 until 250) {
             val q = when (random.nextInt(4)) {
-                0 -> generateOddOneOutQuestion(random)
-                1 -> generateMathReflexQuestion(random)
-                2 -> generateVisualMathGame(random)
-                else -> generateEasyScrambleQuestion(askedSignatures, random)
+                0 -> generateOddOneOutQuestion(random, difficulty)
+                1 -> generateMathReflexQuestion(random, difficulty)
+                2 -> generateVisualMathGame(random, difficulty)
+                else -> generateEasyScrambleQuestion(askedSignatures, random, difficulty)
             }
             if (askedSignatures.add(q.signature)) {
                 return q
@@ -204,7 +232,10 @@ object FocusQuizEngine {
         )
     }
 
-    private fun generateOddOneOutQuestion(random: Random): FocusQuizQuestion {
+    private fun generateOddOneOutQuestion(
+        random: Random,
+        difficulty: QuizDifficulty
+    ): FocusQuizQuestion {
         val keys = categoryPools.keys.toList()
         val mainKey = keys[random.nextInt(keys.size)]
         var oddKey = keys[random.nextInt(keys.size)]
@@ -212,9 +243,15 @@ object FocusQuizEngine {
             oddKey = keys[random.nextInt(keys.size)]
         }
 
+        val mainCount = when (difficulty) {
+            QuizDifficulty.EASY -> 2
+            QuizDifficulty.DEFAULT -> 3
+            QuizDifficulty.HARD -> 4
+        }
+
         val mainPool = categoryPools.getValue(mainKey)
         val oddPool = categoryPools.getValue(oddKey)
-        val mainWords = mainPool.shuffled(random).take(3)
+        val mainWords = mainPool.shuffled(random).take(mainCount)
         val oddWord = oddPool[random.nextInt(oddPool.size)]
         val finalWords = (mainWords + oddWord).shuffled(random)
         val sortedComboSig = mainWords.sorted().joinToString(",") + "|" + oddWord
@@ -229,20 +266,38 @@ object FocusQuizEngine {
         )
     }
 
-    private fun generateMathReflexQuestion(random: Random): FocusQuizQuestion {
+    private fun generateMathReflexQuestion(
+        random: Random,
+        difficulty: QuizDifficulty
+    ): FocusQuizQuestion {
         val mode = random.nextInt(1, 5)
 
         if (mode == 1) {
             val findEven = random.nextBoolean()
+            val distractorCount = when (difficulty) {
+                QuizDifficulty.EASY -> 2
+                QuizDifficulty.DEFAULT -> 3
+                QuizDifficulty.HARD -> 5
+            }
+            val minVal = when (difficulty) {
+                QuizDifficulty.EASY -> 2
+                QuizDifficulty.DEFAULT -> 11
+                QuizDifficulty.HARD -> 101
+            }
+            val maxExclusive = when (difficulty) {
+                QuizDifficulty.EASY -> 41
+                QuizDifficulty.DEFAULT -> 200
+                QuizDifficulty.HARD -> 1000
+            }
             val distractors = mutableListOf<Int>()
-            while (distractors.size < 3) {
-                val n = random.nextInt(11, 200)
+            while (distractors.size < distractorCount) {
+                val n = random.nextInt(minVal, maxExclusive)
                 if (findEven && n % 2 != 0 && n !in distractors) distractors.add(n)
                 if (!findEven && n % 2 == 0 && n !in distractors) distractors.add(n)
             }
             var target: Int
             while (true) {
-                val n = random.nextInt(11, 200)
+                val n = random.nextInt(minVal, maxExclusive)
                 if ((findEven && n % 2 == 0) || (!findEven && n % 2 != 0)) {
                     target = n
                     break
@@ -262,9 +317,27 @@ object FocusQuizEngine {
         if (mode == 2) {
             val findMax = random.nextBoolean()
             val nums = mutableListOf<Int>()
-            while (nums.size < 4) {
-                val n = random.nextInt(10, 251)
-                if (n !in nums) nums.add(n)
+            when (difficulty) {
+                QuizDifficulty.EASY -> {
+                    while (nums.size < 3) {
+                        val n = random.nextInt(5, 61)
+                        if (n !in nums) nums.add(n)
+                    }
+                }
+                QuizDifficulty.DEFAULT -> {
+                    while (nums.size < 4) {
+                        val n = random.nextInt(10, 251)
+                        if (n !in nums) nums.add(n)
+                    }
+                }
+                QuizDifficulty.HARD -> {
+                    // Cluster 6 3-digit numbers within a 140-wide window for fast yet sharp comparison
+                    val bandBase = random.nextInt(120, 820)
+                    while (nums.size < 6) {
+                        val n = random.nextInt(bandBase, bandBase + 140)
+                        if (n !in nums) nums.add(n)
+                    }
+                }
             }
             val ans = if (findMax) nums.max() else nums.min()
             return FocusQuizQuestion(
@@ -278,42 +351,141 @@ object FocusQuizEngine {
         }
 
         if (mode == 3) {
-            val x = random.nextInt(2, 46)
-            val b = random.nextInt(2, 46)
-            val sum = x + b
-            return FocusQuizQuestion(
-                category = "Quick X",
-                hint = "Find x",
-                prompt = "x + $b = $sum",
-                acceptedAnswers = listOf(x.toString()),
-                signature = "QUICK_X:$x+$b=$sum",
-                inputMode = QuizInputMode.NUMERIC
-            )
+            return when (difficulty) {
+                QuizDifficulty.EASY -> {
+                    val x = random.nextInt(1, 16)
+                    val b = random.nextInt(1, 16)
+                    val sum = x + b
+                    FocusQuizQuestion(
+                        category = "Quick X",
+                        hint = "Find x",
+                        prompt = "x + $b = $sum",
+                        acceptedAnswers = listOf(x.toString()),
+                        signature = "QUICK_X:$x+$b=$sum",
+                        inputMode = QuizInputMode.NUMERIC
+                    )
+                }
+                QuizDifficulty.DEFAULT -> {
+                    val x = random.nextInt(2, 46)
+                    val b = random.nextInt(2, 46)
+                    val sum = x + b
+                    FocusQuizQuestion(
+                        category = "Quick X",
+                        hint = "Find x",
+                        prompt = "x + $b = $sum",
+                        acceptedAnswers = listOf(x.toString()),
+                        signature = "QUICK_X:$x+$b=$sum",
+                        inputMode = QuizInputMode.NUMERIC
+                    )
+                }
+                QuizDifficulty.HARD -> {
+                    if (random.nextBoolean()) {
+                        val x = random.nextInt(4, 36)
+                        val b = random.nextInt(5, 51)
+                        val sum = (2 * x) + b
+                        FocusQuizQuestion(
+                            category = "Quick X",
+                            hint = "Find x",
+                            prompt = "2x + $b = $sum",
+                            acceptedAnswers = listOf(x.toString()),
+                            signature = "QUICK_X:2*$x+$b=$sum",
+                            inputMode = QuizInputMode.NUMERIC
+                        )
+                    } else {
+                        val x = random.nextInt(40, 161)
+                        val b = random.nextInt(15, 66)
+                        val diff = x - b
+                        FocusQuizQuestion(
+                            category = "Quick X",
+                            hint = "Find x",
+                            prompt = "x - $b = $diff",
+                            acceptedAnswers = listOf(x.toString()),
+                            signature = "QUICK_X:$x-$b=$diff",
+                            inputMode = QuizInputMode.NUMERIC
+                        )
+                    }
+                }
+            }
         }
 
-        val step = flowSteps[random.nextInt(flowSteps.size)]
-        val start = random.nextInt(1, 31) * step
-        val seq = mutableListOf(
-            start.toString(),
-            (start + step).toString(),
-            (start + step * 2).toString(),
-            (start + step * 3).toString()
-        )
-        val hideIdx = random.nextInt(1, 4)
-        val ans = seq[hideIdx]
-        seq[hideIdx] = "?"
-
-        return FocusQuizQuestion(
-            category = "Number Flow",
-            hint = "Type the missing number",
-            prompt = seq.joinToString("  →  "),
-            acceptedAnswers = listOf(ans),
-            signature = "FLOW:$start:$step:$hideIdx",
-            inputMode = QuizInputMode.NUMERIC
-        )
+        return when (difficulty) {
+            QuizDifficulty.EASY -> {
+                val step = easyFlowSteps[random.nextInt(easyFlowSteps.size)]
+                val start = random.nextInt(1, 11) * step
+                val seq = mutableListOf(
+                    start.toString(),
+                    (start + step).toString(),
+                    (start + step * 2).toString(),
+                    (start + step * 3).toString()
+                )
+                val hideIdx = random.nextInt(2, 4)
+                val ans = seq[hideIdx]
+                seq[hideIdx] = "?"
+                FocusQuizQuestion(
+                    category = "Number Flow",
+                    hint = "Type the missing number",
+                    prompt = seq.joinToString("  →  "),
+                    acceptedAnswers = listOf(ans),
+                    signature = "FLOW:$start:$step:$hideIdx",
+                    inputMode = QuizInputMode.NUMERIC
+                )
+            }
+            QuizDifficulty.DEFAULT -> {
+                val step = flowSteps[random.nextInt(flowSteps.size)]
+                val start = random.nextInt(1, 31) * step
+                val seq = mutableListOf(
+                    start.toString(),
+                    (start + step).toString(),
+                    (start + step * 2).toString(),
+                    (start + step * 3).toString()
+                )
+                val hideIdx = random.nextInt(1, 4)
+                val ans = seq[hideIdx]
+                seq[hideIdx] = "?"
+                FocusQuizQuestion(
+                    category = "Number Flow",
+                    hint = "Type the missing number",
+                    prompt = seq.joinToString("  →  "),
+                    acceptedAnswers = listOf(ans),
+                    signature = "FLOW:$start:$step:$hideIdx",
+                    inputMode = QuizInputMode.NUMERIC
+                )
+            }
+            QuizDifficulty.HARD -> {
+                val step = hardFlowSteps[random.nextInt(hardFlowSteps.size)]
+                val descending = random.nextBoolean()
+                val signedStep = if (descending) -step else step
+                val start = if (descending) {
+                    (random.nextInt(6, 22) * step) + random.nextInt(1, 9)
+                } else {
+                    (random.nextInt(2, 20) * step) + random.nextInt(1, 9)
+                }
+                val seq = mutableListOf(
+                    start.toString(),
+                    (start + signedStep).toString(),
+                    (start + signedStep * 2).toString(),
+                    (start + signedStep * 3).toString(),
+                    (start + signedStep * 4).toString()
+                )
+                val hideIdx = random.nextInt(1, 4)
+                val ans = seq[hideIdx]
+                seq[hideIdx] = "?"
+                FocusQuizQuestion(
+                    category = "Number Flow",
+                    hint = "Type the missing number",
+                    prompt = seq.joinToString(" → "),
+                    acceptedAnswers = listOf(ans),
+                    signature = "FLOW:$start:$signedStep:$hideIdx:5",
+                    inputMode = QuizInputMode.NUMERIC
+                )
+            }
+        }
     }
 
-    private fun generateVisualMathGame(random: Random): FocusQuizQuestion {
+    private fun generateVisualMathGame(
+        random: Random,
+        difficulty: QuizDifficulty
+    ): FocusQuizQuestion {
         val e1 = visualEmojis[random.nextInt(visualEmojis.size)]
         var e2 = visualEmojis[random.nextInt(visualEmojis.size)]
         while (e2 == e1) {
@@ -323,9 +495,26 @@ object FocusQuizEngine {
         val mode = random.nextInt(1, 4)
 
         if (mode == 1) {
-            val value = random.nextInt(2, 26)
-            val count = random.nextInt(2, 4)
-            val extra = random.nextInt(1, 31)
+            val value: Int
+            val count: Int
+            val extra: Int
+            when (difficulty) {
+                QuizDifficulty.EASY -> {
+                    value = random.nextInt(2, 11)
+                    count = 2
+                    extra = random.nextInt(1, 11)
+                }
+                QuizDifficulty.DEFAULT -> {
+                    value = random.nextInt(2, 26)
+                    count = random.nextInt(2, 4)
+                    extra = random.nextInt(1, 31)
+                }
+                QuizDifficulty.HARD -> {
+                    value = random.nextInt(7, 36)
+                    count = random.nextInt(3, 5)
+                    extra = random.nextInt(12, 76)
+                }
+            }
             val emojisStr = List(count) { e1 }.joinToString(" + ")
             val total = (value * count) + extra
 
@@ -340,9 +529,28 @@ object FocusQuizEngine {
         }
 
         if (mode == 2) {
-            val addMode = random.nextFloat() < 0.7f
-            val v1 = if (addMode) random.nextInt(2, 46) else random.nextInt(2, 13)
-            val v2 = if (addMode) random.nextInt(2, 46) else random.nextInt(2, 13)
+            val addChance = when (difficulty) {
+                QuizDifficulty.EASY -> 0.85f
+                QuizDifficulty.DEFAULT -> 0.7f
+                QuizDifficulty.HARD -> 0.4f
+            }
+            val addMode = random.nextFloat() < addChance
+            val v1: Int
+            val v2: Int
+            when (difficulty) {
+                QuizDifficulty.EASY -> {
+                    v1 = if (addMode) random.nextInt(1, 19) else random.nextInt(2, 7)
+                    v2 = if (addMode) random.nextInt(1, 19) else random.nextInt(2, 7)
+                }
+                QuizDifficulty.DEFAULT -> {
+                    v1 = if (addMode) random.nextInt(2, 46) else random.nextInt(2, 13)
+                    v2 = if (addMode) random.nextInt(2, 46) else random.nextInt(2, 13)
+                }
+                QuizDifficulty.HARD -> {
+                    v1 = if (addMode) random.nextInt(35, 146) else random.nextInt(6, 20)
+                    v2 = if (addMode) random.nextInt(35, 146) else random.nextInt(3, 13)
+                }
+            }
             val total = if (addMode) (v1 + v2) else (v1 * v2)
             val symbol = if (addMode) "+" else "×"
 
@@ -356,16 +564,25 @@ object FocusQuizEngine {
             )
         }
 
-        val chosen = soloLetters.shuffled(random).take(3)
+        val duplicatePairs = when (difficulty) {
+            QuizDifficulty.EASY -> 1
+            QuizDifficulty.DEFAULT -> 2
+            QuizDifficulty.HARD -> 3
+        }
+        val chosen = soloLetters.shuffled(random).take(1 + duplicatePairs)
         val soloLetter = chosen[0]
-        val dup1 = chosen[1]
-        val dup2 = chosen[2]
-        val finalSeq = listOf(soloLetter, dup1, dup1, dup2, dup2).shuffled(random)
+        val finalList = mutableListOf(soloLetter)
+        for (i in 1..duplicatePairs) {
+            finalList.add(chosen[i])
+            finalList.add(chosen[i])
+        }
+        val finalSeq = finalList.shuffled(random)
+        val separator = if (difficulty == QuizDifficulty.HARD) " • " else "  •  "
 
         return FocusQuizQuestion(
             category = "Solo Hunter",
             hint = "Type the letter that appears ONLY ONCE",
-            prompt = finalSeq.joinToString("  •  "),
+            prompt = finalSeq.joinToString(separator),
             acceptedAnswers = listOf(soloLetter),
             signature = "SOLO:${finalSeq.joinToString("")}",
             inputMode = QuizInputMode.ALPHA
@@ -374,24 +591,37 @@ object FocusQuizEngine {
 
     private fun generateEasyScrambleQuestion(
         askedSignatures: Set<String>,
-        random: Random
+        random: Random,
+        difficulty: QuizDifficulty
     ): FocusQuizQuestion {
         val unaskedWords = easyFourLetterWords.filter { w -> "SCRAMBLE:$w" !in askedSignatures }
         if (unaskedWords.isEmpty()) {
-            return generateMathReflexQuestion(random)
+            return generateMathReflexQuestion(random, difficulty)
         }
 
         val word = unaskedWords[random.nextInt(unaskedWords.size)]
         var scrambled = word
         var attempts = 0
-        while (scrambled == word && attempts < 20) {
+        while (
+            (scrambled == word || (difficulty == QuizDifficulty.HARD && scrambled.first() == word.first())) &&
+            attempts < 25
+        ) {
             scrambled = word.toList().shuffled(random).joinToString("")
             attempts++
+        }
+        if (scrambled == word) {
+            scrambled = word.reversed()
+        }
+
+        val hintText = when (difficulty) {
+            QuizDifficulty.EASY -> "Starts with '${word.take(2)}' and ends with '${word.last()}'"
+            QuizDifficulty.DEFAULT -> "Starts with '${word.first()}' and ends with '${word.last()}'"
+            QuizDifficulty.HARD -> "Starts with '${word.first()}'"
         }
 
         return FocusQuizQuestion(
             category = "Easy Unscramble",
-            hint = "Starts with '${word.first()}' and ends with '${word.last()}'",
+            hint = hintText,
             prompt = scrambled.toCharArray().joinToString(" "),
             acceptedAnswers = listOf(word),
             signature = "SCRAMBLE:$word",

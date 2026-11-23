@@ -1343,26 +1343,23 @@ private fun FitbitPillBarChart(
 
                                 // Theme-matched luminous selection colors (high contrast, zero borders)
                                 val selectedHighlightTop = when (palette.theme) {
-                                    AppVisualTheme.NOTHING_CRIMSON -> Color(0xFFFF8A90)
+                                    AppVisualTheme.NOTHING_DOT -> Color(0xFFFF8A90)
                                     AppVisualTheme.LIQUID_GLASS -> Color(0xFFFFFFFF)
                                     AppVisualTheme.SOLAR_AMBER -> Color(0xFFFFE596)
-                                    AppVisualTheme.NORDIC_SAGE -> Color(0xFFDCF8EC)
                                 }
                                 val selectedHighlightBottom = when (palette.theme) {
-                                    AppVisualTheme.NOTHING_CRIMSON -> palette.primary
+                                    AppVisualTheme.NOTHING_DOT -> palette.primary
                                     AppVisualTheme.LIQUID_GLASS -> Color(0xFFB4C8E8)
                                     AppVisualTheme.SOLAR_AMBER -> palette.primary
-                                    AppVisualTheme.NORDIC_SAGE -> palette.primary
                                 }
                                 val spotlightTint = when (palette.theme) {
                                     AppVisualTheme.LIQUID_GLASS -> Color(0xFFD8E4FA)
                                     else -> palette.primary
                                 }
                                 val beaconCoreColor = when (palette.theme) {
-                                    AppVisualTheme.NOTHING_CRIMSON -> Color.White
+                                    AppVisualTheme.NOTHING_DOT -> Color.White
                                     AppVisualTheme.LIQUID_GLASS -> Color.White
                                     AppVisualTheme.SOLAR_AMBER -> Color(0xFFFFF4CC)
-                                    AppVisualTheme.NORDIC_SAGE -> Color(0xFFE8FFF4)
                                 }
 
                                 buckets.forEachIndexed { idx, bucket ->
@@ -1474,22 +1471,6 @@ private fun FitbitPillBarChart(
                                                             colors = listOf(
                                                                 Color(0xFFD2DCEB).copy(alpha = if (dimmed) 0.20f else 0.80f),
                                                                 Color(0xFF5D6B84).copy(alpha = if (dimmed) 0.11f else 0.42f)
-                                                            ),
-                                                            startY = topY,
-                                                            endY = topPad + plotH
-                                                        ),
-                                                        topLeft = Offset(activeLeftX, topY),
-                                                        size = Size(activeBarW, barH),
-                                                        cornerRadius = activeRadius
-                                                    )
-                                                }
-                                                AppVisualTheme.NORDIC_SAGE -> {
-                                                    val topCol = if (dimmed) palette.primary.copy(alpha = 0.22f) else palette.primary
-                                                    drawRoundRect(
-                                                        brush = Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                topCol,
-                                                                palette.primarySecondary.copy(alpha = if (dimmed) 0.14f else 0.76f)
                                                             ),
                                                             startY = topY,
                                                             endY = topPad + plotH

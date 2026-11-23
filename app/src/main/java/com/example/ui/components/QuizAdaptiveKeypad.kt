@@ -33,7 +33,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -383,12 +388,11 @@ private fun KeypadTile(
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberSpringPressScale(interactionSource, pressedScale = 0.92f)
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
-    val fill = if (palette.isLiquidGlass) {
-        Color(0x88131722)
-    } else {
-        palette.surfaceElevated
+    val fill = when {
+        palette.isLiquidGlass -> Color(0x88131722)
+        palette.isNothingDot -> Color(0xFF14141C)
+        else -> Color(0xFF1C1810)
     }
-    val stroke = palette.borderHighlight.copy(alpha = if (palette.isLiquidGlass) 0.28f else 0.60f)
 
     Box(
         modifier = modifier
@@ -399,7 +403,52 @@ private fun KeypadTile(
             }
             .clip(shape)
             .background(fill, shape)
-            .border(width = 0.75.dp, color = stroke, shape = shape)
+            .drawWithCache {
+                val cornerPx = cornerRadius.toPx()
+                val cr = CornerRadius(cornerPx, cornerPx)
+                val strokeW = 0.8.dp.toPx()
+                onDrawWithContent {
+                    drawContent()
+                    when {
+                        palette.isLiquidGlass -> {
+                            drawRoundRect(
+                                brush = Brush.verticalGradient(
+                                    0.0f to Color.White.copy(alpha = 0.24f),
+                                    0.45f to Color.White.copy(alpha = 0.05f),
+                                    1.0f to Color.White.copy(alpha = 0.08f)
+                                ),
+                                cornerRadius = cr,
+                                style = Stroke(width = strokeW)
+                            )
+                        }
+                        palette.isNothingDot -> {
+                            drawRoundRect(
+                                color = palette.borderHighlight.copy(alpha = 0.65f),
+                                cornerRadius = cr,
+                                style = Stroke(width = strokeW)
+                            )
+                            if (useNumeralFont) {
+                                drawCircle(
+                                    color = palette.textPrimary.copy(alpha = 0.16f),
+                                    radius = 1.dp.toPx(),
+                                    center = Offset(size.width - 7.dp.toPx(), 7.dp.toPx())
+                                )
+                            }
+                        }
+                        else -> {
+                            drawRoundRect(
+                                brush = Brush.verticalGradient(
+                                    0.0f to palette.primary.copy(alpha = 0.30f),
+                                    0.45f to palette.borderHighlight.copy(alpha = 0.50f),
+                                    1.0f to palette.border.copy(alpha = 0.72f)
+                                ),
+                                cornerRadius = cr,
+                                style = Stroke(width = strokeW)
+                            )
+                        }
+                    }
+                }
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

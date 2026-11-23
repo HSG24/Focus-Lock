@@ -36,19 +36,39 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 17
+    const val CURRENT_RELEASE_ID = 19
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 17,
+            releaseId = 19,
             versionLabel = "Latest Update",
-            headline = "Bug Fixes",
-            summary = "Bug fixes.",
+            headline = "Fresh Look & Custom Difficulty",
+            summary = "New theme artwork on every screen plus Easy, Default, and Hard unlock questions.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Bug Fixes",
-                    description = "Bug fixes.",
-                    category = WhatsNewCategory.FIX
+                    title = "Artistic Theme Scenes",
+                    description = "Added custom minimal artwork and relaxing nature visuals on every screen, unique to each theme.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Unlock Question Difficulty",
+                    description = "Pick Easy, Default, or Hard in Settings to adjust how tough the unlock questions feel.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Nothing Dot Theme",
+                    description = "Crimson is now Nothing Dot, with dot-matrix patterns, LED rings, and subtle red accents.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Three Distinct Themes",
+                    description = "Liquid Glass, Nothing Dot, and Solar Amber each have their own cards, rings, backdrops, and controls.",
+                    category = WhatsNewCategory.NEW
+                ),
+                WhatsNewItem(
+                    title = "Visual Theme Picker",
+                    description = "Added live previews for all three themes and removed Sage (Sage users switch to Liquid Glass automatically).",
+                    category = WhatsNewCategory.NEW
                 )
             )
         )

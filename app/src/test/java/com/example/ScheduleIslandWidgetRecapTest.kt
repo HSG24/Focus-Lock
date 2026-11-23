@@ -304,7 +304,7 @@ class ScheduleIslandWidgetRecapTest {
     fun scheduledSuccessScreen_hasManualDismissButtonAndNoAutoCountdown() {
         var dismissed = false
         composeRule.setContent {
-            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_CRIMSON) {
+            MyApplicationTheme(appTheme = AppVisualTheme.NOTHING_DOT) {
                 ScheduledSuccessScreen(
                     scheduleName = "Morning Focus",
                     durationMs = 45 * 60_000L,
