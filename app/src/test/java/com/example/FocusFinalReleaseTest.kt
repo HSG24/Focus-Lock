@@ -141,17 +141,11 @@ class FocusFinalReleaseTest {
     }
 
     @Test
-    fun whatsNew_preservesPreviousItemsAndAddsRelease19Highlights() {
-        assertEquals(19, FocusWhatsNewCatalog.CURRENT_RELEASE_ID)
+    fun whatsNew_containsOnlyVisualEnhancementsInRelease20() {
+        assertEquals(20, FocusWhatsNewCatalog.CURRENT_RELEASE_ID)
         val items = FocusWhatsNewCatalog.releases.first().items
-        assertEquals(6, items.size)
-        val titles = items.map { it.title }
-        assertTrue("Improved visual aesthetics" in titles)
-        assertTrue("Artistic Theme Scenes" in titles)
-        assertTrue("Unlock Question Difficulty" in titles)
-        assertTrue("Nothing Dot Theme" in titles)
-        assertTrue("Three Distinct Themes" in titles)
-        assertTrue("Visual Theme Picker" in titles)
+        assertEquals(1, items.size)
+        assertEquals("Visual enhancements", items.first().title)
     }
 
     @Test

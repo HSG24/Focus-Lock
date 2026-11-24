@@ -36,43 +36,18 @@ data class WhatsNewRelease(
  * and increment [CURRENT_RELEASE_ID].
  */
 object FocusWhatsNewCatalog {
-    const val CURRENT_RELEASE_ID = 19
+    const val CURRENT_RELEASE_ID = 20
 
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
-            releaseId = 19,
+            releaseId = 20,
             versionLabel = "Latest Update",
-            headline = "Fresh Look & Custom Difficulty",
-            summary = "New theme artwork on every screen plus Easy, Default, and Hard unlock questions.",
+            headline = "Visual enhancements",
+            summary = "Visual enhancements across the app.",
             items = listOf(
                 WhatsNewItem(
-                    title = "Improved visual aesthetics",
-                    description = "Cleaner headers, smoother botanical art, and refined minimal accents across every theme.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Artistic Theme Scenes",
-                    description = "Added custom minimal artwork and relaxing nature visuals on every screen, unique to each theme.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Unlock Question Difficulty",
-                    description = "Pick Easy, Default, or Hard in Settings to adjust how tough the unlock questions feel.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Nothing Dot Theme",
-                    description = "Crimson is now Nothing Dot, with dot-matrix patterns, LED rings, and subtle red accents.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Three Distinct Themes",
-                    description = "Liquid Glass, Nothing Dot, and Solar Amber each have their own cards, rings, backdrops, and controls.",
-                    category = WhatsNewCategory.NEW
-                ),
-                WhatsNewItem(
-                    title = "Visual Theme Picker",
-                    description = "Added live previews for all three themes and removed Sage (Sage users switch to Liquid Glass automatically).",
+                    title = "Visual enhancements",
+                    description = "Visual enhancements across the app.",
                     category = WhatsNewCategory.NEW
                 )
             )

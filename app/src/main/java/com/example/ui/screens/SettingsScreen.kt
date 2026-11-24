@@ -115,7 +115,6 @@ import com.example.ui.components.ProtectionAndBlockersSection
 import com.example.ui.components.ScenicPageVariant
 import com.example.ui.components.ThemeBackdropLayer
 import com.example.ui.components.ThemeScenicBackdropOverlay
-import com.example.ui.components.ThemeScenicVignetteFooter
 import com.example.ui.components.ThemedDivider
 import com.example.ui.components.ThemedSettingsSectionCard
 import com.example.ui.components.ThemedSettingsSwitchRow
@@ -489,12 +488,6 @@ fun SettingsScreen(
                     onOpenUsageSettings = onOpenUsageSettings,
                     onOpenNotificationSettings = onOpenNotificationListenerSettings,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings
-                )
-
-                ThemeScenicVignetteFooter(
-                    caption = "FOCUS SANCTUARY",
-                    subtitle = "Crafted for calm, distraction-free sessions",
-                    palette = palette
                 )
             }
         }
